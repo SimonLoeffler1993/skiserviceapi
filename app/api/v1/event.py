@@ -11,6 +11,8 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+# Server Event https://www.youtube.com/watch?v=M4glLwqDEBw&t=842s
+
 # Initialize the terminal manager
 terminal_manager = KundenTerminalManager()
 
@@ -23,8 +25,16 @@ async def test(request: Request):
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
+@router.get("/terminals")
+async def list_terminals(request: Request):
+    terminals = terminal_manager.list_terminale()
+    return {"terminals": terminals}
+
 @router.post("/send/{terminal}")
 async def send_message(request: Request, terminal: str):
+    if terminal not in terminal_manager.verbindungen:
+        return {"status": "Terminal not connected", "terminal": terminal}
+    
     await terminal_manager.send_message(terminal, "Hello from the server!")
     return {"status": "Message sent", "terminal": terminal}
 

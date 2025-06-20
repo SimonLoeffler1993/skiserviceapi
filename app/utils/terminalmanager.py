@@ -3,7 +3,12 @@ import asyncio
 
 class KundenTerminalManager():
     def __init__(self):
+        """Initialisiert den Terminal Manager."""
         self.verbindungen: dict[str, asyncio.Queue] = {}
+
+    def list_terminale(self) -> list[str]:
+        """Gibt eine Liste der verbundenen Terminals zurück."""
+        return list(self.verbindungen.keys())
 
     async def connect(self, terminal:str) -> asyncio.Queue:
         # Teporäre Warteschlange für das Terminal
