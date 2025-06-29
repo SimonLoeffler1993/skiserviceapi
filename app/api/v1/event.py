@@ -50,12 +50,14 @@ async def zeige_kunde(daten: SkiKundeZuTerminal, request: Request, db: Session =
         "command": "zeige_kunde",
         "kunde": {
             "id": kunde.ID,
-            "nachname": kunde.Nachname,
-            "vorname": kunde.Vorname,
-            "strasse": kunde.Strasse,
-            "plz": kunde.Plz,
-            "tel": kunde.Tel,
-            "email": kunde.Email,
+            "Nachname": kunde.Nachname,
+            "Vorname": kunde.Vorname,
+            "Strasse": kunde.Strasse,
+            "Plz": str(kunde.Plz),
+            "Ort": kunde.Ort.Ort,
+            "Tel": kunde.Tel,
+            "Handy": kunde.Tel1,
+            "Email": kunde.Email,
         }
     }))
     return {"status": "zeige_kunde command sent"}
