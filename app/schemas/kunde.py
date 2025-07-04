@@ -26,3 +26,7 @@ class SkiKundeSpeichern(BaseModel):
 
     class Config:
         orm_mode = True
+
+class SkiKundeZuTerminal(BaseModel):
+    terminal: str
+    kunde_id: int

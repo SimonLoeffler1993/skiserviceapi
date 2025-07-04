@@ -33,11 +33,18 @@ async def search_kunde(vorname: str = None, nachname: str = None, db: Session = 
 async def get_kunde(kunde_id: int, db: Session = Depends(get_db)):
     return crud_kunde.get_kunde(db, kunde_id)
 
+@router.put("/{kunde_id}")
+async def update_kunde(kunde_id: int, kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
+    existing_kunde = crud_kunde.get_kunde(db, kunde_id)
+    if not existing_kunde:
+        raise HTTPException(status_code=404, detail="Kunde not found")
+    return crud_kunde.update_kunde(db, kunde_id, kunde)
+
 @router.post("/erfassen")
 async def erfassen_kunde(kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     return crud_kunde.erfassen_kunde(db, kunde)
 
-    
+# TODO Put Route für kunden aktualisieren
 
 
 # @router.get("/{kunde_id}", response_model=SkiKundeOut)
