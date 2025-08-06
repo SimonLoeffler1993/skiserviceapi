@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  skiserviceapi:
+    image: ghcr.io/simonloeffler1993/skiserviceapi:latest
+    container_name: skiserviceapi
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=192.168.188.10
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=SicheresPasswort123
+      - DB_NAME=skiservice
+    restart: unless-stopped
+
+  kundenterminal:
+    image: ghcr.io/simonloeffler1993/ski-kunden-dialog:latest
+    container_name: kundenterminal
+    ports:
+      - "3000:3000"
+    depends_on:
+      - skiserviceapi
+    environment:
+      - BACKEND_URL=http://skiserviceapi:8000
+    restart: unless-stopped

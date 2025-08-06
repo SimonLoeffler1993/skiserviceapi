@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import kunden, orte, event
+from app.api.v1 import kunden, orte, event, saisonverleih
+from app.api.v1.material import ski
 
 app = FastAPI(title="SkiApp API", version="0.0.1")
 
@@ -13,9 +14,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(kunden.router, prefix="/api/v1")
-app.include_router(orte.router, prefix="/api/v1")
-app.include_router(event.router, prefix="/api/v1")
+appPrefix = "/api/v1"
+
+app.include_router(kunden.router, prefix=appPrefix)
+app.include_router(orte.router, prefix=appPrefix)
+app.include_router(event.router, prefix=appPrefix)
+app.include_router(saisonverleih.router, prefix=appPrefix)
+app.include_router(ski.router, prefix=appPrefix)
+
 
 @app.get("/")
 def read_root():
