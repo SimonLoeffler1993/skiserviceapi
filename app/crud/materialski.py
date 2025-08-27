@@ -1,6 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models.materialski import EigenSki, VerleihSkiModell
-from app.schemas.materialski import  EigenSkiRead
+from app.models.materialski import EigenSki
 
 
 
