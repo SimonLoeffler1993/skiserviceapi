@@ -25,7 +25,7 @@ class SkiKundeSpeichern(BaseModel):
     Email: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class SkiKundeZuTerminal(BaseModel):
     terminal: str
