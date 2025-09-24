@@ -10,7 +10,7 @@ from app.crud import materialski as crud_materialski
 
 router = APIRouter(
     prefix="/material/ski",
-    tags=["materialski"],
+    tags=["Material","Ski"],
     responses={404: {"description": "Not found"}},
 )
 

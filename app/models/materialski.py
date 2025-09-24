@@ -31,4 +31,4 @@ class EigenSki(Base):
     VK = Column(Double)
     EK = Column(Double)
     Saison = Column(String)
-    SkiNr = Column(String)
+    SkiNr = Column(String, unique=True)

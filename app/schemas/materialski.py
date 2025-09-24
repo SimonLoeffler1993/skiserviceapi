@@ -27,13 +27,13 @@ class VerleihSkiHerstellerRead(VerleihSkiHerstellerBase):
     ID: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class SkiArtRead(SkiArtBase):
     ID: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class VerleihSkiModellRead(VerleihSkiModellBase):
     ID: int
@@ -41,11 +41,11 @@ class VerleihSkiModellRead(VerleihSkiModellBase):
     Hersteller: Optional[VerleihSkiHerstellerRead]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class EigenSkiRead(EigenSkiBase):
     ID: int
     Modell: Optional[VerleihSkiModellRead]
 
     class Config:
-        orm_mode = True
+        from_attributes = True

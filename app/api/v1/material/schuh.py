@@ -7,7 +7,7 @@ from app.crud import materialschuh as crud_materialschuh
 
 router = APIRouter(
     prefix="/material/schuh",
-    tags=["materialschuh"],
+    tags=["Material","Schuh"],
     responses={404: {"description": "Not found"}},
 )
 

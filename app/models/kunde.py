@@ -2,6 +2,9 @@ from sqlalchemy import Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
+
+# Wird Importiert um Fehler zu vermeiden
+# auch wen diese nicht direkt verwendet werden
 from app.models.ort import Ort
 
 class SkiKunde(Base):
@@ -11,10 +14,8 @@ class SkiKunde(Base):
     Vorname = Column(String(20))
     Anrede = Column(String(1), default="f")
     Strasse= Column(String(20))
-    # Plz = Column(Integer(), ForeignKey('postleitzahl.Postlz'))
-    Plz = Column(Integer(), ForeignKey(Ort.Postlz))
-    # Ort = relationship("Ort", backref="adresse")
-    Ort = relationship(Ort)
+    Plz = Column(Integer(), ForeignKey('postleitzahl.Postlz'))
+    Ort = relationship("Ort", backref="adresse")
     Tel = Column(String(50))
     Email = Column(String(50))
     Tel1 = Column(String(50))

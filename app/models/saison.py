@@ -8,3 +8,4 @@ class Saison(Base):
     Ende = Column(Date)
     Name = Column(String(50))
     Verwendet = Column(Integer)
+    SaisonVerleihNummer = Column(Integer, nullable=False, default=0)

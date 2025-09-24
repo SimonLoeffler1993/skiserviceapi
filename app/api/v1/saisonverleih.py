@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
-from app.schemas.saisonverleih import SaisonVerleihRead
+from app.schemas.saisonverleih import SaisonVerleihRead, SaisonVerleihCreate
 
 router = APIRouter(
     prefix="/saisonverleih",
@@ -24,11 +24,19 @@ async def get_saisonverleihpreise(db: Session = Depends(get_db)):
     preise = crud_saisonverleih.get_saisonverleihpreise(db)
     return {"preise": preise}
 
-@router.post("/erstllen")
-async def erstelle_saisonverleih():
+@router.post("/neu")
+async def erstelle_saisonverleih(saisonverleih: SaisonVerleihCreate, db: Session = Depends(get_db)):
     """
     Erstellt einen neuen Saisonverleih.
     """
+
+    # print("Erstelle neuen Saisonverleih:")
+    # print(saisonverleih)
+
+    # print(saisonverleih)
+    crud_saisonverleih.create_saisonverleih(db, saisonverleih)
+
+
     return {"message": "Saisonverleih erstellt!"}
 
 @router.get("/{saisonverleih_id}" , response_model=SaisonVerleihRead)

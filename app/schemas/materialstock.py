@@ -1,8 +1,8 @@
 from pydantic import BaseModel
 
-class OrtOut(BaseModel):
-    Postlz: int
-    Ort: str
+class SkiStockOut(BaseModel):
+    ID: int
+    Bezeichnung: str
 
     class Config:
         from_attributes = True

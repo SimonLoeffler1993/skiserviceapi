@@ -12,7 +12,7 @@ class SkiKundeOut(BaseModel):
     Email: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class SkiKundeSpeichern(BaseModel):
     Nachname: str 
