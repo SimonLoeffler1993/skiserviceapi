@@ -14,40 +14,50 @@ def get_saisonverleih(db: Session, saisonverleih_id: int):
     return db.query(SaisonVerleih).filter(SaisonVerleih.ID == saisonverleih_id).first()
 
 def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
-
-    if saisonverleih.Saison_ID is not None:
-        Saison_ID=saisonverleih.Saison_ID,
-    else:
-        SkiSaison=crud_saison.get_AktuelleSaison(db)
-        Saison_ID=SkiSaison.ID,
-    
-    db_saisonverleih = SaisonVerleih(
-        Kunde_ID=saisonverleih.Kunde_ID,
-        Bezahlt = False,
-        Ueberweisung=0,
-        Bemerkung=saisonverleih.Bemerkung,
-        Name=crud_saison.get_next_SaisonVerleihNummer(db),
-        Saison_ID=Saison_ID,
-        Abgerechnet=saisonverleih.Abgerechnet,
-        Start_Am=datetime.date.today(),
-        QuittungID=saisonverleih.QuittungID
-    )
-
-    for material in saisonverleih.Material:
-        db_saisonverleih.Material.append(
-            SaisonVerleihMaterial(
-                skinr=material.skinr,
-                schuhnr=material.schuhnr,
-                stockbez_ID=material.stockbez_ID,
-                stocklaenge=material.stocklaenge,
-                Preis=material.Preis,
-                SkiFahrerName=material.SkiFahrerName
-            )
+    try:
+        if saisonverleih.Saison_ID is not None:
+            Saison_ID=saisonverleih.Saison_ID,
+        else:
+            SkiSaison=crud_saison.get_AktuelleSaison(db)
+            Saison_ID=SkiSaison.ID,
+        
+        db_saisonverleih = SaisonVerleih(
+            Kunde_ID=saisonverleih.Kunde_ID,
+            Bezahlt = False,
+            Ueberweisung=0,
+            Bemerkung=saisonverleih.Bemerkung,
+            Name=crud_saison.get_next_SaisonVerleihNummer(db),
+            Saison_ID=Saison_ID,
+            Abgerechnet=saisonverleih.Abgerechnet,
+            Start_Am=datetime.date.today(),
+            QuittungID=saisonverleih.QuittungID
         )
 
-    db.add(db_saisonverleih)
-    db.commit()
-    db.refresh(db_saisonverleih)
+        for material in saisonverleih.Material:
+            db_saisonverleih.Material.append(
+                SaisonVerleihMaterial(
+                    skinr=material.skinr,
+                    schuhnr=material.schuhnr,
+                    stockbez_ID=material.stockbez_ID,
+                    stocklaenge=material.stocklaenge,
+                    Preis=material.Preis,
+                    SkiFahrerName=material.SkiFahrerName
+                )
+            )
 
-    return "db_saisonverleih"
+        db.add(db_saisonverleih)
+        db.commit()
+        db.refresh(db_saisonverleih)
+
+        return {
+            "success": True,
+            "data":db_saisonverleih
+            }
+
+    except Exception as e:
+        print(f"Fehler beim Saisonverleih Speichern: {e}")
+        return {
+            "success": False,
+            "data": None
+            }
     

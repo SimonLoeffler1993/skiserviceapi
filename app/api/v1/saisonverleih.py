@@ -34,10 +34,8 @@ async def erstelle_saisonverleih(saisonverleih: SaisonVerleihCreate, db: Session
     # print(saisonverleih)
 
     # print(saisonverleih)
-    crud_saisonverleih.create_saisonverleih(db, saisonverleih)
-
-
-    return {"message": "Saisonverleih erstellt!"}
+    ergebnis = crud_saisonverleih.create_saisonverleih(db, saisonverleih)
+    return ergebnis
 
 @router.get("/{saisonverleih_id}" , response_model=SaisonVerleihRead)
 async def get_saisonverleih(saisonverleih_id: int, db: Session = Depends(get_db)):
