@@ -51,6 +51,7 @@ class SaisonVerleihBase(BaseModel):
     Abgerechnet: int | None = None
     Start_Am: date | None = None
     QuittungID: int | None = None
+    Name: str
 
     class Config:
         from_attributes = True
