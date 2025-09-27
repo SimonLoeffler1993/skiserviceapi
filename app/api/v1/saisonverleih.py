@@ -37,6 +37,15 @@ async def erstelle_saisonverleih(saisonverleih: SaisonVerleihCreate, db: Session
     ergebnis = crud_saisonverleih.create_saisonverleih(db, saisonverleih)
     return ergebnis
 
+# TODO get Paramter für Saison
+@router.get("/", response_model=list[SaisonVerleihRead])
+async def list_saisonverleih(db: Session = Depends(get_db)):
+    """
+    Listet alle Saisonverleih-Einträge auf.
+    """
+    saisonverleih_liste = crud_saisonverleih.get_saisonverleih_liste(db)
+    return saisonverleih_liste
+
 @router.get("/{saisonverleih_id}" , response_model=SaisonVerleihRead)
 async def get_saisonverleih(saisonverleih_id: int, db: Session = Depends(get_db)):
     """

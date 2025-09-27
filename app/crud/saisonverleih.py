@@ -13,6 +13,10 @@ def get_saisonverleihpreise(db: Session,):
 def get_saisonverleih(db: Session, saisonverleih_id: int):
     return db.query(SaisonVerleih).filter(SaisonVerleih.ID == saisonverleih_id).first()
 
+def get_saisonverleih_liste(db: Session):
+    SkiSaison = crud_saison.get_AktuelleSaison(db)
+    return db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == SkiSaison.ID).all()
+
 def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
     try:
         if saisonverleih.Saison_ID is not None:
@@ -34,11 +38,17 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
         )
 
         for material in saisonverleih.Material:
+
+            if material.stockbez_ID == -1:
+                stockbez_ID=None,
+            else:
+                stockbez_ID=material.stockbez_ID,
+
             db_saisonverleih.Material.append(
                 SaisonVerleihMaterial(
                     skinr=material.skinr,
                     schuhnr=material.schuhnr,
-                    stockbez_ID=material.stockbez_ID,
+                    stockbez_ID=stockbez_ID,
                     stocklaenge=material.stocklaenge,
                     Preis=material.Preis,
                     SkiFahrerName=material.SkiFahrerName

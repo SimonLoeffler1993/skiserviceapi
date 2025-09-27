@@ -4,6 +4,9 @@ from datetime import date
 
 from app.schemas.kunde import SkiKundeOut
 from app.schemas.saison import SaisonRead
+from app.schemas.materialski import EigenSkiRead
+from app.schemas.materialschuh import EigenSchuhRead
+from app.schemas.materialstock import SkiStockOut
 
 
 
@@ -30,6 +33,9 @@ class SaisonVerleihMaterialUpdate(SaisonVerleihMaterialBase):
 
 class SaisonVerleihMaterialRead(SaisonVerleihMaterialBase):
     ID: int
+    Ski: EigenSkiRead | None = None
+    Schuh: EigenSchuhRead | None = None
+    Stock: SkiStockOut | None = None
     # Optional: verschachtelte Infos aus den Relationen (falls du eigene Out-Schemas hast)
     # Ski: Optional[EigenSkiRead] = None
     # Schuh: Optional[EigenSchuhRead] = None
@@ -51,7 +57,6 @@ class SaisonVerleihBase(BaseModel):
     Abgerechnet: int | None = None
     Start_Am: date | None = None
     QuittungID: int | None = None
-    Name: str
 
     class Config:
         from_attributes = True
@@ -64,10 +69,11 @@ class SaisonVerleihUpdate(SaisonVerleihBase):
 
 # -> Read mit verschachtelten Objekten
 class SaisonVerleihRead(SaisonVerleihBase):
-    ID: int | None = None
+    ID: int
+    Name: str 
     Kunde: SkiKundeOut | None = None
     Saison: SaisonRead | None = None
-    Material: List[SaisonVerleihMaterialRead] = []
+    Material: List[SaisonVerleihMaterialRead] = [] 
 
     class Config:
         from_attributes = True
