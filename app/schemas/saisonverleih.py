@@ -50,7 +50,7 @@ class SaisonVerleihBase(BaseModel):
     Ueberweisung: int | None = None
     Bezahlt: int | None = None
     Bezahlt_Am: date | None = None
-    Zurueck: int | None = None
+    Zurueck: bool | None = None
     Zurueck_Am: date | None = None
     Bemerkung: str | None = None
     Saison_ID: int | None = None
