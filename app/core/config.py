@@ -14,3 +14,6 @@ class DbSettings:
 
 
 dbSettings = DbSettings()
+
+class PDFSettings:
+    STIRLING_URL = os.getenv("STIRLING_URL", "http://pdf.fa-loeffler.de")

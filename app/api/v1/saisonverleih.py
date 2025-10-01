@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
 from app.schemas.saisonverleih import SaisonVerleihRead, SaisonVerleihCreate
+from app.utils import skipdf
 
 router = APIRouter(
     prefix="/saisonverleih",
@@ -55,3 +56,18 @@ async def get_saisonverleih(saisonverleih_id: int, db: Session = Depends(get_db)
     if not saisonverleih:
         raise HTTPException(status_code=404, detail="Saisonverleih not found")
     return saisonverleih
+
+@router.get("/pdf/{saisonverleih_id}")
+async def get_saisonverleih_pdf(saisonverleih_id: int, db: Session = Depends(get_db)):
+    """
+    Generiert ein PDF für den Saisonverleih.
+    """
+    saisonverleih = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
+    if not saisonverleih:
+        raise HTTPException(status_code=404, detail="Saisonverleih not found")
+    
+    pdf_bytes = skipdf.generate_Saisonbericht(saisonverleih)
+
+    return Response(content=pdf_bytes, media_type="application/pdf", headers={
+        "Content-Disposition": f"attachment; filename=saisonverleih_{saisonverleih_id}.pdf"
+    })

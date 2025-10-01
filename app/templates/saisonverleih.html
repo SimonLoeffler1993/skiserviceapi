@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Saisonverleih Zusammenfassung</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            color: #2c3e50;
+        }
+        h1 {
+            color: #1f3a63;
+            border-bottom: 3px solid #1f3a63;
+            padding-bottom: 5px;
+        }
+        h2 {
+            color: #1f3a63;
+            margin-top: 30px;
+            border-bottom: 1px solid #cccccc;
+            padding-bottom: 3px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .info p {
+            margin: 4px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #cccccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: #ffffff;
+        }
+        .row-even {
+            background-color: #f2f7fc;
+        }
+        .footer {
+            margin-top: 40px;
+            font-style: italic;
+            color: #555555;
+        }
+
+        /* Print-specific CSS */
+        @media print {
+            th {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .row-even {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            body {
+                color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Saisonverleih Zusammenfassung</h1>
+
+    <div class="section info">
+        <h2>Kundendaten</h2>
+        <p><strong>Name:</strong> {{ saisonverleih.Kunde.Vorname }} {{ saisonverleih.Kunde.Nachname }}</p>
+        <p><strong>Adresse:</strong> {{ saisonverleih.Kunde.Strasse }}, {{ saisonverleih.Kunde.Ort.Postlz }} {{ saisonverleih.Kunde.Ort.Ort }}</p>
+        <p><strong>Telefon:</strong> {{ saisonverleih.Kunde.Tel }}</p>
+        <p><strong>E-Mail:</strong> {{ saisonverleih.Kunde.Email }}</p>
+    </div>
+
+    <div class="section info">
+        <h2>Saisondaten</h2>
+        <p><strong>Saison:</strong> {{ saisonverleih.Saison.Name }}</p>
+        <p><strong>Startdatum:</strong> {{ saisonverleih.Start_Am }}</p>
+        <p><strong>Quittung ID:</strong> {{ saisonverleih.QuittungID }}</p>
+        <p><strong>Bezahlt:</strong> {% if saisonverleih.Bezahlt %}Ja ({{ saisonverleih.Bezahlt_Am }}){% else %}Nein{% endif %}</p>
+    </div>
+
+    <div class="section">
+        <h2>Ausgeliehenes Material</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Ski</th>
+                    <th>Schuh</th>
+                    <th>Stock</th>
+                    <th>Preis (€)</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in saisonverleih.Material %}
+                <tr class="{% if loop.index0 % 2 == 0 %}row-even{% endif %}">
+                    <td>{{ item.Ski.Modell.Modell }} / {{ item.Ski.Modell.Hersteller.Name }} ({{ item.Ski.Laenge }} cm)<br>{{ item.Ski.SkiNr }}</td>
+                    <td>{{ item.Schuh.Modell.Modell }} / {{ item.Schuh.Groese }}</td>
+                    <td>{{ item.Stock.Bezeichnung }} / {{ item.stocklaenge }} cm</td>
+                    <td>{{ item.Preis }} €</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <p class="footer">Rückgabe bis 30. April!</p>
+</body>
+</html>
