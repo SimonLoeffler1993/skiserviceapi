@@ -28,3 +28,11 @@ async def get_eigen_schuhe(schuhnr: str, db: Session = Depends(get_db)):
     if schuh is None:
         raise HTTPException(status_code=404, detail="EigenSchuh nicht gefunden")
     return schuh
+
+@router.get("/eigen/liste", response_model=list[EigenSchuhRead])
+async def get_eigen_schuhe_liste(db: Session = Depends(get_db)):
+    """
+    Gibt alle Eigenen Schuhe zurueck.
+    Wenn keine Schuhe gefunden werden, wird eine leere Liste zurueckgegeben.
+    """
+    return crud_materialschuh.get_eigen_schuhe_liste(db)

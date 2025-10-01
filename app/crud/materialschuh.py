@@ -9,3 +9,6 @@ def get_eigen_schuhe(db: Session, eigen_schuh_nr: str):
     if db_eigen_schuhe is None:
         return None
     return db_eigen_schuhe
+
+def get_eigen_schuhe_liste(db: Session):
+    return db.query(EigenSchuh).all()
