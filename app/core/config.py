@@ -17,3 +17,11 @@ dbSettings = DbSettings()
 
 class PDFSettings:
     STIRLING_URL = os.getenv("STIRLING_URL", "http://pdf.fa-loeffler.de")
+
+class EttikettierSettings:
+    printerIdent = os.getenv("LABELPRINTERIDENT", "tcp://192.168.188.159")
+    printerModel = os.getenv("LABELPRINTERMODEL", "QL-820NWB")
+    labelSize = os.getenv("LABELSIZE", "62")
+    printErstellung = os.getenv("PRINTSAISONVERLEIHCREATION", "false").strip().lower() == "true"
+
+

@@ -1,6 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import kunden, orte, event, saisonverleih
+from app.api.v1 import kunden, orte, event, saisonverleih, ettiket
 from app.api.v1.material import ski, schuh, stock
 
 app = FastAPI(title="SkiApp API", version="0.0.1")
@@ -23,11 +23,14 @@ app.include_router(saisonverleih.router, prefix=appPrefix)
 app.include_router(ski.router, prefix=appPrefix)
 app.include_router(schuh.router, prefix=appPrefix)
 app.include_router(stock.router, prefix=appPrefix)
+app.include_router(ettiket.router, prefix=appPrefix)
 
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+
 
 
 

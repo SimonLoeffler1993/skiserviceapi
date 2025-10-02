@@ -4,6 +4,8 @@ import datetime
 from app.models.saisonverleih import SkiSaisonverleihPreise, SaisonVerleih, SaisonVerleihMaterial
 from app.schemas.saisonverleih import SaisonVerleihCreate
 from app.crud import saison as crud_saison
+from app.utils.skiEttiket import SkiEttiket
+from app.core.config import EttikettierSettings
 
 
 def get_saisonverleihpreise(db: Session,):
@@ -18,6 +20,10 @@ def get_saisonverleih_liste(db: Session):
     return db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == SkiSaison.ID).all()
 
 def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
+
+    # Namen in Array
+    printNamen = []
+
     try:
         if saisonverleih.Saison_ID is not None:
             Saison_ID=saisonverleih.Saison_ID,
@@ -39,6 +45,10 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
 
         for material in saisonverleih.Material:
 
+            # Namen für Etikett
+            if not material.SkiFahrerName or material.SkiFahrerName.strip() != "": 
+                printNamen.append(material.SkiFahrerName)
+
             if material.stockbez_ID == -1:
                 stockbez_ID=None,
             else:
@@ -58,6 +68,16 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
         db.add(db_saisonverleih)
         db.commit()
         db.refresh(db_saisonverleih)
+
+        # Etiketten drucken
+        # Druck Job wird extra gemacht falls was schief geht
+        if EttikettierSettings.printErstellung:
+            label = SkiEttiket()
+            for name in printNamen:
+                label.saisonFahererName(name)
+
+            label.drucken()
+
 
         return {
             "success": True,
