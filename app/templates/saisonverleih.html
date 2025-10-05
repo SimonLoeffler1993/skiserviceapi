@@ -49,9 +49,18 @@
             color: #555555;
         }
 
+        .total-row td {
+            font-weight: bold;
+            background-color: #e8f0fa;
+        }
+
+        .total-row td:last-child {
+            text-align: right;
+        }
+
         /* Print-specific CSS */
         @media print {
-            th {
+            th, .total-row td {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
@@ -80,9 +89,6 @@
     <div class="section info">
         <h2>Saisondaten</h2>
         <p><strong>Saison:</strong> {{ saisonverleih.Saison.Name }}</p>
-        <p><strong>Startdatum:</strong> {{ saisonverleih.Start_Am }}</p>
-        <p><strong>Quittung ID:</strong> {{ saisonverleih.QuittungID }}</p>
-        <p><strong>Bezahlt:</strong> {% if saisonverleih.Bezahlt %}Ja ({{ saisonverleih.Bezahlt_Am }}){% else %}Nein{% endif %}</p>
     </div>
 
     <div class="section">
@@ -120,10 +126,16 @@
                         kein Stock
                         {% endif %}
                     </td>
-                    <td>{{ item.Preis }} €</td>
+                    <td style="text-align: right;">{{ "%.2f"|format(item.Preis) }} €</td>
                 </tr>
             {% endfor %}
             </tbody>
+            <tfoot>
+                <tr class="total-row">
+                    <td colspan="3" style="text-align: right;">Gesamtpreis:</td>
+                    <td>{{ "%.2f"|format(gesamtpreis) }} €</td>
+                </tr>
+            </tfoot>
         </table>
     </div>
 

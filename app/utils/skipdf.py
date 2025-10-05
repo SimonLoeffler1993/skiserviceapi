@@ -8,7 +8,11 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 def generate_Saisonbericht(saionverleih: SaisonVerleihRead):
-    html  = templates.get_template("saisonverleih.html").render(saisonverleih=saionverleih)
+
+    # Gesamtpreis berechnen
+    gesamtpreis = sum(item.Preis for item in saionverleih.Material)
+
+    html  = templates.get_template("saisonverleih.html").render(saisonverleih=saionverleih, gesamtpreis=gesamtpreis)
 
     # PDF generieren via API
     respose = requests.post(f"{PDFSettings.STIRLING_URL}/api/v1/convert/html/pdf",
