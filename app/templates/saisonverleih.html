@@ -99,9 +99,27 @@
             <tbody>
             {% for item in saisonverleih.Material %}
                 <tr class="{% if loop.index0 % 2 == 0 %}row-even{% endif %}">
-                    <td>{{ item.Ski.Modell.Modell }} / {{ item.Ski.Modell.Hersteller.Name }} ({{ item.Ski.Laenge }} cm)<br>{{ item.Ski.SkiNr }}</td>
-                    <td>{{ item.Schuh.Modell.Modell }} / {{ item.Schuh.Groese }}</td>
-                    <td>{{ item.Stock.Bezeichnung }} / {{ item.stocklaenge }} cm</td>
+                    <td>
+                        {% if item.Ski %}
+                        {{ item.Ski.Modell.Hersteller.Name }} {{ item.Ski.Modell.Modell }} / {{ item.Ski.Laenge }} cm<br>{{ item.Ski.SkiNr }}
+                        {% else %}
+                        kein Ski
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.Schuh %}
+                        {{ item.Schuh.Modell.Hersteller.Name }} {{ item.Schuh.Modell.Modell }} / {{ item.Schuh.Groese }}
+                        {% else %}
+                        kein Schuh
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.Stock %}
+                        {{ item.Stock.Bezeichnung }} / {{ item.stocklaenge }} cm
+                        {% else %}
+                        kein Stock
+                        {% endif %}
+                    </td>
                     <td>{{ item.Preis }} €</td>
                 </tr>
             {% endfor %}
