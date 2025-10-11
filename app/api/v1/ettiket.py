@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
+from app.crud import materialschuh as crud_materialschuh
 from app.utils.skiEttiket import SkiEttiket
 
 from app.schemas.ettiketenprint import EttiketPrintRequest
@@ -61,3 +62,20 @@ def print_saisonfahrer_ettiket(saisonverleih_id: int, db: Session = Depends(get_
     if not labelPrint:
         return {"success": False, "message": "Kein Fahrername für Ettiket vorhanden."}
     return {"success": True, "message": f"Ettiket for Saisonverleih ID {saisonverleih_id} printed."}
+
+@router.post("/schuh/{schuhID}" , response_model=EttiketPrintRequest)
+def print_schuh_ettiket(schuhID: str, db: Session = Depends(get_db)):
+    """
+    Druckt Ettiket für Schuh
+    """
+    schuh = crud_materialschuh.get_eigen_schuhe(db, schuhID)
+    if not schuh:
+        return {"success": False, "message": f"Error Drucken ettiket: Schuh {schuhID} nicht gefunden."}
+    try:
+        ettiket_printer = SkiEttiket()
+        ettiket_printer.SchuhEttiket(hersteller=schuh.Modell.Hersteller.Name, modell=schuh.Modell.Modell, groesse=str(schuh.Groese), qrdata=schuhID)
+        ettiket_printer.drucken()
+    except Exception as e:
+        return {"success": False, "message": f"Error printing ettiket: {str(e)}"}
+
+    return {"success": True, "message": f"Ettiket for Schuh {schuhID} printed."}
