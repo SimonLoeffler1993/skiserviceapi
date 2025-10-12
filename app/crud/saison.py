@@ -19,3 +19,6 @@ def get_next_SaisonVerleihNummer(db: Session):
     # TODO Kürzel in Einstellungen frei Devinierbar machen   
     return saisonData.Name + "SV" + str(nexteNummer)
 
+
+def get_all_saisons(db: Session):
+    return db.query(Saison).all()
