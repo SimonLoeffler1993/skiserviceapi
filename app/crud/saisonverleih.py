@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 import datetime
+from typing import Optional
 
 from app.models.saisonverleih import SkiSaisonverleihPreise, SaisonVerleih, SaisonVerleihMaterial
 from app.schemas.saisonverleih import SaisonVerleihCreate
@@ -15,7 +16,9 @@ def get_saisonverleihpreise(db: Session,):
 def get_saisonverleih(db: Session, saisonverleih_id: int):
     return db.query(SaisonVerleih).filter(SaisonVerleih.ID == saisonverleih_id).first()
 
-def get_saisonverleih_liste(db: Session):
+def get_saisonverleih_liste(db: Session, saisonID: Optional[int] = None ):
+    if saisonID is not None:
+        return db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == saisonID).all()
     SkiSaison = crud_saison.get_AktuelleSaison(db)
     return db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == SkiSaison.ID).all()
 
