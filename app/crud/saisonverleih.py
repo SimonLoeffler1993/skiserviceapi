@@ -57,7 +57,13 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
             else:
                 stockbez_ID=material.stockbez_ID,
 
+            if material.skinr == "":
+                material.skinr=None,
+            if material.schuhnr == "":
+                material.schuhnr=None,
+
             db_saisonverleih.Material.append(
+                
                 SaisonVerleihMaterial(
                     skinr=material.skinr,
                     schuhnr=material.schuhnr,
