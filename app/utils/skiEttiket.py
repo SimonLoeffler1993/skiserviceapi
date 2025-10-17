@@ -80,6 +80,7 @@ class SkiEttiket:
         img = Image.new("RGB", (labelpxbreite, labelpxhoehe), "white")
         draw = ImageDraw.Draw(img)
 
+        # TODO Schriftarten, Fehler im Docker Container
         try:
             font_path = os.path.join("fonts", "arial.ttf")
             font_bold_path = os.path.join("fonts", "arialbd.ttf")

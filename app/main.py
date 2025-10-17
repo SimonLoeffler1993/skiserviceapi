@@ -5,6 +5,9 @@ from app.api.v1.material import ski, schuh, stock
 
 app = FastAPI(title="SkiApp API", version="0.0.1")
 
+# TODO: Alembic in den Startprozess integrieren
+# Dadurch werden bei jedem Start die neuesten DB Migrationen ausgeführt.
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
