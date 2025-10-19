@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
 from app.schemas.materialski import EigenSkiRead
-from app.schemas.materialski import SkiArtRead, VerleihSkiHerstellerRead, VerleihSkiHerstellerBase
+from app.schemas.materialski import SkiArtRead, VerleihSkiHerstellerRead, VerleihSkiHerstellerBase, VerleihSkiModellBase, VerleihSkiModellRead
 from app.crud import materialski as crud_materialski
 
 router = APIRouter(
@@ -40,3 +40,33 @@ def create_hersteller(hersteller: VerleihSkiHerstellerBase, db: Session = Depend
     """
     hersteller = hersteller.Name
     return crud_materialski.create_hersteller(db, hersteller)
+
+@router.get("/art", response_model=list[SkiArtRead])
+def get_skiart(db: Session = Depends(get_db)):
+    """
+    Gibt alle Skiarten zurück.
+    """
+    return crud_materialski.get_skiart(db)
+
+# @router.post("/art", response_model=SkiArtRead)
+# def create_skiart(skiart: SkiArtRead, db: Session = Depends(get_db)):
+#     """
+#     Erstellt eine neue Skiart.
+#     """
+#     skiart_name = skiart.Name
+#     return crud_materialski.create_skiart(db, skiart_name)
+
+@router.post("/modell", response_model=VerleihSkiModellRead)
+def create_ski_modell(modell: VerleihSkiModellBase, db: Session = Depends(get_db)):
+    """
+    Erstellt ein neues Skimodell.
+    """
+    modell = modell
+    return crud_materialski.create_ski_modell(db, modell)
+
+@router.get("/modell", response_model=list[VerleihSkiModellRead])
+def get_ski_modell(db: Session = Depends(get_db)):
+    """
+    Gibt alle Skimodelle zurück.
+    """
+    return crud_materialski.get_ski_modell(db)

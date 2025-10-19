@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models.materialski import EigenSki, VerleihSkiHersteller
+from app.models.materialski import EigenSki, VerleihSkiHersteller, SkiArt, VerleihSkiModell
 
 
 
@@ -18,3 +18,20 @@ def create_hersteller(db: Session, hersteller: str):
     db.commit()
     db.refresh(db_hersteller)
     return db_hersteller
+
+def get_skiart(db: Session):
+    return db.query(SkiArt).all()
+
+def create_ski_modell(db: Session, modell):
+    db_modell = VerleihSkiModell(
+        Modell=modell.Modell,
+        Art_ID=modell.Art_ID,
+        Hersteller_ID=modell.Hersteller_ID
+    )
+    db.add(db_modell)
+    db.commit()
+    db.refresh(db_modell)
+    return db_modell
+
+def get_ski_modell(db: Session):
+    return db.query(VerleihSkiModell).all() 
