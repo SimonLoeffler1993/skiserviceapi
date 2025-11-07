@@ -13,7 +13,7 @@ class SkiKunde(Base):
     Nachname = Column(String(20))
     Vorname = Column(String(20))
     Anrede = Column(String(1), default="f")
-    Strasse= Column(String(20))
+    Strasse= Column(String(250))
     Plz = Column(Integer(), ForeignKey('postleitzahl.Postlz'))
     Ort = relationship("Ort", backref="adresse")
     Tel = Column(String(50))
