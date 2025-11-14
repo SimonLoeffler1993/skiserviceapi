@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 
 from app.db.deps import get_db
-from app.schemas.materialski import EigenSkiRead
+from app.schemas.materialski import EigenSkiRead, EigenSkiBase
 from app.schemas.materialski import SkiArtRead, VerleihSkiHerstellerRead, VerleihSkiHerstellerBase, VerleihSkiModellBase, VerleihSkiModellRead
 from app.crud import materialski as crud_materialski
 
@@ -70,3 +70,10 @@ def get_ski_modell(db: Session = Depends(get_db)):
     Gibt alle Skimodelle zurück.
     """
     return crud_materialski.get_ski_modell(db)
+
+@router.post("/anlegen", response_model=EigenSkiRead)
+def create_eigen_ski(ski: EigenSkiBase, db: Session = Depends(get_db)):
+    """
+    Legt ein neuen Eigenes Ski Material an.
+    """
+    return crud_materialski.create_eigen_ski(db, ski)

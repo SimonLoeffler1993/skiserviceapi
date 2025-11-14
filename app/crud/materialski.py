@@ -9,6 +9,20 @@ def get_eigen_ski(db: Session, eigen_ski_nr: int):
         return None
     return db_eigen_ski
 
+def create_eigen_ski(db: Session, ski):
+    db_ski = EigenSki(
+        SkiNr=ski.SkiNr,
+        Modell_ID=ski.Modell_ID,
+        VK=ski.VK,
+        EK=ski.EK,
+        Laenge=ski.Laenge,
+        Saison=ski.Saison
+    )
+    db.add(db_ski)
+    db.commit()
+    db.refresh(db_ski)
+    return db_ski
+
 def get_hersteller(db: Session):
     return db.query(VerleihSkiHersteller).all()
 
