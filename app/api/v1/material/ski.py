@@ -26,6 +26,14 @@ async def get_eigen_ski(skinr: str, db: Session = Depends(get_db)):
     """
     return crud_materialski.get_eigen_ski(db,skinr)
 
+@router.get("/liste", response_model=list[EigenSkiRead])
+async def get_eigen_ski_liste(db: Session = Depends(get_db)):
+    """
+    Gibt alle Eigenen SKi zurück.
+    """
+    # TODO Paging
+    return crud_materialski.get_eigen_ski(db,"")
+
 @router.get("/hersteller", response_model=list[VerleihSkiHerstellerRead])
 def get_hersteller(db: Session = Depends(get_db)):
     """
