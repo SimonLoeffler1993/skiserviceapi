@@ -100,3 +100,12 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
             "data": None
             }
     
+def set_Saisonverleih_Zurueck(db: Session, saisonverleih_id: int, zurueck: bool = True):
+    saisonverleih = get_saisonverleih(db, saisonverleih_id)
+    if not saisonverleih:
+        return False
+    saisonverleih.Zurueck_Am = datetime.date.today()
+    saisonverleih.Zurueck = zurueck
+    db.commit()
+    db.refresh(saisonverleih)
+    return True

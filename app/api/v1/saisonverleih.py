@@ -72,3 +72,13 @@ async def get_saisonverleih_pdf(saisonverleih_id: int, db: Session = Depends(get
     return Response(content=pdf_bytes, media_type="application/pdf", headers={
         "Content-Disposition": f"attachment; filename=saisonverleih_{saisonverleih_id}.pdf"
     })
+
+@router.post("/zurueckgeben/{saisonverleih_id}")
+async def saisonverleih_zurueckgeben(saisonverleih_id: int, db: Session = Depends(get_db), zurueck: bool = True):
+    """
+    Markiert einen Saisonverleih als zurückgegeben.
+    """
+    result = crud_saisonverleih.set_Saisonverleih_Zurueck(db, saisonverleih_id, zurueck)
+    if not result:
+        raise HTTPException(status_code=404, detail="Saisonverleih not found")
+    return {"message": f"Saisonverleih {saisonverleih_id} wurde als zurückgegeben markiert", "success": True}
