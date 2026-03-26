@@ -19,8 +19,11 @@ class SaisonVerleihMaterialBase(BaseModel):
     Preis: float
     SkiFahrerName: Optional[str] = None # Name der Person, die das Material fährt (kann vom Kunden abweichen)
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
+    # class Config:
+    #     from_attributes = True
 
 
 class SaisonVerleihMaterialCreate(SaisonVerleihMaterialBase):
@@ -40,8 +43,11 @@ class SaisonVerleihMaterialRead(SaisonVerleihMaterialBase):
     # Ski: Optional[EigenSkiRead] = None
     # Schuh: Optional[EigenSchuhRead] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
+    # class Config:
+    #     from_attributes = True
 
 
 # --- Saisonverleih ---
@@ -58,8 +64,9 @@ class SaisonVerleihBase(BaseModel):
     Start_Am: date | None = None
     QuittungID: int | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class SaisonVerleihCreate(SaisonVerleihBase):
     Material: List[SaisonVerleihMaterialBase] = []
@@ -75,5 +82,8 @@ class SaisonVerleihRead(SaisonVerleihBase):
     Saison: SaisonRead | None = None
     Material: List[SaisonVerleihMaterialRead] = [] 
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
+    # class Config:
+    #     from_attributes = True

@@ -24,4 +24,8 @@ class EttikettierSettings:
     labelSize = os.getenv("LABELSIZE", "62")
     printErstellung = os.getenv("PRINTSAISONVERLEIHCREATION", "false").strip().lower() == "true"
 
+class LexwareSettings:
+    baseURl = os.getenv("LEXWARE_BASEURL", "https://api.lexware.io")
+    apiKey = os.getenv("LEXWARE_APIKEY" )
+    sync = os.getenv("LEXWARE_SYNC", "false").strip().lower() == "true"
 

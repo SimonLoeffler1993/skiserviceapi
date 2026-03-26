@@ -53,6 +53,11 @@ def erfassen_kunde(db: Session, kunde: SkiKundeSpeichern):
     
 def update_kunde(db: Session, kunde_id: int, kunde: SkiKundeSpeichern):
     existing_kunde = db.query(SkiKunde).filter(SkiKunde.ID == kunde_id).first()
+    if not existing_kunde:
+        return {
+            "success": False,
+            "kunde": None
+        }
     existing_kunde.Vorname = kunde.Vorname
     existing_kunde.Nachname = kunde.Nachname
     existing_kunde.Strasse = kunde.Strasse
@@ -63,6 +68,6 @@ def update_kunde(db: Session, kunde_id: int, kunde: SkiKundeSpeichern):
     db.commit()
     return {
         "success": True,
-        "kunde":existing_kunde
+        "kunde": existing_kunde
     }
 
