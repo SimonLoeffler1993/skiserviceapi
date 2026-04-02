@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -41,11 +41,16 @@ async def erstelle_saisonverleih(saisonverleih: SaisonVerleihCreate, db: Session
 
 # TODO get Paramter für Saison
 @router.get("/", response_model=list[SaisonVerleihRead])
-async def list_saisonverleih(saisonID: Optional[int] = None ,db: Session = Depends(get_db)):
+async def list_saisonverleih(
+        saisonID: Optional[int] = Query(default=None, description="ID der Saison für die Filterung der Verleih-Einträge, keine ist die aktelle Saison"),
+        limit: int = Query(default=15, le=100), 
+        last_id: Optional[int] = Query(default=None, description="ID des letzten Eintrags der vorherigen Seite für die Pagination"),
+        db: Session = Depends(get_db)
+    ):
     """
     Listet alle Saisonverleih-Einträge auf.
     """
-    saisonverleih_liste = crud_saisonverleih.get_saisonverleih_liste(db, saisonID)
+    saisonverleih_liste = crud_saisonverleih.get_saisonverleih_liste(db, limit, last_id, saisonID)
     return saisonverleih_liste
 
 @router.get("/{saisonverleih_id}" , response_model=SaisonVerleihRead)
