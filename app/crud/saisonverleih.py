@@ -20,7 +20,8 @@ def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int]
     # Wenn keine Saison ID angegeben ist, nehme die aktuelle Saison
     if saisonID is None:
         SkiSaison = crud_saison.get_AktuelleSaison(db)
-        saisonID = SkiSaison.ID
+        if SkiSaison is not None:
+            saisonID = SkiSaison.ID
 
     query = db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == saisonID)
 

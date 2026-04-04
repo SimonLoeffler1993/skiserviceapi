@@ -39,7 +39,7 @@ async def erstelle_saisonverleih(saisonverleih: SaisonVerleihCreate, db: Session
     ergebnis = crud_saisonverleih.create_saisonverleih(db, saisonverleih)
     return ergebnis
 
-# TODO get Paramter für Saison
+# TODO Route für alle Daten aufeinmal abrufen
 @router.get("/", response_model=list[SaisonVerleihRead])
 async def list_saisonverleih(
         saisonID: Optional[int] = Query(default=None, description="ID der Saison für die Filterung der Verleih-Einträge, keine ist die aktelle Saison"),
