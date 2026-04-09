@@ -19,3 +19,7 @@ async def test():
 @router.get("/alle", response_model=list[SaisonsNamen])
 async def get_all_saisons(db: Session = Depends(get_db)):
     return crud_saison.get_all_saisons(db)
+
+@router.get("/aktuelle", response_model=SaisonsNamen)
+async def get_aktuelle_saison(db: Session = Depends(get_db)):
+    return crud_saison.get_AktuelleSaison(db)
