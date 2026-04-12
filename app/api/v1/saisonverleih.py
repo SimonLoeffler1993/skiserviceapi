@@ -45,12 +45,13 @@ async def list_saisonverleih(
         saisonID: Optional[int] = Query(default=None, description="ID der Saison für die Filterung der Verleih-Einträge, keine ist die aktelle Saison"),
         limit: int = Query(default=15, le=100), 
         last_id: Optional[int] = Query(default=None, description="ID des letzten Eintrags der vorherigen Seite für die Pagination"),
+        alle: bool = Query(default=False, description="Alle Einträge ohne Pagination zurückgeben"),
         db: Session = Depends(get_db)
     ):
     """
     Listet alle Saisonverleih-Einträge auf.
     """
-    saisonverleih_liste = crud_saisonverleih.get_saisonverleih_liste(db, limit, last_id, saisonID)
+    saisonverleih_liste = crud_saisonverleih.get_saisonverleih_liste(db, limit, last_id, saisonID, alle)
     return saisonverleih_liste
 
 @router.get("/{saisonverleih_id}" , response_model=SaisonVerleihRead)
