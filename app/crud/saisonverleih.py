@@ -16,11 +16,24 @@ def get_saisonverleihpreise(db: Session,):
 def get_saisonverleih(db: Session, saisonverleih_id: int):
     return db.query(SaisonVerleih).filter(SaisonVerleih.ID == saisonverleih_id).first()
 
-def get_saisonverleih_liste(db: Session, saisonID: Optional[int] = None ):
-    if saisonID is not None:
-        return db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == saisonID).all()
-    SkiSaison = crud_saison.get_AktuelleSaison(db)
-    return db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == SkiSaison.ID).all()
+def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] = False):
+    # Wenn keine Saison ID angegeben ist, nehme die aktuelle Saison
+    if saisonID is None:
+        SkiSaison = crud_saison.get_AktuelleSaison(db)
+        if SkiSaison is not None:
+            saisonID = SkiSaison.ID
+
+    query = db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == saisonID)
+
+    # Wenn "alle" True ist, gebe alle Einträge zurück, andernfalls wende Pagination an
+    if alle:
+        return query.order_by(SaisonVerleih.ID).all()
+    
+    # Pagination anwenden
+    if last_id is not None:
+        query = query.filter(SaisonVerleih.ID > last_id)
+
+    return query.order_by(SaisonVerleih.ID).limit(limit).all()
 
 def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
 
