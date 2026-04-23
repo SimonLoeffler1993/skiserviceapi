@@ -1,8 +1,9 @@
 import httpx
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.db.deps import get_db
 from app.crud import quittung as crud_quittung
@@ -16,6 +17,23 @@ router = APIRouter(
 )
 
 lexware_api = LexwareAPI()
+
+@router.get("/lexware/belege")
+async def get_lexware_belege(
+        page: Optional[int] = Query(default=0, description="Seitenzahl für die Paginierung der Belege von Lexware, beginnend bei 0")
+    ):
+    """
+    Holt die Belege von Lexoffice.
+    """
+    try:
+        # Standardmäßig wird die erste Seite (page=0) abgerufen, wenn kein Wert angegeben ist.
+        if page is None:
+            page = 0
+
+        belege_data = lexware_api.get_belege(page=page)
+        return belege_data
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
 
 @router.get("/lexware/{lex_quittung_id}")
 async def get_lexware_quittung(lex_quittung_id: str):
