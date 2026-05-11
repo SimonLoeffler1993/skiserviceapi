@@ -27,3 +27,15 @@ class LexwareAPI:
         response = httpx.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
+    
+    def get_belege(self, page: int = 0):
+        # TODO: #4 Belege mit Filterung nach Typ und Status abrufen von Lexware API
+        url = f"{self.baseURL}/v1/voucherlist?voucherType=invoice&voucherStatus=any&page={page}"
+        headers = {
+            "cache-control": "no-cache",
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self.apiKey}"
+            }
+        response = httpx.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()

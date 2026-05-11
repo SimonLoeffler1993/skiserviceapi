@@ -8,15 +8,16 @@ from app.db.base import Base
 # Vorne bei Mapped immer Python typen verwenden, hinten bei mapped_column die SQLAlchemy Spaltentypen
 class Quittung(Base):
     __tablename__ = "quittungen"
-    ID = Column(Integer, primary_key=True)
+    ID: Mapped[int] = mapped_column(Integer, primary_key=True)
     Name: Mapped[str] = mapped_column(String)
-    AnzAuftrag: Mapped[int] = mapped_column(Integer, nullable=True)
-    AnzVerleih: Mapped[int] = mapped_column(Integer, nullable=True)
+    AnzAuftrag: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
+    AnzVerleih: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
     Saison_ID: Mapped[int] = mapped_column(Integer)
-    Bezahlt_Am: Mapped[date | None] = mapped_column(Date, nullable=True)
+    Bezahlt_Am: Mapped[date | None] = mapped_column(Date, nullable=True, default=False)
   
     Erstellt_Am: Mapped[date] = mapped_column(Date)
-    Ueberweisung: Mapped[bool] = mapped_column(Boolean, nullable=True)
-    Bezahlt: Mapped[bool] = mapped_column(Boolean, nullable=True)
-    BuchhaltungSync: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    Ueberweisung: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
+    Bezahlt: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
+    BuchhaltungSync: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
     LexID: Mapped[str] = mapped_column(String(150))
+    NurExtern: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)

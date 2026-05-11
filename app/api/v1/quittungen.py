@@ -1,12 +1,14 @@
 import httpx
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.db.deps import get_db
 from app.crud import quittung as crud_quittung
-from app.schemas.quittung import QuittungRead
+from app.crud import saisonverleih as crud_saisonverleih
+from app.schemas.quittung import QuittungNurExtern, QuittungRead
 from app.utils.lexware import LexwareAPI
 
 router = APIRouter(
@@ -16,6 +18,23 @@ router = APIRouter(
 )
 
 lexware_api = LexwareAPI()
+
+@router.get("/lexware/belege")
+async def get_lexware_belege(
+        page: Optional[int] = Query(default=0, description="Seitenzahl für die Paginierung der Belege von Lexware, beginnend bei 0")
+    ):
+    """
+    Holt die Belege von Lexoffice.
+    """
+    try:
+        # Standardmäßig wird die erste Seite (page=0) abgerufen, wenn kein Wert angegeben ist.
+        if page is None:
+            page = 0
+
+        belege_data = lexware_api.get_belege(page=page)
+        return belege_data
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
 
 @router.get("/lexware/{lex_quittung_id}")
 async def get_lexware_quittung(lex_quittung_id: str):
@@ -64,10 +83,10 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
            
 
             lexOffenerBetrag = -1
-            lexOffenerBetrag = bezahlinfo_data["openAmount"]
+            lexOffenerBetrag = bezahlinfo_data.get("openAmount")
 
             lexBezahltAm = None
-            if bezahlinfo_data["paidDate"]:
+            if bezahlinfo_data.get("paidDate"):
                 # Parse ISO 8601 datetime and convert to date for response
                 paid_date = datetime.fromisoformat(bezahlinfo_data["paidDate"].replace('Z', '+00:00'))
                 lexBezahltAm = paid_date.date()
@@ -89,6 +108,27 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
             raise HTTPException(status_code=e.response.status_code, detail=str(e))
     return quittung
 
+@router.post("/quittung/nurextern")
+async def create_quittung_nur_extern(quittung_data: QuittungNurExtern, db: Session = Depends(get_db)):
+    # Zuerst Prüfen ob es eine Saisonverleih gibt
+    saisonverleih = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id=quittung_data.SaisonverleihID)
+    if saisonverleih is None:
+        raise HTTPException(status_code=404, detail="Saisonverleih not found")
+    
+    print(f"Saisonverleih wurde gefunden: ID {saisonverleih.ID}")
+    
+    neuExQuittung = crud_quittung.create_NurExtern_quittung(db, saisonverleih_id=quittung_data.SaisonverleihID, lexoffice_id=quittung_data.LexOfficeID)
+    if neuExQuittung is None:
+        raise HTTPException(status_code=500, detail="Fehler beim Erstellen der Quittung")
+    
+    print(f"Neue Quittung wurde erstellt: ID {neuExQuittung.ID}")
+    
+    # Saisonverleih mit Quittung verknüpfen
+    success = crud_saisonverleih.set_Saisonverleih_Quittung(db, saisonverleih_id=quittung_data.SaisonverleihID, quittung_id=neuExQuittung.ID)
+    if not success:
+        raise HTTPException(status_code=500, detail="Fehler beim Verknüpfen der Quittung mit dem Saisonverleih")
+    
+    return {"erfolgreich": True, "quittung_id": neuExQuittung.ID}
 
 @router.get("/test")
 async def test():

@@ -122,3 +122,12 @@ def set_Saisonverleih_Zurueck(db: Session, saisonverleih_id: int, zurueck: bool 
     db.commit()
     db.refresh(saisonverleih)
     return True
+
+def set_Saisonverleih_Quittung(db: Session, saisonverleih_id: int, quittung_id: int):
+    saisonverleih = get_saisonverleih(db, saisonverleih_id)
+    if not saisonverleih:
+        return False
+    saisonverleih.QuittungID = quittung_id
+    db.commit()
+    db.refresh(saisonverleih)
+    return True
