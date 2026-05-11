@@ -24,6 +24,8 @@ def create_NurExtern_quittung(db: Session, saisonverleih_id: int, lexoffice_id: 
     if aktuelle_saison is None:
         raise ValueError("Keine aktuelle Saison gefunden. Bitte erstelle eine Saison, bevor du eine Quittung erstellst.")
     
+    # TODO: #5 Externe Beleggname bei Name eintragen beim erstellen eines nur externen Beleg
+
     db_quittung = Quittung(
         Saison_ID=aktuelle_saison.ID,
         LexID=lexoffice_id,
