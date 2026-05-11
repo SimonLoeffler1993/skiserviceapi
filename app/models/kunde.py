@@ -1,26 +1,30 @@
-from sqlalchemy import Column, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship
+from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from typing import Optional
 
 from app.db.base import Base
-
-# Wird Importiert um Fehler zu vermeiden
-# auch wen diese nicht direkt verwendet werden
 from app.models.ort import Ort
+
 
 class SkiKunde(Base):
     __tablename__ = "adresse"
-    ID = Column(Integer, primary_key=True)
-    Nachname = Column(String(20))
-    Vorname = Column(String(20))
-    Anrede = Column(String(1), default="f")
-    Strasse= Column(String(250))
-    Plz = Column(Integer(), ForeignKey('postleitzahl.Postlz'))
-    Ort = relationship("Ort", backref="adresse")
-    Tel = Column(String(50))
-    Email = Column(String(50))
-    Tel1 = Column(String(50))
-    Tel2 = Column(String(50))
-    Email1 = Column(String(50))
-    Email2 = Column(String(50))
-    AusweisNr = Column(String(15), default="0")
-    BDay = Column(String(15))
+    ID: Mapped[int] = mapped_column(Integer, primary_key=True)
+    Nachname: Mapped[str | None] = mapped_column(String(20))
+    Vorname: Mapped[str | None] = mapped_column(String(20))
+    Anrede: Mapped[str | None] = mapped_column(String(1), default="f")
+    Strasse: Mapped[str | None] = mapped_column(String(250))
+    Plz: Mapped[int | None] = mapped_column(Integer, ForeignKey("postleitzahl.Postlz"))
+    Ort: Mapped[Optional[Ort]] = relationship(Ort, back_populates="adresse")
+    Tel: Mapped[str | None] = mapped_column(String(50))
+    Email: Mapped[str | None] = mapped_column(String(50))
+    Tel1: Mapped[str | None] = mapped_column(String(50))
+    Tel2: Mapped[str | None] = mapped_column(String(50))
+    Email1: Mapped[str | None] = mapped_column(String(50))
+    Email2: Mapped[str | None] = mapped_column(String(50))
+    AusweisNr: Mapped[str | None] = mapped_column(String(15), default="0")
+    BDay: Mapped[str | None] = mapped_column(String(15))
+
+    # back_populates von SaisonVerleih
+    saisonverleih: Mapped[list["SaisonVerleih"]] = relationship(
+        "SaisonVerleih", back_populates="Kunde"
+    )

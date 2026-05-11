@@ -13,8 +13,8 @@ class BezahlInfoSchema(BaseModel):
 
 class QuittungBase(BaseModel):
     Name: str
-    AnzAuftrag: int
-    AnzVerleih: int
+    AnzAuftrag: int | None = None
+    AnzVerleih: int | None = None
     Saison_ID: int
     Bezahlt_Am: date | None = None
     Erstellt_Am: date | None = None
@@ -44,6 +44,14 @@ class QuittungUpdate(BaseModel):
 
 class QuittungRead(QuittungBase):
     ID: int
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class QuittungNurExtern(BaseModel):
+    SaisonverleihID: int
+    LexOfficeID: str
 
     model_config = {
         "from_attributes": True
