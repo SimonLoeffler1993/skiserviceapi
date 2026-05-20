@@ -10,3 +10,4 @@ brother-ql==0.9.4
 pillow==12.1.1
 qrcode==8.2.0
 httpx==0.28.1
+websockets==16.0
