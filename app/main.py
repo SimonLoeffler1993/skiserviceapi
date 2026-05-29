@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import kunden, orte, event, saisonverleih, ettiket, saison, quittungen
 from app.api.v1.material import ski, schuh, stock
 from app.api.v1.scanner import skiscanner
+from app.api.v1 import skiservice
 
 app = FastAPI(title="SkiApp API", version="0.0.1")
 
@@ -31,6 +32,7 @@ app.include_router(ettiket.router, prefix=appPrefix)
 app.include_router(saison.router, prefix=appPrefix)
 app.include_router(quittungen.router, prefix=appPrefix)
 app.include_router(skiscanner.router, prefix=appPrefix)
+app.include_router(skiservice.router, prefix=appPrefix)
 
 @app.get("/")
 def read_root():

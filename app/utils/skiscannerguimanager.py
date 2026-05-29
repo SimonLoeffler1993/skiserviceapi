@@ -1,5 +1,7 @@
 from fastapi import WebSocket, WebSocketDisconnect
 
+from app.schemas.scanner import ScannerWebSocketMessage
+
 class SkiScannerGUIManager:
     def __init__(self):
         self.active: list[WebSocket] = []
@@ -16,5 +18,12 @@ class SkiScannerGUIManager:
         for websocket in list(self.active):
             try:
                 await websocket.send_text(message)
+            except WebSocketDisconnect:
+                await self.trennen(websocket)
+
+    async def sende_data_broadcast(self, data: ScannerWebSocketMessage):
+        for websocket in list(self.active):
+            try:
+                await websocket.send_json(data.dict())
             except WebSocketDisconnect:
                 await self.trennen(websocket)

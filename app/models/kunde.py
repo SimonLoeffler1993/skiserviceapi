@@ -24,7 +24,3 @@ class SkiKunde(Base):
     AusweisNr: Mapped[str | None] = mapped_column(String(15), default="0")
     BDay: Mapped[str | None] = mapped_column(String(15))
 
-    # back_populates von SaisonVerleih
-    saisonverleih: Mapped[list["SaisonVerleih"]] = relationship(
-        "SaisonVerleih", back_populates="Kunde"
-    )

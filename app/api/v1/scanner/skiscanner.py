@@ -1,8 +1,14 @@
+import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from urllib.parse import urlparse, parse_qs
+from sqlalchemy.orm import Session
 
-from app.schemas.scanner import ScannerRead, TriggerStatus
+from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
+from app.schemas.skiservice import AuftragSchema
 from app.utils.skiscannerguimanager import SkiScannerGUIManager
+from app.crud import skiservice as crud_skiservice
+from app.db.deps import get_db
 
 router = APIRouter(
     prefix="/scanner/skiscanner",
@@ -14,25 +20,45 @@ scanner_manager = SkiScannerGUIManager()
 
 def codeURL2SaisonID(codeURL: str):
     parsed_url = urlparse(codeURL)
-    saison_id = parsed_url.path.strip("/").split("/")[-1] or None
-    ski_nr = parse_qs(parsed_url.query).get("ski", [None])[0] 
+    service_id = parsed_url.path.strip("/").split("/")[-1] or None
+    ski_id = parse_qs(parsed_url.query).get("ski", [None])[0] 
 
-    return saison_id, ski_nr
-    
+    return service_id, ski_id
 
 @router.get("/test")
 async def test():
     return {"message": "Skiscanner API is working!"}
 
 @router.post("/scan")
-async def scan(scanner_data: ScannerRead):
+async def scan(scanner_data: ScannerRead, db: Session = Depends(get_db)):
     """
     Wertet die gesendeten Daten vom Skiscanner aus.
     """
     
     if scanner_data.trigger == TriggerStatus.fertig:
-        saisonID, ski_nr = codeURL2SaisonID(scanner_data.code)
-        print(f"Scan abgeschlossen. SaisonID: {saisonID}, Ski-Nr: {ski_nr}")
+        service_id, ski_id = codeURL2SaisonID(scanner_data.code)
+        print(f"Scan abgeschlossen. ServiceID: {service_id}, Ski-ID: {ski_id}")
+
+        # ServiceID in Integer umwandeln, falls möglich
+        intServiceID = int(service_id) if service_id and service_id.isdigit() else None
+        if intServiceID is None:
+            print(f"Ungültige ServiceID: {service_id}")
+            return {"message": "Ungültige ServiceID im CodeURL"}
+        
+        # Datenbankabfrage, um die Auftragsdaten zu erhalten
+        skiservicedata = crud_skiservice.getSkiserviceAuftrag(db, intServiceID)
+
+        # Nachricht an alle verbundenen WebSocket-Clients senden
+        await scanner_manager.sende_data_broadcast(
+            ScannerWebSocketMessage(
+                message="Scan abgeschlossen",
+                success=True,
+                scannername=scanner_data.name,
+                ski_id=int(ski_id) if ski_id and ski_id.isdigit() else None,
+                service_id=intServiceID,
+                data=AuftragSchema.model_validate(skiservicedata) if skiservicedata else None
+            )
+        )
 
     return {"message": "Scanning in progress..."}
 
