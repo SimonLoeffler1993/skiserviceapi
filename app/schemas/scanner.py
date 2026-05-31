@@ -1,6 +1,5 @@
 from pydantic import BaseModel
 from enum import IntEnum
-from datetime import datetime
 
 from app.schemas.skiservice import AuftragSchema
 

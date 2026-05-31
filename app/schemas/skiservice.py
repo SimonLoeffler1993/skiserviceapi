@@ -63,3 +63,7 @@ class AuftragSchema(BaseModel):
     @field_serializer("bezahlt_am")
     def serialize_date(self, d: date, _info) -> Optional[str]:
         return d.isoformat() if d else None
+    
+class AuftragSkiFertigSchema(BaseModel):
+    id: int
+    ski_ids: list[int]
