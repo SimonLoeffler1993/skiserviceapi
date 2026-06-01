@@ -27,3 +27,7 @@ class SkiScannerGUIManager:
                 await websocket.send_json(data.dict())
             except WebSocketDisconnect:
                 await self.trennen(websocket)
+
+
+# Globale Instanz erstellen
+scanner_gui_manager = SkiScannerGUIManager()

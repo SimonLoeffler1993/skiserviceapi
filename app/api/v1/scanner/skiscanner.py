@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
 from app.schemas.skiservice import AuftragSchema
-from app.utils.skiscannerguimanager import SkiScannerGUIManager
+from app.utils.skiscannerguimanager import scanner_gui_manager as scanner_manager
 from app.crud import skiservice as crud_skiservice
 from app.db.deps import get_db
 
@@ -16,7 +16,7 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-scanner_manager = SkiScannerGUIManager()
+# scanner_manager = SkiScannerGUIManager()
 
 def codeURL2SaisonID(codeURL: str):
     parsed_url = urlparse(codeURL)
