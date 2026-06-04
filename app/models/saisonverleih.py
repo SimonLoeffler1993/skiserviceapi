@@ -1,10 +1,10 @@
 from __future__ import annotations
 from sqlalchemy import Integer, String, Double, Date, ForeignKey, Boolean
-from app.db.base import Base
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from datetime import date
 from typing import Optional
 
+from app.db.base import Base
 from app.models.saison import Saison
 from app.models.kunde import SkiKunde
 from app.models.materialski import EigenSki
@@ -54,7 +54,7 @@ class SaisonVerleih(Base):
     ID: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     Kunde_ID: Mapped[int | None] = mapped_column(ForeignKey("adresse.ID"))
-    Kunde: Mapped[Optional[SkiKunde]] = relationship(SkiKunde, back_populates="saisonverleih")
+    Kunde: Mapped[Optional[SkiKunde]] = relationship(SkiKunde)
 
     Ueberweisung: Mapped[bool | None] = mapped_column(Boolean)
     Bezahlt: Mapped[bool | None] = mapped_column(Boolean)

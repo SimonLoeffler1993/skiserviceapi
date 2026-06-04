@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+</head>
+
+<body>
+    <p style="margin: 0 0 8px; font-size: 14px; color: #444;">Hallo {{ auftrag.kunde.Vorname }} {{ auftrag.kunde.Nachname }},</p>
+    <p style="margin: 0 0 20px; font-size: 16px; font-weight: bold; color: #111;">Deine Ski sind abholbereit!
+    </p>
+    <p style="margin: 0 0 24px; font-size: 14px; color: #444; line-height: 1.6;">
+        Wir freuen uns, dir mitteilen zu dürfen, dass deine Ski fertig bearbeitet wurden und ab sofort bei
+        uns
+        abgeholt werden können.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0"
+        style="border-collapse: collapse; border: 1px solid #ddd; margin-bottom: 24px;">
+        <tr style="background: #f5f5f5;">
+            <td style="padding: 8px 12px; font-size: 12px; color: #666; border-bottom: 1px solid #ddd;">
+                Leistung
+            </td>
+            <td style="padding: 8px 12px; font-size: 12px; color: #666; border-bottom: 1px solid #ddd; text-align: center;">
+                Anz.
+            </td>
+            <td style="padding: 8px 12px; font-size: 12px; color: #666; border-bottom: 1px solid #ddd; text-align: right;">
+                Preis
+            </td>
+        </tr>
+        {% for service in skiservices.values() %}
+        <tr>
+            <td style="padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #eee;">
+                {{ service.service }}
+            </td>
+            <td
+                style="padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #eee; text-align: center; color: #555;">
+                {{ service.anzahl }}
+            </td>
+
+            <td style="padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #eee; text-align: right;">
+                {{ service.gesamtpreis }} €
+            </td>
+        </tr>
+        {% endfor %}
+   
+        <tr style="background: #f5f5f5;">
+            <td colspan="2" style="padding: 10px 12px; font-size: 14px; font-weight: bold;">Gesamt inkl. 19%
+                MwSt.</td>
+            <td style="padding: 10px 12px; font-size: 16px; font-weight: bold; text-align: right;">{{ total_preis }} €
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

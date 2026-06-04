@@ -29,3 +29,9 @@ class LexwareSettings:
     apiKey = os.getenv("LEXWARE_APIKEY" )
     sync = os.getenv("LEXWARE_SYNC", "false").strip().lower() == "true"
 
+class EmailSettings:
+    smtpServer = os.getenv("SMTP_SERVER", "")
+    smtpPort = int(os.getenv("SMTP_PORT", 587))
+    smtpUser = os.getenv("SMTP_USER", "")
+    smtpPassword = os.getenv("SMTP_PASSWORD", "")
+    emailFrom = os.getenv("EMAIL_FROM", "")
