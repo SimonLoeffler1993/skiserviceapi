@@ -12,7 +12,7 @@ def getSkiserviceAuftrag(db: Session, skiservice_auftrag_id: int, mitski: bool =
 def setzeSkiFertig(db: Session, skiservice_auftrag_id: int, ski_ids: list[int]):
     auftrag = db.query(Auftrag).filter(Auftrag.id == skiservice_auftrag_id).options(selectinload(Auftrag.skis)).first()
     if not auftrag:
-        return None
+        return None, False
     
     alleFertig = True
 
@@ -31,4 +31,18 @@ def setzeSkiFertig(db: Session, skiservice_auftrag_id: int, ski_ids: list[int]):
 
     db.commit()
     db.refresh(auftrag)
-    return auftrag
+    return auftrag, alleFertig
+
+def setzeBenachrichtigt(db: Session, skiservice_auftrag_id: int, benachrichtigt: bool = True):
+    auftrag = db.query(Auftrag).filter(Auftrag.id == skiservice_auftrag_id).first()
+    if not auftrag:
+        return False
+    
+    if benachrichtigt:
+        auftrag.benachrichtigt = "Ja"
+    else:
+        auftrag.benachrichtigt = "Nein"
+
+    db.commit()
+    db.refresh(auftrag)
+    return True

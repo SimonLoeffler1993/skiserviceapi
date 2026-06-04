@@ -16,8 +16,6 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-# scanner_manager = SkiScannerGUIManager()
-
 def codeURL2SaisonID(codeURL: str):
     parsed_url = urlparse(codeURL)
     service_id = parsed_url.path.strip("/").split("/")[-1] or None
@@ -43,7 +41,7 @@ async def scan(scanner_data: ScannerRead, db: Session = Depends(get_db)):
         intServiceID = int(service_id) if service_id and service_id.isdigit() else None
         if intServiceID is None:
             print(f"Ungültige ServiceID: {service_id}")
-            return {"message": "Ungültige ServiceID im CodeURL"}
+            return {"message": "Ungültige ServiceID im CodeURL", "success": False}
         
         # Datenbankabfrage, um die Auftragsdaten zu erhalten
         skiservicedata = crud_skiservice.getSkiserviceAuftrag(db, intServiceID)
@@ -60,7 +58,7 @@ async def scan(scanner_data: ScannerRead, db: Session = Depends(get_db)):
             )
         )
 
-    return {"message": "Scanning in progress..."}
+    return {"message": "Scanning abgeschlossen", "success": True}
 
 
 
