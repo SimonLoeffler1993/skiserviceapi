@@ -4,8 +4,12 @@ from typing import cast
 
 from app.db.deps import get_db
 from app.crud import skiservice as crud_skiservice
+from app.crud import skiservicepreis as crud_skiservicepreis
+
 from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, SkiSchema
 from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
+from app.schemas.skiservicepreise import SkiServicePreiseSchema
+
 from app.utils.skiscannerguimanager import scanner_gui_manager as scanner_manager
 from app.utils.mail import sendeFertigMail, skizusammenfassen
 
@@ -68,3 +72,8 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
     ))
 
     return auftrag
+
+@router.get("/preise", response_model=list[SkiServicePreiseSchema])
+async def get_preise(db: Session = Depends(get_db)):
+    preise = crud_skiservicepreis.get_ski_service_preise(db)
+    return preise
