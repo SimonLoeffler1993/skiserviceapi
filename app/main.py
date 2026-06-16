@@ -1,15 +1,25 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 from app.api.v1 import kunden, orte, event, saisonverleih, ettiket, saison, quittungen
 from app.api.v1.material import ski, schuh, stock
 from app.api.v1.scanner import skiscanner
 from app.api.v1 import skiservice
 
+# TODO: #10 Logging einstellungen
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s | %(levelname)-8s | %(name)s - %(message)s",
+    datefmt="%d.%m.%Y %H:%M:%S",
+)
+
 app = FastAPI(title="SkiApp API", version="0.0.1")
+logger = logging.getLogger(__name__)
 
 # TODO: Alembic in den Startprozess integrieren
 # Dadurch werden bei jedem Start die neuesten DB Migrationen ausgeführt.
 
+# TODO: #9 CORS in einstellungen
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,

@@ -3,10 +3,13 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 from brother_ql import BrotherQLRaster, create_label
 from brother_ql.backends.helpers import send
+import logging
 
 import qrcode
 
 from app.core.config import EttikettierSettings
+
+logger = logging.getLogger(__name__) 
 
 # Github
 # https://github.com/pklaus/brother_ql
@@ -167,7 +170,7 @@ class SkiEttiket:
 
         if fertig_datum:
             ettiket_laenge +=4
-
+        logger.info("Auftrag Ettiket wird erstellt")
 
         labelpxhoehe, labelpxbreite = labelmm2px(ettiket_laenge, 62)
         img = Image.new("RGB", (labelpxbreite, labelpxhoehe), "white")
@@ -249,30 +252,36 @@ class SkiEttiket:
             draw.text((datum_x, Y), datum_text, fill="black", font=font_date)
 
         # img.save("skiAuftragEttiket.png")
-        img.show()
+        # img.show()
 
-        # create_label(
-        #     qlr=self.qlr,
-        #     image=img,
-        #     label_size=self.labelSize,
-        #     rotate=0,
-        #     threshold=70,
-        #     dither=False,
-        #     compress=True,
-        #     red=False,
-        #     dpi_600=False,
-        #     hq=True,
-        #     cut=True
-        # )
+        try:
+            create_label(
+                qlr=self.qlr,
+                image=img,
+                label_size=self.labelSize,
+                rotate=0,
+                threshold=70,
+                dither=False,
+                compress=True,
+                red=False,
+                dpi_600=False,
+                hq=True,
+                cut=True
+            )
+        except Exception as e:
+            logger.error("Fehler beim vorbereiten zum Ettiket Drucken: %s", e, exc_info=True)
 
         return True
 
 
     def drucken(self):
-        send(
-            instructions=self.qlr.data,
-            printer_identifier=self.printerIdentifier,
-        )
+        try:
+            send(
+                instructions=self.qlr.data,
+                printer_identifier=self.printerIdentifier,
+            )
+        except Exception as e:
+            logger.error("Fehler beim Ettiket Drucken: %s", e, exc_info=True)
 
 if __name__ == "__main__":
     skiEttiket = SkiEttiket()
