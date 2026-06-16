@@ -11,9 +11,9 @@ class SkiSchema(BaseModel):
     service: str
     preis: str
     status: Optional[int] = None
-    komentar: str
+    komentar: Optional[str] = None
     dabei: Optional[int] = None
-    fertig_date: str
+    fertig_date: Optional[str] = None
     bindung_id: int
     bindung_check: bool = False
     bindung_preis: int
@@ -24,6 +24,12 @@ class SkiSchema(BaseModel):
     gepueft: Optional[date] = None
 
     model_config = {"from_attributes": True}
+
+class SkiCreateSchema(BaseModel):
+    service: str
+    preis: str
+    komentar: Optional[str] = None
+    bindung_preis: int
 
 
 class AuftragSchema(BaseModel):
@@ -67,3 +73,10 @@ class AuftragSchema(BaseModel):
 class AuftragSkiFertigSchema(BaseModel):
     id: int
     ski_ids: list[int]
+
+class AuftragCreateSchema(BaseModel):
+    kunden_id: int
+    abhol_date: Optional[str] = None
+    skis: list[SkiCreateSchema]
+
+

@@ -6,7 +6,7 @@ from app.db.deps import get_db
 from app.crud import skiservice as crud_skiservice
 from app.crud import skiservicepreis as crud_skiservicepreis
 
-from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, SkiSchema
+from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema
 from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
 from app.schemas.skiservicepreise import SkiServicePreiseSchema
 
@@ -77,3 +77,11 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
 async def get_preise(db: Session = Depends(get_db)):
     preise = crud_skiservicepreis.get_ski_service_preise(db)
     return preise
+
+@router.post("/neu", response_model=AuftragSchema )
+async def erstelle_auftrag(auftrag: AuftragCreateSchema, db: Session = Depends(get_db)):
+    """
+    Erstellt einen neuen Skiservice-Auftrag.
+    """
+    new_auftrag = crud_skiservice.createSkiserviceAuftrag(db, auftrag)
+    return new_auftrag

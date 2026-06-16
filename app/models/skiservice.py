@@ -15,9 +15,9 @@ class Ski(Base):
     service: Mapped[str] = mapped_column("Service", Text, nullable=False)
     preis: Mapped[str] = mapped_column("Preis", Text, nullable=False)
     status: Mapped[Optional[int]] = mapped_column("Status", Integer)
-    komentar: Mapped[str] = mapped_column("komentar", Text, nullable=False)
+    komentar: Mapped[Optional[str]] = mapped_column("komentar", Text)
     dabei: Mapped[Optional[int]] = mapped_column("dabei", Integer)
-    fertig_date: Mapped[str] = mapped_column("Fertig_Date", String(10), nullable=False)
+    fertig_date: Mapped[Optional[str]] = mapped_column("Fertig_Date", String(10))
     bindung_id: Mapped[int] = mapped_column("BindungID", Integer, default=0)
     bindung_check: Mapped[bool] = mapped_column("BindungCheck", Boolean, default=False)
     bindung_preis: Mapped[int] = mapped_column("BindungPreis", Integer, nullable=False)
@@ -61,3 +61,8 @@ class Auftrag(Base):
     # Relation zu Ski
     skis: Mapped[list["Ski"]] = relationship(Ski, back_populates="auftrag")
     kunde: Mapped["SkiKunde"] = relationship("SkiKunde")
+
+class AuftragNummer(Base):
+    __tablename__ = "auftragnummer"
+    NeuNr: Mapped[int] = mapped_column(Integer, primary_key=True)
+    Jahr: Mapped[int] = mapped_column("Jahr", Integer, nullable=False)

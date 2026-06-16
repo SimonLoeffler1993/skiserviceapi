@@ -2,7 +2,8 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.skiservice import Auftrag
+from app.models.skiservice import Auftrag, Ski, AuftragNummer
+from app.crud import saison as crud_saison
 
 def getSkiserviceAuftrag(db: Session, skiservice_auftrag_id: int, mitski: bool = True):
     if mitski:
@@ -46,3 +47,39 @@ def setzeBenachrichtigt(db: Session, skiservice_auftrag_id: int, benachrichtigt:
     db.commit()
     db.refresh(auftrag)
     return True
+
+def neuAuftragNummer(db: Session):
+    neu = AuftragNummer(
+        Jahr=datetime.now().year
+    )
+    db.add(neu)
+    db.commit()
+    db.refresh(neu)
+    return neu
+
+def createSkiserviceAuftrag(db: Session, auftrag_data):
+
+    aktuelle_saison = crud_saison.get_AktuelleSaison(db)
+    if aktuelle_saison is None:
+        return None
+    
+    auftragNummer = neuAuftragNummer(db)
+    name = aktuelle_saison.Name+ "S" + str(auftragNummer.NeuNr)
+
+    new_auftrag = Auftrag(
+        kunden_id=auftrag_data.kunden_id,
+        abhol_date=auftrag_data.abhol_date,
+        zu= str(aktuelle_saison.ID),
+        name=name,
+        skis=[Ski(
+            name=f"{name}-{i+1}",
+            service=ski.service,
+            preis=ski.preis,
+            komentar=ski.komentar,
+            bindung_preis=ski.bindung_preis
+        ) for i, ski in enumerate(auftrag_data.skis)]
+    )
+    db.add(new_auftrag)
+    db.commit()
+    db.refresh(new_auftrag)
+    return new_auftrag
