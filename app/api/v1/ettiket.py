@@ -4,9 +4,13 @@ from sqlalchemy.orm import Session
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
 from app.crud import materialschuh as crud_materialschuh
+from app.crud import skiservice as crud_skiservice
 from app.utils.skiEttiket import SkiEttiket
 
+from app.services.skiserviceauftrag import skiServiceEttiketDrucken
+
 from app.schemas.ettiketenprint import EttiketPrintRequest
+from app.schemas.skiservice import AuftragSchema
 
 router = APIRouter(
     prefix="/ettiket",
@@ -79,3 +83,24 @@ def print_schuh_ettiket(schuhID: str, db: Session = Depends(get_db)):
         return {"success": False, "message": f"Error printing ettiket: {str(e)}"}
 
     return {"success": True, "message": f"Ettiket for Schuh {schuhID} printed."}
+
+@router.post("serviceauftrag/{auftragid}", response_model=EttiketPrintRequest)
+def print_serviceAuftrag_erriket(auftragid: int, db: Session = Depends(get_db)):
+    """
+    Druck alle Ettiketen für einen Skiserice
+    """
+    try:
+        auftrag = crud_skiservice.getSkiserviceAuftrag(db, auftragid)
+
+        # Sql Alchemy Modell in object
+        skiserviceAuftrag = AuftragSchema.model_validate(auftrag)
+
+        skiServiceEttiketDrucken(skiserviceAuftrag)
+    except Exception as e:
+        return {"success": False, "message": f"Fehler beim Drucken ettiket: {str(e)}"}
+
+    if not auftrag:
+        return {"success": False, "message": f"Error Drucken ettiket: Skiservice {auftragid} nicht gefunden."}
+    
+    return {"success": True, "message": f"Ettiket für Skiservice {auftragid} ausgedruckt!"}
+    

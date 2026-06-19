@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.skiservice import Auftrag, Ski, AuftragNummer
 from app.crud import saison as crud_saison
+from app.schemas.skiservice import AuftragCreateSchema
 
 def getSkiserviceAuftrag(db: Session, skiservice_auftrag_id: int, mitski: bool = True):
     if mitski:
@@ -57,7 +58,7 @@ def neuAuftragNummer(db: Session):
     db.refresh(neu)
     return neu
 
-def createSkiserviceAuftrag(db: Session, auftrag_data):
+def createSkiserviceAuftrag(db: Session, auftrag_data: AuftragCreateSchema):
 
     aktuelle_saison = crud_saison.get_AktuelleSaison(db)
     if aktuelle_saison is None:
@@ -76,7 +77,8 @@ def createSkiserviceAuftrag(db: Session, auftrag_data):
             service=ski.service,
             preis=ski.preis,
             komentar=ski.komentar,
-            bindung_preis=ski.bindung_preis
+            bindung_preis=ski.bindung_preis,
+            bindung_check=ski.bindung_check
         ) for i, ski in enumerate(auftrag_data.skis)]
     )
     db.add(new_auftrag)

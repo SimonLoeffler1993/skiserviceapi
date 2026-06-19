@@ -1,8 +1,9 @@
-from sqlalchemy import Boolean, Integer, String, Double, Date, TIMESTAMP, Text, ForeignKey
+from sqlalchemy import Boolean, Integer, String, Double, Date, TIMESTAMP, Text, ForeignKey, Numeric
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from datetime import date, datetime
 from typing import Optional
+from decimal import Decimal
 
 from app.db.base import Base
 from app.models.kunde import SkiKunde
@@ -20,7 +21,7 @@ class Ski(Base):
     fertig_date: Mapped[Optional[str]] = mapped_column("Fertig_Date", String(10))
     bindung_id: Mapped[int] = mapped_column("BindungID", Integer, default=0)
     bindung_check: Mapped[bool] = mapped_column("BindungCheck", Boolean, default=False)
-    bindung_preis: Mapped[int] = mapped_column("BindungPreis", Integer, nullable=False)
+    bindung_preis: Mapped[Decimal] = mapped_column("BindungPreis", Numeric(10,2), nullable=False)
     name: Mapped[Optional[str]] = mapped_column("Name", String(15))
     band: Mapped[int] = mapped_column("Band", Integer, default=0)
     sack: Mapped[int] = mapped_column("Sack", Integer, default=0)

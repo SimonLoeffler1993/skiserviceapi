@@ -31,6 +31,7 @@ def labelmm2px(hoehe, breite, randpx=18):
     neubreite = mm2px(breite) - randpx * 2
     return round(neuhoehe), round(neubreite)
 
+# TODO: #11 Ettiketen Breite auf LabelSize
 class SkiEttiket:
     def __init__(self, labelSize=EttikettierSettings.labelSize, printerModel=EttikettierSettings.printerModel, printerIdentifier=EttikettierSettings.printerIdent):
         self.labelSize = labelSize
@@ -183,7 +184,7 @@ class SkiEttiket:
         font_date  = ImageFont.truetype(font_bold_path, 44)
 
         RAND = 8
-        Y = RAND  # laufende Y-Position
+        Y = RAND +2 # laufende Y-Position
 
         # --- Rahmen ---
         draw.rectangle(

@@ -16,7 +16,7 @@ from app.utils.mail import sendeFertigMail, skizusammenfassen
 router = APIRouter(
     prefix="/skiservice",
     tags=["Skiservice"],
-    responses={404: {"description": "Not found"}},
+    responses={404: {"beschreibung": "Aufruf kann nicht gefunden wernde!"}},
 )
 
 @router.get("/test")
