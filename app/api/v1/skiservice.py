@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import cast
 
@@ -12,6 +12,8 @@ from app.schemas.skiservicepreise import SkiServicePreiseSchema
 
 from app.utils.skiscannerguimanager import scanner_gui_manager as scanner_manager
 from app.utils.mail import sendeFertigMail, skizusammenfassen
+
+from app.services import skiserviceauftrag
 
 router = APIRouter(
     prefix="/skiservice",
@@ -79,9 +81,17 @@ async def get_preise(db: Session = Depends(get_db)):
     return preise
 
 @router.post("/neu", response_model=AuftragSchema )
-async def erstelle_auftrag(auftrag: AuftragCreateSchema, db: Session = Depends(get_db)):
+async def erstelle_auftrag(auftrag: AuftragCreateSchema, hintergrundProzess: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Erstellt einen neuen Skiservice-Auftrag.
     """
     new_auftrag = crud_skiservice.createSkiserviceAuftrag(db, auftrag)
+
+    # SQLAlchemy zu Pydantic
+    skiauftrag = AuftragSchema.model_validate(new_auftrag)
+
+    if new_auftrag:
+        # Drucken im Hintergrund
+        hintergrundProzess.add_task(skiserviceauftrag.skiServiceEttiketDrucken, skiauftrag)
+
     return new_auftrag
