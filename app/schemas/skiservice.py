@@ -10,14 +10,14 @@ class SkiSchema(BaseModel):
     id: int
     auftrag_id: int
     service: str
-    preis: str
+    preis: float
     status: Optional[int] = None
     komentar: Optional[str] = None
     dabei: Optional[int] = None
     fertig_date: Optional[str] = None
     bindung_id: int
     bindung_check: bool = False
-    bindung_preis: Decimal
+    bindung_preis: float
     name: Optional[str] = None
     band: int
     sack: int
@@ -28,7 +28,7 @@ class SkiSchema(BaseModel):
 
 class SkiCreateSchema(BaseModel):
     service: str
-    preis: str
+    preis: Decimal
     komentar: Optional[str] = None
     bindung_preis: Decimal
     bindung_check: bool
