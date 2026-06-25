@@ -28,9 +28,9 @@ class SkiSchema(BaseModel):
 
 class SkiCreateSchema(BaseModel):
     service: str
-    preis: Decimal
+    preis: float
     komentar: Optional[str] = None
-    bindung_preis: Decimal
+    bindung_preis: float
     bindung_check: bool
 
 
@@ -74,6 +74,9 @@ class AuftragSchema(BaseModel):
     
 class AuftragSkiFertigSchema(BaseModel):
     id: int
+    ski_ids: list[int]
+
+class SkiBindungFertigSchema(BaseModel):
     ski_ids: list[int]
 
 class AuftragCreateSchema(BaseModel):

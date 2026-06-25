@@ -1,6 +1,8 @@
-from datetime import datetime
+from datetime import datetime, date
 
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 
 from app.models.skiservice import Auftrag, Ski, AuftragNummer
 from app.crud import saison as crud_saison
@@ -85,3 +87,16 @@ def createSkiserviceAuftrag(db: Session, auftrag_data: AuftragCreateSchema):
     db.commit()
     db.refresh(new_auftrag)
     return new_auftrag
+
+def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> bool:
+    skis = db.query(Ski).filter(Ski.id.in_(ski_ids)).all()
+    
+    if not skis:
+        return False
+
+    for ski in skis:
+        ski.bindung_status = True
+        ski.gepueft = date.today()
+
+    db.commit()
+    return True

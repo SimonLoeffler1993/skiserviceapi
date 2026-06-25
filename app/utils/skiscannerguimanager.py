@@ -24,7 +24,7 @@ class SkiScannerGUIManager:
     async def sende_data_broadcast(self, data: ScannerWebSocketMessage):
         for websocket in list(self.active):
             try:
-                await websocket.send_json(data.dict())
+                await websocket.send_json(data.model_dump(mode="json"))
             except WebSocketDisconnect:
                 await self.trennen(websocket)
 

@@ -6,7 +6,7 @@ from app.db.deps import get_db
 from app.crud import skiservice as crud_skiservice
 from app.crud import skiservicepreis as crud_skiservicepreis
 
-from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema
+from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema, SkiBindungFertigSchema
 from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
 from app.schemas.skiservicepreise import SkiServicePreiseSchema
 
@@ -74,6 +74,18 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
     ))
 
     return auftrag
+
+@router.post("/bindungfertig")
+async def bindungfertig(SkisChecked: SkiBindungFertigSchema, db: Session = Depends(get_db)):
+    """
+    Endpunkt der eine Bindung auf geprüft setzt
+    """
+    success = crud_skiservice.setzeBindungGeprueft(db, SkisChecked.ski_ids)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="Keine Skis gefunden")
+    
+    return {"success": True}
 
 @router.get("/preise", response_model=list[SkiServicePreiseSchema])
 async def get_preise(db: Session = Depends(get_db)):
