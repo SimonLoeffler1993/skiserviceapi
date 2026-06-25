@@ -1,18 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import cast
 
 from app.db.deps import get_db
 from app.crud import skiservice as crud_skiservice
-from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, SkiSchema
+from app.crud import skiservicepreis as crud_skiservicepreis
+
+from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema, SkiBindungFertigSchema
 from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
+from app.schemas.skiservicepreise import SkiServicePreiseSchema
+
 from app.utils.skiscannerguimanager import scanner_gui_manager as scanner_manager
 from app.utils.mail import sendeFertigMail, skizusammenfassen
+
+from app.services import skiserviceauftrag
 
 router = APIRouter(
     prefix="/skiservice",
     tags=["Skiservice"],
-    responses={404: {"description": "Not found"}},
+    responses={404: {"beschreibung": "Aufruf kann nicht gefunden wernde!"}},
 )
 
 @router.get("/test")
@@ -68,3 +74,36 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
     ))
 
     return auftrag
+
+@router.post("/bindungfertig")
+async def bindungfertig(SkisChecked: SkiBindungFertigSchema, db: Session = Depends(get_db)):
+    """
+    Endpunkt der eine Bindung auf geprüft setzt
+    """
+    success = crud_skiservice.setzeBindungGeprueft(db, SkisChecked.ski_ids)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="Keine Skis gefunden")
+    
+    return {"success": True}
+
+@router.get("/preise", response_model=list[SkiServicePreiseSchema])
+async def get_preise(db: Session = Depends(get_db)):
+    preise = crud_skiservicepreis.get_ski_service_preise(db)
+    return preise
+
+@router.post("/neu", response_model=AuftragSchema )
+async def erstelle_auftrag(auftrag: AuftragCreateSchema, hintergrundProzess: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Erstellt einen neuen Skiservice-Auftrag.
+    """
+    new_auftrag = crud_skiservice.createSkiserviceAuftrag(db, auftrag)
+
+    # SQLAlchemy zu Pydantic
+    skiauftrag = AuftragSchema.model_validate(new_auftrag)
+
+    if new_auftrag:
+        # Drucken im Hintergrund
+        hintergrundProzess.add_task(skiserviceauftrag.skiServiceEttiketDrucken, skiauftrag)
+
+    return new_auftrag

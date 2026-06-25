@@ -35,3 +35,6 @@ class EmailSettings:
     smtpUser = os.getenv("SMTP_USER", "")
     smtpPassword = os.getenv("SMTP_PASSWORD", "")
     emailFrom = os.getenv("EMAIL_FROM", "")
+
+class AnwendungSettings:
+    appHost = os.getenv("HOST","https://ms-skiservice.de")

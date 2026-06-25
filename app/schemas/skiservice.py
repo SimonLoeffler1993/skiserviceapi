@@ -1,6 +1,7 @@
 from pydantic import BaseModel, field_serializer
 from datetime import date, datetime
 from typing import Optional
+from decimal import Decimal
 
 from app.schemas.kunde import SkiKundeOut
 
@@ -9,14 +10,14 @@ class SkiSchema(BaseModel):
     id: int
     auftrag_id: int
     service: str
-    preis: str
+    preis: float
     status: Optional[int] = None
-    komentar: str
+    komentar: Optional[str] = None
     dabei: Optional[int] = None
-    fertig_date: str
+    fertig_date: Optional[str] = None
     bindung_id: int
     bindung_check: bool = False
-    bindung_preis: int
+    bindung_preis: float
     name: Optional[str] = None
     band: int
     sack: int
@@ -24,6 +25,13 @@ class SkiSchema(BaseModel):
     gepueft: Optional[date] = None
 
     model_config = {"from_attributes": True}
+
+class SkiCreateSchema(BaseModel):
+    service: str
+    preis: float
+    komentar: Optional[str] = None
+    bindung_preis: float
+    bindung_check: bool
 
 
 class AuftragSchema(BaseModel):
@@ -67,3 +75,13 @@ class AuftragSchema(BaseModel):
 class AuftragSkiFertigSchema(BaseModel):
     id: int
     ski_ids: list[int]
+
+class SkiBindungFertigSchema(BaseModel):
+    ski_ids: list[int]
+
+class AuftragCreateSchema(BaseModel):
+    kunden_id: int
+    abhol_date: Optional[str] = None
+    skis: list[SkiCreateSchema]
+
+
