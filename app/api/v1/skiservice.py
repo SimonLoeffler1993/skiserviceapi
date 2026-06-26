@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from typing import cast
+from typing import Optional
 
 from app.db.deps import get_db
 from app.crud import skiservice as crud_skiservice
@@ -20,6 +20,19 @@ router = APIRouter(
     tags=["Skiservice"],
     responses={404: {"beschreibung": "Aufruf kann nicht gefunden wernde!"}},
 )
+
+@router.get("/", response_model=list[AuftragSchema])
+async def skiauftragListe(
+    saisonID: Optional[int] = Query(default=None, description="ID der Saison für die Filterung der Service-Einträge, keine ist die aktelle Saison"),
+    limit: int = Query(default=15, le=100), 
+    last_id: Optional[int] = Query(default=None, description="ID des letzten Eintrags der vorherigen Seite für die Pagination"),
+    alle: bool = Query(default=False, description="Alle Einträge ohne Pagination zurückgeben"),
+    db: Session = Depends(get_db)
+):
+    """
+    Listet alle Skiservice auf
+    """
+    return crud_skiservice.get_skiservice_liste(db,limit, last_id, saisonID, alle)
 
 @router.get("/test")
 async def test():
