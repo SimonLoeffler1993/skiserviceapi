@@ -1,7 +1,8 @@
 from datetime import datetime, date
+from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import update
+from sqlalchemy import update, desc
 from sqlalchemy.engine import CursorResult
 
 from app.models.skiservice import Auftrag, Ski, AuftragNummer
@@ -100,3 +101,22 @@ def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> bool:
 
     db.commit()
     return True
+
+def get_skiservice_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] =False):
+    # Falls keine Saison ID angegebn ist, wird die aktuelle Saison verwendet
+    if saisonID is None:
+        SkiSaison = crud_saison.get_AktuelleSaison(db)
+        if SkiSaison is not None:
+            saisonID = SkiSaison.ID
+
+    query = db.query(Auftrag).filter(Auftrag.zu == saisonID)
+
+    if alle:
+        return query.order_by(Auftrag.id).all()
+    
+    # Pagination anwenden
+    if last_id is not None:
+        # Da absteigend sortiert wird, muss kleiner als gefiltert werden
+        query = query.filter(Auftrag.id < last_id)
+
+    return query.order_by(desc(Auftrag.id)).limit(limit).all()
