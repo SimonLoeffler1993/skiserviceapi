@@ -120,3 +120,9 @@ def get_skiservice_liste(db: Session, limit: int = 15, last_id: Optional[int] = 
         query = query.filter(Auftrag.id < last_id)
 
     return query.order_by(desc(Auftrag.id)).limit(limit).all()
+
+def get_auftragid_from_skiid(db: Session, ski_id: int) -> Optional[int]:
+    ski = db.query(Ski).filter(Ski.id == ski_id).first()
+    if ski:
+        return ski.auftrag_id
+    return None

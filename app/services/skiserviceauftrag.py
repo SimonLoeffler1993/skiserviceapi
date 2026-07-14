@@ -35,3 +35,34 @@ def skiServiceEttiketDrucken(skiserviceAuftrag: AuftragSchema):
 
     logger.info("Alle Ettiketen erstellt, jetzt kommt der Druck")
     serviceEttiket.drucken()
+
+def skiServiceEttiketEinzelnDrucken(skiserviceAuftrag: AuftragSchema, skiIds: list[int]):
+    serviceEttiket = SkiEttiket()
+
+    # Kunde aus Vor und Nachname, falls kein Vorname oder Nachname werden leerzeichen entfernt
+    kundeName = f"{skiserviceAuftrag.kunde.Vorname} {skiserviceAuftrag.kunde.Nachname}"
+    kundeName = kundeName.strip()
+
+    bisDatum = skiserviceAuftrag.abhol_date
+
+    for ski in skiserviceAuftrag.skis:
+        if ski.id not in skiIds:
+            continue
+
+        logger.info(f"Ski Ettiket wird erstellt {ski.name}")
+
+        skiName = ski.name or "Ski"
+
+        skiUrl = f"{appHost}/skiservice/anzeigen/{skiserviceAuftrag.id}?ski={ski.id}"
+        
+        # Ettiket für Service
+        serviceEttiket.skiAuftragEttiket(kundeName, skiName,skiUrl,ski.service,ski.bindung_check,bisDatum)
+
+        if ski.bindung_check:
+            # Bei Bindung
+            # zusätzlich ein Ettiket für den Schuh
+            serviceEttiket.skiAuftragEttiket(kundeName, skiName,skiUrl,"SCHUH",False,bisDatum)
+
+
+    logger.info("Alle Ettiketen erstellt, jetzt kommt der Druck")
+    serviceEttiket.drucken()

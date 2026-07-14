@@ -7,9 +7,9 @@ from app.crud import materialschuh as crud_materialschuh
 from app.crud import skiservice as crud_skiservice
 from app.utils.skiEttiket import SkiEttiket
 
-from app.services.skiserviceauftrag import skiServiceEttiketDrucken
+from app.services.skiserviceauftrag import skiServiceEttiketDrucken, skiServiceEttiketEinzelnDrucken
 
-from app.schemas.ettiketenprint import EttiketPrintRequest
+from app.schemas.ettiketenprint import EttiketPrintRequest, EttiketPrintSkisSchema
 from app.schemas.skiservice import AuftragSchema
 
 router = APIRouter(
@@ -84,7 +84,7 @@ def print_schuh_ettiket(schuhID: str, db: Session = Depends(get_db)):
 
     return {"success": True, "message": f"Ettiket for Schuh {schuhID} printed."}
 
-@router.post("serviceauftrag/{auftragid}", response_model=EttiketPrintRequest)
+@router.post("/serviceauftrag/{auftragid}", response_model=EttiketPrintRequest)
 def print_serviceAuftrag_erriket(auftragid: int, db: Session = Depends(get_db)):
     """
     Druck alle Ettiketen für einen Skiserice
@@ -103,4 +103,34 @@ def print_serviceAuftrag_erriket(auftragid: int, db: Session = Depends(get_db)):
         return {"success": False, "message": f"Error Drucken ettiket: Skiservice {auftragid} nicht gefunden."}
     
     return {"success": True, "message": f"Ettiket für Skiservice {auftragid} ausgedruckt!"}
-    
+
+@router.post("/serviceskis", response_model=EttiketPrintRequest)
+def print_serviceSki_ettiket(ettiket_data: EttiketPrintSkisSchema, db: Session = Depends(get_db)):
+    """
+    Druck Ettiketen für spezifische Skis eines Skiservice-Auftrags
+    Die auftrag id ist optional, allerdings müssen alle Ski aus dem selben Auftrag stammen
+    """
+    try:
+        if ettiket_data.auftrag_id is None:
+            # Wenn keine auftrag_id übergeben wurde, dann die auftrag_id anhand der ski_ids ermitteln
+            if len(ettiket_data.ski_ids) == 0:
+                return {"success": False, "message": "Keine Ski IDs übergeben."}
+            
+            auftrag_id = crud_skiservice.get_auftragid_from_skiid(db, ettiket_data.ski_ids[0])
+            if auftrag_id is None:
+                return {"success": False, "message": f"Error Drucken ettiket: Auftrag für Ski ID {ettiket_data.ski_ids[0]} nicht gefunden."}
+            ettiket_data.auftrag_id = auftrag_id
+            
+        auftrag = crud_skiservice.getSkiserviceAuftrag(db, ettiket_data.auftrag_id)
+
+        # Sql Alchemy Modell in object
+        skiserviceAuftrag = AuftragSchema.model_validate(auftrag)
+
+        skiServiceEttiketEinzelnDrucken(skiserviceAuftrag, ettiket_data.ski_ids)
+    except Exception as e:
+        return {"success": False, "message": f"Fehler beim Drucken ettiket: {str(e)}"}
+
+    if not auftrag:
+        return {"success": False, "message": f"Error Drucken ettiket: Skiservice {ettiket_data.auftrag_id} nicht gefunden."}
+
+    return {"success": True, "message": f"Ettiket für Skiservice {ettiket_data.auftrag_id} ausgedruckt!"}
