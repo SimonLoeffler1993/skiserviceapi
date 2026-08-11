@@ -5,6 +5,7 @@ from app.api.v1 import kunden, orte, event, saisonverleih, ettiket, saison, quit
 from app.api.v1.material import ski, schuh, stock
 from app.api.v1.scanner import skiscanner
 from app.api.v1 import skiservice
+from app.api.v1 import kasse
 
 # TODO: #10 Logging einstellungen
 logging.basicConfig(
@@ -16,7 +17,7 @@ logging.basicConfig(
 app = FastAPI(title="SkiApp API", version="0.0.1")
 logger = logging.getLogger(__name__)
 
-# TODO: Alembic in den Startprozess integrieren
+# TODO: #14 Alembic in den Startprozess integrieren
 # Dadurch werden bei jedem Start die neuesten DB Migrationen ausgeführt.
 
 # TODO: #9 CORS in einstellungen
@@ -43,6 +44,7 @@ app.include_router(saison.router, prefix=appPrefix)
 app.include_router(quittungen.router, prefix=appPrefix)
 app.include_router(skiscanner.router, prefix=appPrefix)
 app.include_router(skiservice.router, prefix=appPrefix)
+app.include_router(kasse.router, prefix=appPrefix)
 
 @app.get("/")
 def read_root():

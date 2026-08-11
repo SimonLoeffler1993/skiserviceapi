@@ -52,7 +52,7 @@ class AuftragSchema(BaseModel):
     benachrichtigt: str
     abgerechnet: Optional[int] = None
     uberweisung: Optional[int] = None
-    name: Optional[str] = None
+    name: str
     anz_leih: Optional[int] = None
     rabat: Optional[float] = None
     rabat_name: Optional[str] = None
