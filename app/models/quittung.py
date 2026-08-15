@@ -9,7 +9,7 @@ from app.db.base import Base
 class Quittung(Base):
     __tablename__ = "quittungen"
     ID: Mapped[int] = mapped_column(Integer, primary_key=True)
-    Name: Mapped[str] = mapped_column(String)
+    Name: Mapped[str] = mapped_column(String(100))
     AnzAuftrag: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
     AnzVerleih: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
     Saison_ID: Mapped[int] = mapped_column(Integer)

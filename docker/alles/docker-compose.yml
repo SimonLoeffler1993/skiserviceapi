@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  skiserviceapi:
+    image: ghcr.io/simonloeffler1993/skiserviceapi:latest
+    container_name: skiserviceapi
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  kundenterminal:
+    image: ghcr.io/simonloeffler1993/ski-kunden-dialog:latest
+    container_name: kundenterminal
+    ports:
+      - "3000:3000"
+    depends_on:
+      - skiserviceapi
+    environment:
+      - BACKEND_URL=http://skiserviceapi:8000
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11
+    container_name: mariadb
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=${DB_NAME}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin
+    ports:
+      - "${PMA_PORT}:80"
+    environment:
+      - PMA_HOST=mariadb
+      - PMA_PORT=3306
+    depends_on:
+      - mariadb
+    restart: unless-stopped
+
+volumes:
+  mariadb_data:

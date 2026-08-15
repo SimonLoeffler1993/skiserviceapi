@@ -31,7 +31,7 @@ class SaisonVerleihMaterial(Base):
         "SaisonVerleih", back_populates="Material"
     )
 
-    skinr: Mapped[str | None] = mapped_column(String, ForeignKey("eigenski.SkiNr"))
+    skinr: Mapped[str | None] = mapped_column(String(50), ForeignKey("eigenski.SkiNr"))
     Ski: Mapped[Optional[EigenSki]] = relationship(
         EigenSki,
         primaryjoin="SaisonVerleihMaterial.skinr == EigenSki.SkiNr",
@@ -61,13 +61,13 @@ class SaisonVerleih(Base):
     Bezahlt_Am: Mapped[date | None] = mapped_column(Date)
     Zurueck: Mapped[int | None] = mapped_column(Integer)
     Zurueck_Am: Mapped[date | None] = mapped_column(Date)
-    Bemerkung: Mapped[str | None] = mapped_column(String)
+    Bemerkung: Mapped[str | None] = mapped_column(String(500))
 
     Saison_ID: Mapped[int | None] = mapped_column(ForeignKey("saisons.ID"))
     Saison: Mapped[Optional[Saison]] = relationship(Saison)
 
     Abgerechnet: Mapped[int | None] = mapped_column(Integer)
-    Name: Mapped[str] = mapped_column(String)
+    Name: Mapped[str] = mapped_column(String(100))
     Start_Am: Mapped[date] = mapped_column(Date)
     QuittungID: Mapped[int | None] = mapped_column(Integer)
 
