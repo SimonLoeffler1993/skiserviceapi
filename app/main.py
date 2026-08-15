@@ -1,11 +1,15 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+from contextlib import asynccontextmanager
+
 from app.api.v1 import kunden, orte, event, saisonverleih, ettiket, saison, quittungen
 from app.api.v1.material import ski, schuh, stock
 from app.api.v1.scanner import skiscanner
 from app.api.v1 import skiservice
 from app.api.v1 import kasse
+from app.db.base import Base
+from app.db.session import engine
 
 # TODO: #10 Logging einstellungen
 logging.basicConfig(
@@ -14,7 +18,13 @@ logging.basicConfig(
     datefmt="%d.%m.%Y %H:%M:%S",
 )
 
-app = FastAPI(title="SkiApp API", version="0.0.1")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    Base.metadata.create_all(bind=engine)
+    yield
+
+app = FastAPI(title="SkiApp API", version="0.0.1", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
 # TODO: #14 Alembic in den Startprozess integrieren
