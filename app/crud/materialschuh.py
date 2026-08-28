@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from app.models.materialschuh import EigenSchuh, VerleihSchuhHersteller
-from app.schemas.materialschuh import VerleihSchuhHerstellerBase
+from app.models.materialschuh import EigenSchuh, VerleihSchuhHersteller, VerleihSchuhModell
+from app.schemas.materialschuh import VerleihSchuhHerstellerBase, VerleihSchuhModellBase
 
 def get_eigen_schuhe(db: Session, eigen_schuh_nr: str):
     db_eigen_schuhe = db.query(EigenSchuh).filter(EigenSchuh.ID == eigen_schuh_nr).first()
@@ -20,3 +20,13 @@ def create_hersteller(db: Session, schuh: VerleihSchuhHerstellerBase):
 
 def get_hersteller(db: Session):
     return db.query(VerleihSchuhHersteller).all()
+
+def create_modell(db: Session, modell: VerleihSchuhModellBase):
+    db_modell = VerleihSchuhModell(**modell.model_dump())
+    db.add(db_modell)
+    db.commit()
+    db.refresh(db_modell)
+    return db_modell
+
+def get_modelle(db: Session):
+    return db.query(VerleihSchuhModell).all()

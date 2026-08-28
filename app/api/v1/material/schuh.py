@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
-from app.schemas.materialschuh import EigenSchuhRead, VerleihSchuhHerstellerBase, VerleihSchuhHerstellerRead
+from app.schemas.materialschuh import EigenSchuhRead, VerleihSchuhHerstellerBase, VerleihSchuhHerstellerRead, VerleihSchuhModellBase, VerleihSchuhModellRead
 from app.crud import materialschuh as crud_materialschuh
 
 router = APIRouter(
@@ -50,3 +50,17 @@ async def get_hersteller(db: Session = Depends(get_db)):
     Gibt alle Schuhhersteller zurück.
     """
     return crud_materialschuh.get_hersteller(db)
+
+@router.post("/modell", response_model=VerleihSchuhModellRead)
+async def create_modell(modell: VerleihSchuhModellBase, db: Session = Depends(get_db)):
+    """
+    Erstelle das Skischuhmodell.
+    """
+    return crud_materialschuh.create_modell(db, modell)
+
+@router.get("/modelle", response_model=list[VerleihSchuhModellRead])
+async def get_modelle(db: Session = Depends(get_db)):
+    """
+    Gibt alle Schuhmodelle zurück
+    """
+    return crud_materialschuh.get_modelle(db)

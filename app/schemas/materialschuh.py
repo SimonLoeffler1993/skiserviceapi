@@ -15,7 +15,7 @@ class VerleihSchuhHerstellerRead(VerleihSchuhHerstellerBase):
 # --- Schuhmodell ---
 class VerleihSchuhModellBase(BaseModel):
     Modell: str
-    Jugend: int
+    Jugend: bool
     Hersteller_ID: int
 
 class VerleihSchuhModellRead(VerleihSchuhModellBase):
