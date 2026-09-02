@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
-from app.schemas.materialschuh import EigenSchuhRead, VerleihSchuhHerstellerBase, VerleihSchuhHerstellerRead, VerleihSchuhModellBase, VerleihSchuhModellRead
+from app.schemas.materialschuh import EigenSchuhBase ,EigenSchuhRead, VerleihSchuhHerstellerBase, VerleihSchuhHerstellerRead, VerleihSchuhModellBase, VerleihSchuhModellRead
 from app.crud import materialschuh as crud_materialschuh
 
 router = APIRouter(
@@ -28,6 +28,13 @@ async def get_eigen_schuhe(schuhnr: str, db: Session = Depends(get_db)):
     if schuh is None:
         raise HTTPException(status_code=404, detail="EigenSchuh nicht gefunden")
     return schuh
+
+@router.post("/eigen", response_model=EigenSchuhRead)
+async def create_eigen_schuhe(schuh: EigenSchuhBase, db: Session = Depends(get_db)):
+    """
+    Erstellt einen neuen Eigenen Schuh.
+    """
+    return crud_materialschuh.create_eigen_schuhe(db, schuh)
 
 @router.get("/eigen/liste", response_model=list[EigenSchuhRead])
 async def get_eigen_schuhe_liste(db: Session = Depends(get_db)):
