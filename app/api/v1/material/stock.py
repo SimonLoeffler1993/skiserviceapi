@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.crud import materialstock as crud_materialstock
-from app.schemas.materialstock import SkiStockOut
+from app.schemas.materialstock import SkiStockOut, SkiStockIn
 from app.db.deps import get_db
 
 router = APIRouter(
@@ -15,8 +15,15 @@ router = APIRouter(
 async def test():
     return {"message": "Materialstock API is working!"}
 
-@router.get("/skistocke")
-async def get_skistocke( db: Session = Depends(get_db), response_model=list[SkiStockOut]):
+@router.post("", response_model=SkiStockOut)
+async def create_skistock( Bezeichnung: SkiStockIn, db: Session = Depends(get_db)):
+    """
+    Erstellt einen neuen Skistock.
+    """
+    return crud_materialstock.create_skistock(db, Bezeichnung.Bezeichnung)
+
+@router.get("/skistocke", response_model=list[SkiStockOut])
+async def get_skistocke( db: Session = Depends(get_db)):
     """
     Gibt alle Skistocke zurück.
     """
