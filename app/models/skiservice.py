@@ -51,7 +51,7 @@ class Auftrag(Base):
     benachrichtigt: Mapped[str] = mapped_column("Benachrichtigt", String(10), default="nein")
     abgerechnet: Mapped[Optional[int]] = mapped_column("Abgerechnet", Integer)
     uberweisung: Mapped[Optional[int]] = mapped_column("Uberweisung", Integer)
-    name: Mapped[Optional[str]] = mapped_column("Name", String(15))
+    name: Mapped[str] = mapped_column("Name", String(15))
     anz_leih: Mapped[Optional[int]] = mapped_column("AnzLeih", Integer)
     rabat: Mapped[Optional[float]] = mapped_column("Rabat", Double)
     rabat_name: Mapped[Optional[str]] = mapped_column("RabatName", String(25))

@@ -6,3 +6,6 @@ class SkiStockOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+class SkiStockIn(BaseModel):
+    Bezeichnung: str
