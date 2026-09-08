@@ -21,7 +21,7 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    Base.metadata.create_all(bind=engine)
+    # Base.metadata.create_all(bind=engine)
     yield
 
 app = FastAPI(title="SkiApp API", version="0.0.1", lifespan=lifespan)
