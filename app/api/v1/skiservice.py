@@ -8,7 +8,7 @@ from app.crud import skiservicepreis as crud_skiservicepreis
 
 from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema, SkiBindungFertigSchema
 from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
-from app.schemas.skiservicepreise import SkiServicePreiseSchema
+from app.schemas.skiservicepreise import SkiServicePreiseBase, SkiServicePreiseSchema
 
 from app.utils.skiscannerguimanager import scanner_gui_manager as scanner_manager
 from app.utils.mail import sendeFertigMail, skizusammenfassen
@@ -104,6 +104,11 @@ async def bindungfertig(SkisChecked: SkiBindungFertigSchema, db: Session = Depen
 async def get_preise(db: Session = Depends(get_db)):
     preise = crud_skiservicepreis.get_ski_service_preise(db)
     return preise
+
+@router.post("/preise", response_model=SkiServicePreiseSchema)
+async def create_preis(preis: SkiServicePreiseBase, db: Session = Depends(get_db)):
+    new_preis = crud_skiservicepreis.create_ski_service_preis(db, preis)
+    return new_preis
 
 @router.post("/neu", response_model=AuftragSchema )
 async def erstelle_auftrag(auftrag: AuftragCreateSchema, hintergrundProzess: BackgroundTasks, db: Session = Depends(get_db)):
