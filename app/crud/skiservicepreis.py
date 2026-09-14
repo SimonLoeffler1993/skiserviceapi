@@ -17,3 +17,25 @@ def create_ski_service_preis(db: Session, preis_data: SkiServicePreiseBase):
     db.commit()
     db.refresh(new_preis)
     return new_preis
+
+def setze_bindungsservice(db: Session, bindungsserviceid: int):
+    aktuellerBindungsService = db.query(SkiServicePreise).filter(SkiServicePreise.Bindung == True).first()
+    if aktuellerBindungsService:
+        if aktuellerBindungsService.id == bindungsserviceid:
+            return aktuellerBindungsService  # bereits gesetzt
+
+        neuerBindungsService = db.query(SkiServicePreise).filter(SkiServicePreise.id == bindungsserviceid).first()
+        if not neuerBindungsService:
+            return None  # keine Änderungen vorgenommen
+
+        aktuellerBindungsService.Bindung = False
+        neuerBindungsService.Bindung = True
+    else:
+        neuerBindungsService = db.query(SkiServicePreise).filter(SkiServicePreise.id == bindungsserviceid).first()
+        if not neuerBindungsService:
+            return None
+        neuerBindungsService.Bindung = True
+
+    db.commit()
+    db.refresh(neuerBindungsService)
+    return neuerBindungsService

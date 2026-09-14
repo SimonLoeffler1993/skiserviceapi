@@ -125,3 +125,13 @@ async def erstelle_auftrag(auftrag: AuftragCreateSchema, hintergrundProzess: Bac
         hintergrundProzess.add_task(skiserviceauftrag.skiServiceEttiketDrucken, skiauftrag)
 
     return new_auftrag
+
+@router.post("/bindungsservice", response_model=SkiServicePreiseSchema)
+async def set_bindungsservice(bindungsserviceid: int, db: Session = Depends(get_db)):
+    """
+    Setzt den Bindungsservice für einen Skiservice-Auftrag.
+    """
+    updated_preis = crud_skiservicepreis.setze_bindungsservice(db, bindungsserviceid)
+    if not updated_preis:
+        raise HTTPException(status_code=404, detail="Bindungsservice nicht gefunden")
+    return updated_preis
