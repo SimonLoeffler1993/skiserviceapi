@@ -3,7 +3,7 @@ import datetime
 from typing import Optional
 
 from app.models.saisonverleih import SkiSaisonverleihPreise, SaisonVerleih, SaisonVerleihMaterial
-from app.schemas.saisonverleih import SaisonVerleihCreate
+from app.schemas.saisonverleih import SaisonVerleihCreate, SaisonVerleihPreisBase
 from app.crud import saison as crud_saison
 from app.utils.skiEttiket import SkiEttiket
 from app.core.config import EttikettierSettings
@@ -12,6 +12,20 @@ from app.core.config import EttikettierSettings
 def get_saisonverleihpreise(db: Session,):
     # TODO mit Historie
     return db.query(SkiSaisonverleihPreise).all()
+
+def create_saisonverleihpreis(db: Session, preis_data: SaisonVerleihPreisBase):
+    new_preis = SkiSaisonverleihPreise(
+        Bezeichnung=preis_data.Bezeichnung,
+        Preis=preis_data.Preis,
+        vonL=preis_data.vonL,
+        bisL=preis_data.bisL,
+        SkiArt_ID=preis_data.SkiArt_ID,
+        inaktiv=0
+    )
+    db.add(new_preis)
+    db.commit()
+    db.refresh(new_preis)
+    return new_preis
 
 def get_saisonverleih(db: Session, saisonverleih_id: int):
     return db.query(SaisonVerleih).filter(SaisonVerleih.ID == saisonverleih_id).first()

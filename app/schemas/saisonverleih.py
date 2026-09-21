@@ -87,3 +87,31 @@ class SaisonVerleihRead(SaisonVerleihBase):
     }
     # class Config:
     #     from_attributes = True
+
+
+# --- Saisonverleih-Preis ---
+class SaisonVerleihPreisBase(BaseModel):
+    Bezeichnung: str
+    Preis: float
+    vonL: int | None = None
+    bisL: int | None = None
+    SkiArt_ID: int | None = None
+    inaktiv: bool | None = None
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class SaisonVerleihPreisRead(SaisonVerleihPreisBase):
+    ID: int
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class SaisonVerleihPreiseListe(BaseModel):
+    preise: List[SaisonVerleihPreisRead]
+
+    model_config = {
+        "from_attributes": True
+    }

@@ -4,7 +4,7 @@ from typing import Optional
 
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
-from app.schemas.saisonverleih import SaisonVerleihRead, SaisonVerleihCreate
+from app.schemas.saisonverleih import SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate
 from app.utils import skipdf
 
 router = APIRouter(
@@ -17,14 +17,21 @@ router = APIRouter(
 async def test():
     return {"message": "Saisonverleih API is working!"}
 
-# TODO Response Shema hinzufügen
-@router.get("/preise")
+@router.get("/preise", response_model=SaisonVerleihPreiseListe)
 async def get_saisonverleihpreise(db: Session = Depends(get_db)):
     """
     Zeigt alle Saisonverleihpreise an inklusieve der Gültigkeit und Historische.
     """
     preise = crud_saisonverleih.get_saisonverleihpreise(db)
     return {"preise": preise}
+
+@router.post("/preise", response_model=SaisonVerleihPreisRead)
+async def erstelle_saisonverleihpreis(preis: SaisonVerleihPreisBase, db: Session = Depends(get_db)):
+    """
+    Erstellt einen neuen Saisonverleihpreis.
+    """
+    ergebnis = crud_saisonverleih.create_saisonverleihpreis(db, preis)
+    return ergebnis
 
 @router.post("/neu")
 async def erstelle_saisonverleih(saisonverleih: SaisonVerleihCreate, db: Session = Depends(get_db)):

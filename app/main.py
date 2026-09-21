@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="SkiApp API", version="0.0.1", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
-# TODO: #14 Alembic in den Startprozess integrieren
+
 # Dadurch werden bei jedem Start die neuesten DB Migrationen ausgeführt.
 
 # TODO: #9 CORS in einstellungen
