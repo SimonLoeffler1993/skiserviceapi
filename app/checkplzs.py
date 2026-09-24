@@ -44,10 +44,16 @@ def seed_plz(db: Session) -> None:
     db.commit()
     logger.info("%d Postleitzahlen eingespielt", len(rows))
 
+def ensure_default_plz(db: Session) -> None:
+    if db.get(Ort, 0) is None:
+        db.execute(insert(Ort), [{"Postlz": 0, "Ort": "Keine Angabe"}])
+        db.commit()
+        logger.info("Standard-PLZ 0 (keine Angabe) angelegt")
 
 def seed_if_empty() -> None:
     with SessionLocal() as db:
         seed_plz(db)
+        ensure_default_plz(db)
 
 
 if __name__ == "__main__":
