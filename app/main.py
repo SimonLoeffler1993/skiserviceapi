@@ -28,8 +28,6 @@ app = FastAPI(title="SkiApp API", version="0.0.1", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
 
-# Dadurch werden bei jedem Start die neuesten DB Migrationen ausgeführt.
-
 # TODO: #9 CORS in einstellungen
 # CORS configuration
 app.add_middleware(

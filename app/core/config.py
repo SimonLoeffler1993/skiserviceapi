@@ -23,6 +23,7 @@ class EttikettierSettings:
     printerModel = os.getenv("LABELPRINTERMODEL", "QL-820NWB")
     labelSize = os.getenv("LABELSIZE", "62")
     printErstellung = os.getenv("PRINTSAISONVERLEIHCREATION", "false").strip().lower() == "true"
+    # TODO: #19 Einstellen ob Labeldrucker Rot Schwarz oder nur S/W Druckt
 
 class LexwareSettings:
     baseURl = os.getenv("LEXWARE_BASEURL", "https://api.lexware.io")
