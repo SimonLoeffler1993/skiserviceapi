@@ -6,7 +6,7 @@ import os
 
 templates = Jinja2Templates(directory="app/templates")
 
-
+# TODO #20 auf Loakel generieren umstellen
 def generate_Saisonbericht(saionverleih: SaisonVerleihRead):
 
     # Gesamtpreis berechnen

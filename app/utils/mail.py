@@ -38,6 +38,7 @@ def sendeFertigMail(auftrag: AuftragSchema):
 
     msg.attach(MIMEText(html, "html"))
     try:
+        # TODO #21 bei Port 587 anderst versenden 
         with smtplib.SMTP_SSL(EmailSettings.smtpServer, EmailSettings.smtpPort) as server:
             server.login(EmailSettings.smtpUser, EmailSettings.smtpPassword)
             server.send_message(msg)

@@ -23,6 +23,7 @@ services:
             - EMAIL_FROM=${EMAIL_FROM}
             - HOST=${HOST}
             - LEXWARE_APIKEY=${LEXWARE_APIKEY}
+            - LABELPRINTERIDENT=${LABELPRINTERIDENT}
         depends_on:
             mariadb:
                 condition: service_healthy
