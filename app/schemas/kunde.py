@@ -1,29 +1,20 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator,
+)
 from app.schemas.ort import OrtOut
 
 
-class SkiKundeOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    ID: int
-    Nachname: str | None = None
-    Vorname: str | None = None
-    Strasse: str | None = None
-    Ort: OrtOut | None = None
-    Tel: str | None = None
-    Handy: str | None = Field(None, validation_alias="Tel1")
-    Email: str | None = None
-
-
-class SkiKundeSpeichern(BaseModel):
+class SkiKundeBasis(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    Nachname: str | None = Field(None, max_length=20)
-    Vorname: str | None = Field(None, max_length=20)
+    Nachname: str | None = Field(None, max_length=100)
+    Vorname: str | None = Field(None, max_length=100)
     Strasse: str | None = Field(None, max_length=250)
-    Plz: int | None = None
-    Ort: str | None = None
     Tel: str | None = Field(None, max_length=50)
-    Handy: str | None = Field(None, max_length=50)
+    # JSON-Eingabe heißt "Handy", das ORM-Objekt hat die Spalte "Tel1"
+    Handy: str | None = Field(
+        None, max_length=50, validation_alias=AliasChoices("Handy", "Tel1")
+    )
     Email: str | None = Field(None, max_length=50)
 
     # macht aus leeren Strings None, damit die Datenbank NULL-Werte bekommt
@@ -34,9 +25,12 @@ class SkiKundeSpeichern(BaseModel):
             return v.strip() or None
         return v
 
-    # prüft, ob die Pflichtangaben vorhanden sind
-    # mindest 1 Name Vor oder Nachema
-    # mindestens 1 Kontaktmöglichkeit Tel, Handy oder Email
+
+class SkiKundeSpeichern(SkiKundeBasis):
+    Plz: int | None = None
+    Ort: str | None = None
+
+    # mindestens 1 Name (Vor- oder Nachname) und 1 Kontaktmöglichkeit (Tel, Handy, Email)
     @model_validator(mode="after")
     def pruefe_pflichtangaben(self):
         if not (self.Nachname or self.Vorname):
@@ -45,6 +39,29 @@ class SkiKundeSpeichern(BaseModel):
             raise ValueError("Mindestens E-Mail, Telefon oder Handy angeben")
         return self
 
+
+class SkiKundeOut(SkiKundeBasis):
+    ID: int
+    Ort: OrtOut | None = None
+
+
 class SkiKundeZuTerminal(BaseModel):
     terminal: str
     kunde_id: int
+
+
+class SkiKundeTerminal(SkiKundeBasis):
+    id: int = Field(validation_alias="ID")
+    Plz: str | None = None
+    Ort: str | None = None
+
+    @field_validator("Plz", mode="before")
+    @classmethod
+    def plz_als_text(cls, v):
+        return str(v) if v is not None else None
+
+    @field_validator("Ort", mode="before")
+    @classmethod
+    def ort_name(cls, v):
+        # v ist das Ort-Objekt (Relationship) oder None
+        return v.Ort if v is not None else None
