@@ -9,8 +9,8 @@ from app.models.ort import Ort
 class SkiKunde(Base):
     __tablename__ = "adresse"
     ID: Mapped[int] = mapped_column(Integer, primary_key=True)
-    Nachname: Mapped[str | None] = mapped_column(String(20))
-    Vorname: Mapped[str | None] = mapped_column(String(20))
+    Nachname: Mapped[str | None] = mapped_column(String(100))
+    Vorname: Mapped[str | None] = mapped_column(String(100))
     Anrede: Mapped[str | None] = mapped_column(String(1), default="f")
     Strasse: Mapped[str | None] = mapped_column(String(250))
     Plz: Mapped[int | None] = mapped_column(Integer, ForeignKey("postleitzahl.Postlz"))

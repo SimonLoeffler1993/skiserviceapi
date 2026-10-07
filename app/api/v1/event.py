@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
 from app.utils.terminalmanager import KundenTerminalManager
-from app.schemas.kunde import SkiKundeZuTerminal
+from app.schemas.kunde import SkiKundeZuTerminal, SkiKundeTerminal
 from app.crud import kunde as crud_kunde
 
 
@@ -40,26 +40,20 @@ async def list_terminals(request: Request):
 async def zeige_kunde(daten: SkiKundeZuTerminal, request: Request, db: Session = Depends(get_db)):
     if daten.terminal not in terminal_manager.verbindungen:
         return {"status": "Terminal not connected", "terminal": daten.terminal}
+    
     # Kunde abfragen
     kunde = crud_kunde.get_kunde(db, daten.kunde_id)
     if not kunde:
         return {"status": "Kunde not found", "kunde_id": daten.kunde_id}
 
     # Nachricht an die Warteschlange des Terminals senden
-    await terminal_manager.send_message(daten.terminal,json.dumps({
+    payload = {
         "command": "zeige_kunde",
-        "kunde": {
-            "id": kunde.ID,
-            "Nachname": kunde.Nachname,
-            "Vorname": kunde.Vorname,
-            "Strasse": kunde.Strasse,
-            "Plz": str(kunde.Plz),
-            "Ort": kunde.Ort.Ort,
-            "Tel": kunde.Tel,
-            "Handy": kunde.Tel1,
-            "Email": kunde.Email,
-        }
-    }))
+        "kunde": SkiKundeTerminal.model_validate(kunde).model_dump()
+    }
+
+    await terminal_manager.send_message(daten.terminal,json.dumps(payload))
+      
     return {"status": "zeige_kunde command sent"}
 
 @router.post("/send/{terminal}")

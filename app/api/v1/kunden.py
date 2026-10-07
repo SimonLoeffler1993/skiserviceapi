@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -24,10 +24,16 @@ async def test():
     return {"test": "test"}
 
 @router.get("/suchen", response_model=list[SkiKundeOut])
-async def search_kunde(vorname: str = None, nachname: str = None, db: Session = Depends(get_db)):
+def search_kunde(
+    vorname: str | None = Query(None, max_length=50),
+    nachname: str | None = Query(None, max_length=50),
+    db: Session = Depends(get_db),
+):
+    vorname = (vorname or "").strip()
+    nachname = (nachname or "").strip()
     if not vorname and not nachname:
         raise HTTPException(status_code=400, detail="Mindestens ein Name muss angegeben werden")
-    return crud_kunde.search_kunde(db, vorname or "", nachname or "")
+    return crud_kunde.search_kunde(db, vorname, nachname)
 
 @router.get("/{kunde_id}", response_model= SkiKundeOut)
 async def get_kunde(kunde_id: int, db: Session = Depends(get_db)):
