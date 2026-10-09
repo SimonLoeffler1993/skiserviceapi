@@ -10,5 +10,8 @@ alembic upgrade head
 echo "Datenbank Prüfen..."
 python -m app.checkplzs
 
+echo "Skiarten Prüfen und ggf. hinzufügen..."
+python -m app.add_skitype
+
 echo "Skiservice API starten..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000
