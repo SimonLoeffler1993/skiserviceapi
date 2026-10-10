@@ -19,3 +19,5 @@ async def test():
 async def artikels(artikelkategorie: KasseArtikelKategorie = KasseArtikelKategorie.auftrag, db: Session = Depends(get_db)):
     if artikelkategorie == KasseArtikelKategorie.auftrag:
         return KasseService(db).get_offene_auftraege()
+    elif artikelkategorie == KasseArtikelKategorie.verleih:
+        return KasseService(db).get_offene_verleih()
