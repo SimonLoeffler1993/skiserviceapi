@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.skiservice import Auftrag, Ski
 from app.models.saisonverleih import SaisonVerleih, SaisonVerleihMaterial
 from app.schemas.kasse import KassenArtikelSchema, KasseEinzelArtikelSchema
-from skiserviceapi.app.models.kunde import SkiKunde
+from app.models.kunde import SkiKunde
 
 def get_kundenname(kunde: SkiKunde | None) -> str:
     if kunde is not None:
