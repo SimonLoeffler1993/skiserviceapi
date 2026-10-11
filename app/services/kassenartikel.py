@@ -1,11 +1,15 @@
 # app/services/kasse_service.py
 
+from datetime import date
+
 from sqlalchemy.orm import Session
 
 from app.models.skiservice import Auftrag, Ski
 from app.models.saisonverleih import SaisonVerleih, SaisonVerleihMaterial
-from app.schemas.kasse import KassenArtikelSchema, KasseEinzelArtikelSchema
+from app.schemas.kasse import KasseBezahlenSchema, KasseHatBezahltSchema, KassenArtikelSchema, KasseEinzelArtikelSchema
 from app.models.kunde import SkiKunde
+from app.models.quittung import Quittung, QuittungArtikel
+from app.crud import saison as crud_saison
 
 def get_kundenname(kunde: SkiKunde | None) -> str:
     if kunde is not None:
@@ -37,6 +41,7 @@ class KasseService:
             artikelname=auftrag.name,
             gesamtpreis=gesamtpreis,
             artikel=artikel,
+            service=True,
         )
 
     def _ski_zu_artikel(self, ski: Ski) -> list[KasseEinzelArtikelSchema]:
@@ -79,6 +84,7 @@ class KasseService:
             artikelname=verleih.Name,
             gesamtpreis=gesamtpreis,
             artikel=artikel,
+            verleih=True,
         )
 
     def _material_zu_artikel(self, material: SaisonVerleihMaterial) -> list[KasseEinzelArtikelSchema]:
@@ -109,3 +115,71 @@ class KasseService:
         #         )
         #     )
         return positionen
+
+    def bezahlen(self, zuBezahlen: KasseBezahlenSchema) -> KasseHatBezahltSchema:
+        """
+        Es wird eine Quittung erstellt und die angegebenen Artikels als bezahlt markiert.
+        """
+
+        aktuelle_Saison = crud_saison.get_AktuelleSaison(self.db)
+        if aktuelle_Saison is None:
+            raise ValueError("Keine aktuelle Saison gefunden.")
+
+        quittung = Quittung(
+            Name="Quittung",
+            AnzAuftrag=0,
+            AnzVerleih=0,
+            Saison_ID=aktuelle_Saison.ID,
+            Bezahlt_Am=date.today(),
+            Erstellt_Am=date.today(),
+            Ueberweisung=zuBezahlen.Ueberweisung,
+            Karte=zuBezahlen.Karte,
+            Bar=zuBezahlen.Bar,
+            Bezahlt=True,
+            BuchhaltungSync=False,
+            LexID="",
+            NurExtern=False
+        )
+        self.db.add(quittung)
+        self.db.commit()
+        self.db.refresh(quittung)
+
+        for artikel in zuBezahlen.artikels:
+            if artikel.service:
+                auftrag = self.db.query(Auftrag).filter(Auftrag.id == artikel.id).first()
+                if auftrag:
+                    auftrag.bezahlt = "ja"
+                    self.db.commit()
+                    self.db.refresh(auftrag)
+                    quittung_artikel = QuittungArtikel(
+                        Quittung_ID=quittung.ID,
+                        Artikel_ID=auftrag.id,
+                        Artikel_Kategorie="Skiservice",
+                        Auftrag_ID=auftrag.id,
+                        Verleih_ID=None
+                    )
+                    self.db.add(quittung_artikel)
+                    self.db.commit()
+                    self.db.refresh(quittung_artikel)
+            elif artikel.verleih:
+                verleih = self.db.query(SaisonVerleih).filter(SaisonVerleih.ID == artikel.id).first()
+                if verleih:
+                    verleih.Bezahlt = True
+                    self.db.commit()
+                    self.db.refresh(verleih)
+                    quittung_artikel = QuittungArtikel(
+                        Quittung_ID=quittung.ID,
+                        Artikel_ID=verleih.ID,
+                        Artikel_Kategorie="Verleih",
+                        Auftrag_ID=None,
+                        Verleih_ID=verleih.ID
+                    )
+                    self.db.add(quittung_artikel)
+                    self.db.commit()
+                    self.db.refresh(quittung_artikel)
+
+        return KasseHatBezahltSchema(
+            quittung_id=quittung.ID,
+            bezahldatum=str(quittung.Bezahlt_Am),
+            bezahlinfo={"AnzAuftrag": quittung.AnzAuftrag, "AnzVerleih": quittung.AnzVerleih}
+        )
