@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from pydantic import BaseModel
+from enum import Enum 
 
 
 class BezahlInfoSchema(BaseModel):
@@ -56,3 +57,32 @@ class QuittungNurExtern(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+# Outputschema für einheitliche Antwort
+class QuittungsTyp(str, Enum):
+    Auftrag = "Auftrag"
+    Verleih = "Verleih"
+    Handware = "Handware"
+
+class QuittungOutSchema(BaseModel):
+    id: int
+    name: str
+    saison_ID: int
+    bezahlt: bool 
+    bezahlt_Am: date | None = None
+    erstellt_Am: date | None = None
+    ueberweisung: bool
+    karte: bool
+    bar: bool
+    buchhaltungSync: bool
+    lexID: str | None = None
+    artikels: list[QuittungArtikelSchema] = []
+    nurExtern: bool = False
+
+class QuittungArtikelSchema(BaseModel):
+    type: QuittungsTyp
+    bezeichnung: str
+    preis: float
+    anzahl: int
+    toID: int
+

@@ -25,9 +25,10 @@ class KasseHatBezahltSchema(BaseModel):
     quittung_id: int
     bezahldatum: Optional[str] = None
     bezahlinfo: Optional[dict] = None
+    success: bool 
 
 class KasseBezahlenSchema(BaseModel):
     artikels: list[KassenArtikelSchema]
-    Ueberweisung: bool = False
-    Karte: bool = False
-    Bar: bool = False
+    ueberweisung: bool = False
+    karte: bool = False
+    bar: bool = False

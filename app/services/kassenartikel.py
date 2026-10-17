@@ -120,6 +120,7 @@ class KasseService:
         """
         Es wird eine Quittung erstellt und die angegebenen Artikels als bezahlt markiert.
         """
+        # TODO #25 Fehler behandlung in der Funktion
 
         aktuelle_Saison = crud_saison.get_AktuelleSaison(self.db)
         if aktuelle_Saison is None:
@@ -132,9 +133,9 @@ class KasseService:
             Saison_ID=aktuelle_Saison.ID,
             Bezahlt_Am=date.today(),
             Erstellt_Am=date.today(),
-            Ueberweisung=zuBezahlen.Ueberweisung,
-            Karte=zuBezahlen.Karte,
-            Bar=zuBezahlen.Bar,
+            Ueberweisung=zuBezahlen.ueberweisung,
+            Karte=zuBezahlen.karte,
+            Bar=zuBezahlen.bar,
             Bezahlt=True,
             BuchhaltungSync=False,
             LexID="",
@@ -148,9 +149,14 @@ class KasseService:
             if artikel.service:
                 auftrag = self.db.query(Auftrag).filter(Auftrag.id == artikel.id).first()
                 if auftrag:
+                    # Markiere den Auftrag als bezahlt und aktualisiere die Quittung_ID
                     auftrag.bezahlt = "ja"
+                    auftrag.bezahlt_am = date.today()
+                    auftrag.quittung_id = quittung.ID
                     self.db.commit()
                     self.db.refresh(auftrag)
+
+                    # Skiservice Auftrag als Quittungsartikel hinzufügen
                     quittung_artikel = QuittungArtikel(
                         Quittung_ID=quittung.ID,
                         Artikel_ID=auftrag.id,
@@ -161,12 +167,20 @@ class KasseService:
                     self.db.add(quittung_artikel)
                     self.db.commit()
                     self.db.refresh(quittung_artikel)
+
+
+
             elif artikel.verleih:
                 verleih = self.db.query(SaisonVerleih).filter(SaisonVerleih.ID == artikel.id).first()
                 if verleih:
+                    # Markiere den Verleih als bezahlt und aktualisiere die Quittung_ID
                     verleih.Bezahlt = True
+                    verleih.Bezahlt_Am = date.today()
+                    verleih.QuittungID = quittung.ID
                     self.db.commit()
                     self.db.refresh(verleih)
+
+                    # Verleih als Quittungsartikel hinzufügen
                     quittung_artikel = QuittungArtikel(
                         Quittung_ID=quittung.ID,
                         Artikel_ID=verleih.ID,
@@ -178,8 +192,11 @@ class KasseService:
                     self.db.commit()
                     self.db.refresh(quittung_artikel)
 
+    
+
         return KasseHatBezahltSchema(
             quittung_id=quittung.ID,
             bezahldatum=str(quittung.Bezahlt_Am),
-            bezahlinfo={"AnzAuftrag": quittung.AnzAuftrag, "AnzVerleih": quittung.AnzVerleih}
+            bezahlinfo={"AnzAuftrag": quittung.AnzAuftrag, "AnzVerleih": quittung.AnzVerleih},
+            success=True
         )
