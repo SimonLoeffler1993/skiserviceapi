@@ -37,7 +37,9 @@
   table.artikel .r, table.summe .r { text-align: right; white-space: nowrap; }
   table.artikel .c { text-align: center; white-space: nowrap; }
   .pos { width: 8mm; color: #777; }
-  .typ { width: 22mm; font-size: 8.5pt; color: #555; }
+
+  tr.gruppe { break-after: avoid; page-break-after: avoid; }
+  tr.gruppe td { background: #fafafa; font-weight: bold; font-size: 8.5pt; padding: 3.5mm 2mm 1.5mm 2mm; border-bottom: 1px solid #999; }
 
   .summe-block { page-break-inside: avoid; margin-top: 6mm; }
   table.summe { width: 75mm; margin-left: auto; border-collapse: collapse; }
@@ -59,12 +61,15 @@
 <body>
 {# ---------- Vorbereitung ---------- #}
 {% set ns = namespace(summe=0, auftrag=0, verleih=0, sonst=0) %}
-{% for a in quittung.artikels %}
-  {% set zeile = a.preis * a.anzahl %}
-  {% set ns.summe = ns.summe + zeile %}
-  {% if a.type == "Auftrag" %}{% set ns.auftrag = ns.auftrag + zeile %}
-  {% elif a.type == "Verleih" %}{% set ns.verleih = ns.verleih + zeile %}
-  {% else %}{% set ns.sonst = ns.sonst + zeile %}{% endif %}
+{% for g in quittung.artikelgruppen %}
+  {% set typ = g.type.value if g.type.value is defined else g.type %}
+  {% for a in g.artikels %}
+    {% set zeile = a.preis * a.anzahl %}
+    {% set ns.summe = ns.summe + zeile %}
+    {% if typ == "Auftrag" %}{% set ns.auftrag = ns.auftrag + zeile %}
+    {% elif typ == "Verleih" %}{% set ns.verleih = ns.verleih + zeile %}
+    {% else %}{% set ns.sonst = ns.sonst + zeile %}{% endif %}
+  {% endfor %}
 {% endfor %}
 
 {# ---------- Kopf ---------- #}
@@ -100,7 +105,6 @@
   <thead>
     <tr>
       <th class="pos">#</th>
-      <th class="typ">Art</th>
       <th>Bezeichnung</th>
       <th class="c">Anzahl</th>
       <th class="r">Einzelpreis</th>
@@ -108,15 +112,27 @@
     </tr>
   </thead>
   <tbody>
-    {% for a in quittung.artikels %}
+    {% set pos = namespace(n=0) %}
+    {% for g in quittung.artikelgruppen %}
+    <tr class="gruppe">
+      <td colspan="5">
+        {%- if g.bezeichnung -%}
+          {{ g.bezeichnung }}
+        {%- else -%}
+          {{ g.type.value if g.type.value is defined else g.type }}{% if g.toID is not none %} #{{ g.toID }}{% endif %}
+        {%- endif -%}
+      </td>
+    </tr>
+    {% for a in g.artikels %}
+    {% set pos.n = pos.n + 1 %}
     <tr>
-      <td class="pos">{{ loop.index }}</td>
-      <td class="typ">{{ a.type }}</td>
+      <td class="pos">{{ pos.n }}</td>
       <td>{{ a.bezeichnung }}</td>
       <td class="c">{{ a.anzahl }}</td>
       <td class="r">{{ a.preis | eur }}</td>
       <td class="r">{{ (a.preis * a.anzahl) | eur }}</td>
     </tr>
+    {% endfor %}
     {% endfor %}
   </tbody>
 </table>
@@ -124,13 +140,13 @@
 {# ---------- Summe ---------- #}
 <div class="summe-block">
   <table class="summe">
-    {% if ns.auftrag and (ns.verleih or ns.sonst) %}<tr class="teil"><td>Aufträge</td><td class="r">{{ ns.auftrag | eur }}</td></tr>{% endif %}
+    <!-- {% if ns.auftrag and (ns.verleih or ns.sonst) %}<tr class="teil"><td>Aufträge</td><td class="r">{{ ns.auftrag | eur }}</td></tr>{% endif %}
     {% if ns.verleih and (ns.auftrag or ns.sonst) %}<tr class="teil"><td>Verleih</td><td class="r">{{ ns.verleih | eur }}</td></tr>{% endif %}
-    {% if ns.sonst and (ns.auftrag or ns.verleih) %}<tr class="teil"><td>Sonstiges</td><td class="r">{{ ns.sonst | eur }}</td></tr>{% endif %}
+    {% if ns.sonst and (ns.auftrag or ns.verleih) %}<tr class="teil"><td>Sonstiges</td><td class="r">{{ ns.sonst | eur }}</td></tr>{% endif %} -->
     {% if firma.mwst_satz %}
-      {% set netto = ns.summe / (1 + firma.mwst_satz / 100) %}
+      {% set netto = (ns.summe | float) / (1 + firma.mwst_satz / 100) %}
       <tr class="teil"><td>Netto</td><td class="r">{{ netto | eur }}</td></tr>
-      <tr class="teil"><td>MwSt. {{ firma.mwst_satz }} %</td><td class="r">{{ (ns.summe - netto) | eur }}</td></tr>
+      <tr class="teil"><td>MwSt. {{ firma.mwst_satz }} %</td><td class="r">{{ ((ns.summe | float) - netto) | eur }}</td></tr>
     {% endif %}
     <tr class="gesamt"><td>Gesamtbetrag</td><td class="r">{{ ns.summe | eur }}</td></tr>
   </table>

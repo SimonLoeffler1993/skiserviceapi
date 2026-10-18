@@ -76,8 +76,14 @@ class QuittungOutSchema(BaseModel):
     bar: bool
     buchhaltungSync: bool
     lexID: str | None = None
-    artikels: list[QuittungArtikelSchema] = []
+    artikelgruppen: list[QuittungGruppeArtikel] = []
     nurExtern: bool = False
+
+class QuittungGruppeArtikel(BaseModel):
+    type: QuittungsTyp
+    toID: int
+    bezeichnung: str
+    artikels: list[QuittungArtikelSchema] = []
 
 class QuittungArtikelSchema(BaseModel):
     type: QuittungsTyp
