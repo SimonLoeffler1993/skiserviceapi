@@ -6,6 +6,7 @@ from collections import Counter
 from app.models.quittung import Quittung
 from app.schemas.quittung import QuittungArtikelSchema, QuittungOutSchema, QuittungsTyp
 from app.crud import skiservice as crud_skiservice
+from app.crud import saisonverleih as crud_saisonverleih
 
 
 def _AuftragzuArtikel(auftrag_id: int, db: Session) -> list[QuittungArtikelSchema]:
@@ -34,12 +35,40 @@ def _AuftragzuArtikel(auftrag_id: int, db: Session) -> list[QuittungArtikelSchem
         ))
 
     for bindung_preis, anzahl in bindung_Counter.items():
+        # TODO #27 Bindungscheck bezeichnung aus DB in der Quittung
         artikels.append(QuittungArtikelSchema(
             type=QuittungsTyp.Auftrag,
-            bezeichnung="Bindung",
+            bezeichnung="Bindungscheck",
             preis=bindung_preis,
             anzahl=anzahl,
             toID=auftrag_id
+        ))
+
+    return artikels
+
+def _VerleihzuArtikel(verleihID: int, db: Session) -> list[QuittungArtikelSchema]:
+    # ertmal daten aus DB lesen
+    verleih = crud_saisonverleih.get_saisonverleih(db, verleihID)
+    # TODO #26 Verleih bezeichnung mit auf der Quittung
+    verleih_counter: Counter[float] = Counter()
+
+    #Wen nix gefunden wird auch nix zurück
+    if not verleih:
+        return []
+
+    # artikel Init
+    artikels: list[QuittungArtikelSchema] = []
+
+    for ski in verleih.Material:
+        verleih_counter[ski.Preis] += 1
+
+    for verleih_Preis, anzahl in verleih_counter.items():
+        artikels.append(QuittungArtikelSchema(
+            type=QuittungsTyp.Verleih,
+            bezeichnung="Saisonverleih",
+            preis=verleih_Preis,
+            anzahl=anzahl,
+            toID=verleihID
         ))
 
     return artikels
@@ -78,9 +107,7 @@ class QuittungsService:
                 # mit extend anhängen
                 quittungOut.artikels.extend(_AuftragzuArtikel(artikel.Auftrag_ID, self.db))
 
-                    
-
-       
-
+            if artikel.Verleih_ID is not None:
+                quittungOut.artikels.extend(_VerleihzuArtikel(artikel.Verleih_ID, self.db))
         
         return quittungOut
