@@ -1,0 +1,180 @@
+{% set firma = firma | default({}) %}
+{% set firma_name = firma.name | default("Simons Skiservice") %}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Quittung {{ quittung.id }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 18mm 22mm 18mm;
+    @bottom-left  { content: "{{ firma_name }} · Quittung Nr. {{ quittung.id }}"; font-size: 8pt; color: #888; font-family: "DejaVu Sans", Arial, sans-serif; }
+    @bottom-right { content: "Seite " counter(page) " von " counter(pages); font-size: 8pt; color: #888; font-family: "DejaVu Sans", Arial, sans-serif; }
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 10pt; color: #1a1a1a; line-height: 1.4; }
+
+  .kopf { width: 100%; border-collapse: collapse; margin-bottom: 10mm; }
+  .kopf td { vertical-align: top; padding: 0; }
+  .firma-name { font-size: 16pt; font-weight: bold; }
+  .firma-adresse { font-size: 9pt; color: #555; margin-top: 2mm; }
+  .titel { text-align: right; }
+  .titel h1 { font-size: 20pt; margin: 0 0 2mm 0; letter-spacing: 1px; text-transform: uppercase; }
+  .titel .nr { font-size: 10pt; color: #555; }
+
+  .meta { width: 100%; border-collapse: collapse; margin-bottom: 8mm; }
+  .meta td { padding: 2mm 3mm; vertical-align: top; border: 1px solid #ddd; width: 33.33%; }
+  .meta .label { display: block; font-size: 7.5pt; text-transform: uppercase; color: #777; margin-bottom: 1mm; }
+  .meta .wert { font-size: 10pt; font-weight: bold; }
+
+  table.artikel { width: 100%; border-collapse: collapse; }
+  table.artikel thead { display: table-header-group; }   /* Kopfzeile wird auf jeder Seite wiederholt */
+  table.artikel th { background: #f0f0f0; text-align: left; font-size: 8.5pt; text-transform: uppercase;
+                     padding: 2.5mm 2mm; border-bottom: 2px solid #1a1a1a; }
+  table.artikel td { padding: 2.5mm 2mm; border-bottom: 1px solid #e3e3e3; vertical-align: top; }
+  table.artikel tr { page-break-inside: avoid; }
+  table.artikel .r, table.summe .r { text-align: right; white-space: nowrap; }
+  table.artikel .c { text-align: center; white-space: nowrap; }
+  .pos { width: 8mm; color: #777; }
+
+  tr.gruppe { break-after: avoid; page-break-after: avoid; }
+  tr.gruppe td { background: #fafafa; font-weight: bold; font-size: 8.5pt; padding: 3.5mm 2mm 1.5mm 2mm; border-bottom: 1px solid #999; }
+
+  .summe-block { page-break-inside: avoid; margin-top: 6mm; }
+  table.summe { width: 75mm; margin-left: auto; border-collapse: collapse; }
+  table.summe td { padding: 1.5mm 2mm; }
+  table.summe tr.gesamt td { border-top: 2px solid #1a1a1a; font-size: 12pt; font-weight: bold; padding-top: 3mm; }
+  table.summe tr.teil td { font-size: 9pt; color: #555; }
+
+  .zahlung { page-break-inside: avoid; margin-top: 10mm; padding: 4mm; border: 1px solid #ddd; }
+  .zahlung .status { font-weight: bold; }
+  .bezahlt  { color: #1b7a34; }
+  .offen    { color: #b3261e; }
+
+  .unterschrift { page-break-inside: avoid; margin-top: 18mm; }
+  .unterschrift .linie { width: 70mm; border-top: 1px solid #1a1a1a; padding-top: 1.5mm; font-size: 8pt; color: #777; }
+
+  .hinweis { margin-top: 8mm; font-size: 8pt; color: #777; }
+</style>
+</head>
+<body>
+{# ---------- Vorbereitung ---------- #}
+{% set ns = namespace(summe=0, auftrag=0, verleih=0, sonst=0) %}
+{% for g in quittung.artikelgruppen %}
+  {% set typ = g.type.value if g.type.value is defined else g.type %}
+  {% for a in g.artikels %}
+    {% set zeile = a.preis * a.anzahl %}
+    {% set ns.summe = ns.summe + zeile %}
+    {% if typ == "Auftrag" %}{% set ns.auftrag = ns.auftrag + zeile %}
+    {% elif typ == "Verleih" %}{% set ns.verleih = ns.verleih + zeile %}
+    {% else %}{% set ns.sonst = ns.sonst + zeile %}{% endif %}
+  {% endfor %}
+{% endfor %}
+
+{# ---------- Kopf ---------- #}
+<table class="kopf">
+  <tr>
+    <td>
+      <div class="firma-name">{{ firma_name }}</div>
+      <div class="firma-adresse">
+        {% if firma.strasse %}{{ firma.strasse }}<br>{% endif %}
+        {{ firma.ort | default("Fronreute") }}
+        {% if firma.telefon %}<br>Tel. {{ firma.telefon }}{% endif %}
+        {% if firma.email %}<br>{{ firma.email }}{% endif %}
+      </div>
+    </td>
+    <td class="titel">
+      <h1>Quittung</h1>
+      <div class="nr">Nr. {{ quittung.id }}</div>
+    </td>
+  </tr>
+</table>
+
+{# ---------- Meta ---------- #}
+<table class="meta">
+  <tr>
+    <td><span class="label">Bezeichnung</span><span class="wert">{{ quittung.name }}</span></td>
+    <td><span class="label">Datum</span><span class="wert">{{ (quittung.bezahlt_Am or quittung.erstellt_Am) | datum or heute }}</span></td>
+    <!-- <td><span class="label">Saison</span><span class="wert">{{ quittung.saison_ID }}</span></td> -->
+  </tr>
+</table>
+
+{# ---------- Artikel ---------- #}
+<table class="artikel">
+  <thead>
+    <tr>
+      <th class="pos">#</th>
+      <th>Bezeichnung</th>
+      <th class="c">Anzahl</th>
+      <th class="r">Einzelpreis</th>
+      <th class="r">Gesamt</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% set pos = namespace(n=0) %}
+    {% for g in quittung.artikelgruppen %}
+    <tr class="gruppe">
+      <td colspan="5">
+        {%- if g.bezeichnung -%}
+          {{ g.bezeichnung }}
+        {%- else -%}
+          {{ g.type.value if g.type.value is defined else g.type }}{% if g.toID is not none %} #{{ g.toID }}{% endif %}
+        {%- endif -%}
+      </td>
+    </tr>
+    {% for a in g.artikels %}
+    {% set pos.n = pos.n + 1 %}
+    <tr>
+      <td class="pos">{{ pos.n }}</td>
+      <td>{{ a.bezeichnung }}</td>
+      <td class="c">{{ a.anzahl }}</td>
+      <td class="r">{{ a.preis | eur }}</td>
+      <td class="r">{{ (a.preis * a.anzahl) | eur }}</td>
+    </tr>
+    {% endfor %}
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- Summe ---------- #}
+<div class="summe-block">
+  <table class="summe">
+    <!-- {% if ns.auftrag and (ns.verleih or ns.sonst) %}<tr class="teil"><td>Aufträge</td><td class="r">{{ ns.auftrag | eur }}</td></tr>{% endif %}
+    {% if ns.verleih and (ns.auftrag or ns.sonst) %}<tr class="teil"><td>Verleih</td><td class="r">{{ ns.verleih | eur }}</td></tr>{% endif %}
+    {% if ns.sonst and (ns.auftrag or ns.verleih) %}<tr class="teil"><td>Sonstiges</td><td class="r">{{ ns.sonst | eur }}</td></tr>{% endif %} -->
+    {% if firma.mwst_satz %}
+      {% set netto = (ns.summe | float) / (1 + firma.mwst_satz / 100) %}
+      <tr class="teil"><td>Netto</td><td class="r">{{ netto | eur }}</td></tr>
+      <tr class="teil"><td>MwSt. {{ firma.mwst_satz }} %</td><td class="r">{{ ((ns.summe | float) - netto) | eur }}</td></tr>
+    {% endif %}
+    <tr class="gesamt"><td>Gesamtbetrag</td><td class="r">{{ ns.summe | eur }}</td></tr>
+  </table>
+</div>
+
+{# ---------- Zahlung ---------- #}
+<div class="zahlung">
+  {% if quittung.bezahlt %}
+    <span class="status bezahlt">Betrag dankend erhalten</span>
+    {% if quittung.bezahlt_Am %} am {{ quittung.bezahlt_Am | datum }}{% endif %}
+  {% else %}
+    <span class="status offen">Noch nicht bezahlt</span>
+  {% endif %}
+  {% set arten = [] %}
+  {% if quittung.bar %}{% set _ = arten.append("Bar") %}{% endif %}
+  {% if quittung.karte %}{% set _ = arten.append("Karte") %}{% endif %}
+  {% if quittung.ueberweisung %}{% set _ = arten.append("Überweisung") %}{% endif %}
+  {% if arten %}<br>Zahlungsart: {{ arten | join(", ") }}{% endif %}
+</div>
+
+{% if quittung.bezahlt %}
+<div class="unterschrift">
+  <div class="linie">Ort, Datum, Unterschrift</div>
+</div>
+{% endif %}
+
+{% if firma.kleinunternehmer %}
+<p class="hinweis">Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</p>
+{% endif %}
+</body>
+</html>

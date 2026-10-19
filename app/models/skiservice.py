@@ -12,7 +12,7 @@ class Ski(Base):
     __tablename__ = "ski"
 
     id: Mapped[int] = mapped_column("ID", Integer, primary_key=True)
-    auftrag_id: Mapped[int] = mapped_column("Auftrag_ID", ForeignKey("auftraege.id"), nullable=False)
+    auftrag_id: Mapped[int] = mapped_column("Auftrag_ID", ForeignKey("auftraege.id", ondelete="CASCADE"), nullable=False)
     service: Mapped[str] = mapped_column("Service", Text, nullable=False)
     preis: Mapped[float] = mapped_column("Preis", Numeric(10,2), nullable=False)
     status: Mapped[Optional[int]] = mapped_column("Status", Integer)
@@ -60,7 +60,7 @@ class Auftrag(Base):
     quittung_id: Mapped[Optional[int]] = mapped_column("QuittungID", Integer)
 
     # Relation zu Ski
-    skis: Mapped[list["Ski"]] = relationship(Ski, back_populates="auftrag")
+    skis: Mapped[list["Ski"]] = relationship(Ski, back_populates="auftrag", cascade="all, delete-orphan")
     kunde: Mapped["SkiKunde"] = relationship("SkiKunde")
 
 class AuftragNummer(Base):

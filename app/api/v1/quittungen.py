@@ -1,15 +1,16 @@
 import httpx
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.db.deps import get_db
 from app.crud import quittung as crud_quittung
 from app.crud import saisonverleih as crud_saisonverleih
-from app.schemas.quittung import QuittungNurExtern, QuittungRead
+from app.schemas.quittung import QuittungNurExtern, QuittungRead, QuittungOutSchema
 from app.utils.lexware import LexwareAPI
+from app.services. quittung import QuittungsService
 
 router = APIRouter(
     prefix="/quittungen",
@@ -107,6 +108,33 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=e.response.status_code, detail=str(e))
     return quittung
+
+@router.get("/quittung/{quittung_id}/pdf")
+async def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
+    """
+    Holt das PDF einer Quittung anhand der ID.
+    """
+    try:
+        quittungsdata = QuittungsService(db).get_quittung(quittung_id)
+        pdf = QuittungsService(db).renderPDF(quittungsdata)
+
+        return Response(
+                content=pdf,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'inline; filename="quittung-{quittung_id}.pdf"'},
+            )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    
+@router.get("/quittung/{quittung_id}/json", response_model=QuittungOutSchema)
+async def get_quittung_json(quittung_id: int, db: Session = Depends(get_db)):
+    """
+    Holt das JSON einer Quittung anhand der ID.
+    """
+    try:
+        return QuittungsService(db).get_quittung(quittung_id)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
 
 @router.post("/quittung/nurextern")
 async def create_quittung_nur_extern(quittung_data: QuittungNurExtern, db: Session = Depends(get_db)):
