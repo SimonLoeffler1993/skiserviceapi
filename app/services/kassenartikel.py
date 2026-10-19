@@ -197,6 +197,6 @@ class KasseService:
         return KasseHatBezahltSchema(
             quittung_id=quittung.ID,
             bezahldatum=str(quittung.Bezahlt_Am),
-            bezahlinfo={"AnzAuftrag": quittung.AnzAuftrag, "AnzVerleih": quittung.AnzVerleih},
+            # bezahlinfo={"AnzAuftrag": quittung.AnzAuftrag, "AnzVerleih": quittung.AnzVerleih},
             success=True
         )

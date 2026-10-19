@@ -24,7 +24,7 @@ class KassenArtikelSchema(BaseModel):
 class KasseHatBezahltSchema(BaseModel):
     quittung_id: int
     bezahldatum: Optional[str] = None
-    bezahlinfo: Optional[dict] = None
+    # bezahlinfo: Optional[dict] = None
     success: bool 
 
 class KasseBezahlenSchema(BaseModel):
