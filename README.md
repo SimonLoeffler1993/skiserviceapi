@@ -15,7 +15,7 @@ Zentrales Backend der Skiservice-Anwendung. Alle Frontends sprechen ausschließl
 
 - **Kunden** mit Postleitzahlen-Verzeichnis (wird beim Start eingespielt)
 - **Skiservice-Aufträge**: anlegen, bearbeiten (Ski hinzufügen/ändern/entfernen, Abholdatum), löschen, fertigmelden mit Mail an den Kunden
-- **Saison- und Tagesverleih**: eigener Nummernkreis je Art (`25/26SV12`, `25/26TV3`), Belegungsprüfung beim Tagesverleih, Vertrag als PDF
+- **Saison- und Tagesverleih**: eigener Nummernkreis je Art (`25/26SV12`, `25/26TV3`), Belegungsprüfung beim Tagesverleih, Vertrag als PDF (WeasyPrint, ohne externen Dienst)
 - **Kasse**: offene Aufträge und Verleihe, Bezahlen in einer Transaktion, Quittung als PDF
 - **Etikettendruck** auf Brother-QL-Druckern (QR-Code je Ski)
 - **Lexware Office**: Bezahlstatus von Belegen
@@ -36,7 +36,7 @@ Bezahlte Aufträge und Verleihe sind gegen Ändern und Löschen gesperrt (HTTP 4
 | `DB_PASSWORD` | `password` |
 | `DB_NAME` | `skiservice` |
 
-Alle anderen Einstellungen (Firma, Etikettendrucker, SMTP, Lexware, PDF-Dienst, Nummernkürzel …) stehen in der Tabelle `einstellungen` und werden im Skiservice Center unter **Verwalten → Einstellungen** gepflegt. Welche Einstellungen es gibt, ist in [`app/services/einstellungen.py`](app/services/einstellungen.py) definiert; im Code werden sie mit `einstellungen.hole("SCHLUESSEL")` gelesen.
+Alle anderen Einstellungen (Firma, Etikettendrucker, SMTP, Lexware, Nummernkürzel …) stehen in der Tabelle `einstellungen` und werden im Skiservice Center unter **Verwalten → Einstellungen** gepflegt. Welche Einstellungen es gibt, ist in [`app/services/einstellungen.py`](app/services/einstellungen.py) definiert; im Code werden sie mit `einstellungen.hole("SCHLUESSEL")` gelesen.
 
 **Umstieg von älteren Versionen:** Beim Start werden fehlende Einstellungen einmalig aus gleichnamigen Umgebungsvariablen übernommen (z. B. `SMTP_SERVER`, `SMTP_PASSWORD`, `LEXWARE_APIKEY`, `LABELPRINTERIDENT`, `HOST`). Danach können diese Variablen entfernt werden.
 

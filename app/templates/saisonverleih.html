@@ -4,9 +4,14 @@
     <meta charset="UTF-8">
     <title>{{ saisonverleih.Bezeichnung }} Zusammenfassung</title>
     <style>
+        @page {
+            size: A4;
+            margin: 18mm 16mm;
+        }
         body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
+            /* DejaVu ist im Docker Image installiert, Arial nicht */
+            font-family: "DejaVu Sans", Arial, sans-serif;
+            margin: 0;
             color: #2c3e50;
         }
         h1 {
@@ -54,6 +59,10 @@
             background-color: #e8f0fa;
         }
 
+        /* Preise nicht umbrechen */
+        th:last-child, td:last-child {
+            white-space: nowrap;
+        }
         .total-row td:last-child {
             text-align: right;
         }
@@ -143,6 +152,10 @@
         </table>
     </div>
 
-    <p class="footer">Rückgabe bis 30. April!</p>
+    {% if saisonverleih.Art == "tag" and saisonverleih.Ende_Am %}
+    <p class="footer">Rückgabe am {{ saisonverleih.Ende_Am.strftime("%d.%m.%Y") }}!</p>
+    {% elif saisonverleih.Saison and saisonverleih.Saison.Ende %}
+    <p class="footer">Rückgabe bis spätestens {{ saisonverleih.Saison.Ende.strftime("%d.%m.%Y") }}!</p>
+    {% endif %}
 </body>
 </html>

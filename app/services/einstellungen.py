@@ -43,7 +43,6 @@ GRUPPEN = {
     "drucker": "Etikettendrucker",
     "mail": "E-Mail",
     "lexware": "Lexware Office",
-    "pdf": "PDF",
     "anwendung": "Anwendung",
 }
 
@@ -82,10 +81,6 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("LEXWARE_BASEURL", "lexware", "API Adresse", standard="https://api.lexware.io"),
     EinstellungDefinition("LEXWARE_APIKEY", "lexware", "API Key", typ="passwort"),
     EinstellungDefinition("LEXWARE_SYNC", "lexware", "Quittungen synchronisieren", typ="bool", standard=False),
-
-    # PDF
-    EinstellungDefinition("STIRLING_URL", "pdf", "Stirling-PDF Adresse", standard="http://pdf.fa-loeffler.de",
-                          beschreibung="Wird für den Saisonverleih Vertrag verwendet."),
 
     # Anwendung
     EinstellungDefinition("HOST", "anwendung", "Öffentliche Adresse", standard="https://ms-skiservice.de",

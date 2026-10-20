@@ -91,9 +91,10 @@ async def get_saisonverleih(saisonverleih_id: int, db: Session = Depends(get_db)
     return saisonverleih
 
 @router.get("/pdf/{saisonverleih_id}")
-async def get_saisonverleih_pdf(saisonverleih_id: int, db: Session = Depends(get_db)):
+def get_saisonverleih_pdf(saisonverleih_id: int, db: Session = Depends(get_db)):
     """
     Generiert ein PDF für den Saisonverleih.
+    Ohne async, damit FastAPI das Rendern in einem Thread ausführt und andere Anfragen nicht blockiert.
     """
     saisonverleih = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
     if not saisonverleih:
@@ -102,7 +103,7 @@ async def get_saisonverleih_pdf(saisonverleih_id: int, db: Session = Depends(get
     pdf_bytes = skipdf.generate_Saisonbericht(saisonverleih)
 
     return Response(content=pdf_bytes, media_type="application/pdf", headers={
-        "Content-Disposition": f"attachment; filename=saisonverleih_{saisonverleih_id}.pdf"
+        "Content-Disposition": f"inline; filename=saisonverleih_{saisonverleih_id}.pdf"
     })
 
 @router.post("/zurueckgeben/{saisonverleih_id}")
