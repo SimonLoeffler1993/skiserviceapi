@@ -1,4 +1,5 @@
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session, selectinload
 import datetime
 import logging
 from typing import Optional
@@ -54,6 +55,80 @@ def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int]
 
     return query.order_by(SaisonVerleih.ID).limit(limit).all()
 
+def finde_belegungen(
+        db: Session,
+        von: datetime.date,
+        bis: datetime.date,
+        skinr: Optional[str] = None,
+        schuhnr: Optional[int] = None,
+        ausser_id: Optional[int] = None,
+    ) -> list[dict]:
+    """
+    Sucht Verleihe, in denen der Ski bzw. Schuh im Zeitraum von-bis bereits verliehen ist.
+    - Tagesverleih: Zeiträume überschneiden sich
+    - Saisonverleih: gestartet vor dem Ende des Zeitraums und nicht vor dessen Beginn zurückgegeben
+    """
+    if not skinr and not schuhnr:
+        return []
+
+    material_filter = []
+    if skinr:
+        material_filter.append(SaisonVerleihMaterial.skinr == skinr)
+    if schuhnr:
+        material_filter.append(SaisonVerleihMaterial.schuhnr == schuhnr)
+
+    gestartet = or_(SaisonVerleih.Start_Am.is_(None), SaisonVerleih.Start_Am <= bis)
+    nicht_zurueck = or_(
+        SaisonVerleih.Zurueck.is_(None),
+        SaisonVerleih.Zurueck == 0,
+        SaisonVerleih.Zurueck_Am.is_(None),
+        SaisonVerleih.Zurueck_Am >= von,
+    )
+    zeitraum_filter = or_(
+        and_(SaisonVerleih.Art == "tag", gestartet, SaisonVerleih.Ende_Am >= von),
+        and_(SaisonVerleih.Art != "tag", gestartet, nicht_zurueck),
+    )
+
+    query = (
+        db.query(SaisonVerleih)
+        .join(SaisonVerleih.Material)
+        .filter(or_(*material_filter), zeitraum_filter)
+        .options(selectinload(SaisonVerleih.Material), selectinload(SaisonVerleih.Kunde))
+        .distinct()
+    )
+    if ausser_id is not None:
+        query = query.filter(SaisonVerleih.ID != ausser_id)
+
+    belegungen = []
+    for verleih in query.all():
+        for material in verleih.Material:
+            treffer = []
+            if skinr and material.skinr == skinr:
+                treffer.append("Ski")
+            if schuhnr and material.schuhnr == schuhnr:
+                treffer.append("Schuh")
+            for art in treffer:
+                kunde = verleih.Kunde
+                belegungen.append({
+                    "ID": verleih.ID,
+                    "Name": verleih.Name,
+                    "Art": verleih.Art,
+                    "Start_Am": verleih.Start_Am,
+                    "Ende_Am": verleih.Ende_Am,
+                    "Kunde": f"{kunde.Vorname or ''} {kunde.Nachname or ''}".strip() if kunde else "Unbekannt",
+                    "Material": art,
+                })
+    return belegungen
+
+
+def belegung_text(belegung: dict) -> str:
+    if belegung["Art"] == "tag":
+        zeitraum = f"{belegung['Start_Am']:%d.%m.}–{belegung['Ende_Am']:%d.%m.%Y}"
+    else:
+        zeitraum = "Saisonverleih"
+    return f"{belegung['Material']} ist bereits verliehen: {belegung['Name']} ({zeitraum}, {belegung['Kunde']})"
+
+
 def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
 
     # Namen in Array
@@ -81,6 +156,16 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
             Ende_Am=saisonverleih.Ende_Am if saisonverleih.Art == "tag" else None,
             QuittungID=saisonverleih.QuittungID
         )
+
+        # Beim Tagesverleih prüfen, ob Ski oder Schuh im Zeitraum schon verliehen sind
+        if saisonverleih.Art == "tag":
+            for material in saisonverleih.Material:
+                belegungen = finde_belegungen(
+                    db, saisonverleih.Start_Am, saisonverleih.Ende_Am,
+                    skinr=material.skinr or None, schuhnr=material.schuhnr or None,
+                )
+                if belegungen:
+                    return {"success": False, "data": None, "error": belegung_text(belegungen[0])}
 
         for material in saisonverleih.Material:
 
@@ -207,7 +292,15 @@ def fuege_material_hinzu(db: Session, saisonverleih_id: int, material: SaisonVer
     if saisonverleih is None:
         return None
     _pruefe_nicht_bezahlt(saisonverleih)
-    saisonverleih.Material.append(SaisonVerleihMaterial(**_material_werte(material)))
+    werte = _material_werte(material)
+    if saisonverleih.Art == "tag":
+        belegungen = finde_belegungen(
+            db, saisonverleih.Start_Am, saisonverleih.Ende_Am,
+            skinr=werte.get("skinr"), schuhnr=werte.get("schuhnr"), ausser_id=saisonverleih.ID,
+        )
+        if belegungen:
+            raise VerleihGesperrt(belegung_text(belegungen[0]))
+    saisonverleih.Material.append(SaisonVerleihMaterial(**werte))
     db.commit()
     db.refresh(saisonverleih)
     return saisonverleih

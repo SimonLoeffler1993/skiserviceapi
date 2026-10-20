@@ -140,3 +140,14 @@ class SaisonVerleihPreiseListe(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+# --- Belegung (Prüfung beim Tagesverleih) ---
+class VerleihBelegung(BaseModel):
+    ID: int
+    Name: str
+    Art: str
+    Start_Am: date | None = None
+    Ende_Am: date | None = None
+    Kunde: str
+    # "Ski" oder "Schuh"
+    Material: str

@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 from typing import Literal, Optional
+from datetime import date
 
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
-from app.schemas.saisonverleih import SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate
+from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate
 from app.utils import skipdf
 
 router = APIRouter(
@@ -60,6 +61,24 @@ async def list_saisonverleih(
     """
     saisonverleih_liste = crud_saisonverleih.get_saisonverleih_liste(db, limit, last_id, saisonID, alle, art)
     return saisonverleih_liste
+
+@router.get("/belegung", response_model=list[VerleihBelegung])
+def get_belegung(
+        von: date,
+        bis: date,
+        skinr: Optional[str] = Query(default=None),
+        schuhnr: Optional[int] = Query(default=None),
+        ausser_id: Optional[int] = Query(default=None, description="Diesen Verleih nicht berücksichtigen"),
+        db: Session = Depends(get_db),
+    ):
+    """
+    Prüft, ob Ski und/oder Schuh im Zeitraum von-bis bereits verliehen sind.
+    Leere Liste = verfügbar.
+    """
+    if bis < von:
+        raise HTTPException(status_code=400, detail="Das Enddatum darf nicht vor dem Startdatum liegen.")
+    return crud_saisonverleih.finde_belegungen(db, von, bis, skinr, schuhnr, ausser_id)
+
 
 @router.get("/{saisonverleih_id}" , response_model=SaisonVerleihRead)
 async def get_saisonverleih(saisonverleih_id: int, db: Session = Depends(get_db)):
