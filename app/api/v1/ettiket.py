@@ -40,23 +40,24 @@ def print_saisonfahrer_ettiket(saisonverleih_id: int, db: Session = Depends(get_
         ettiket_printer = SkiEttiket()
         
         for material in saisonverleih.Material:
-            print(material.SkiFahrerName)
-            if material.SkiFahrerName != None:
-                # Ski Drucken
-                if material.skinr or material.skinr != "":
-                    labelPrint = True
-                    ettiket_printer.saisonFahererName(str(material.SkiFahrerName))
-                    ettiket_printer.saisonFahererName(str(material.SkiFahrerName))
-                # Schuh Drucken
-                if material.schuhnr or material.schuhnr != "":
-                    labelPrint = True
-                    ettiket_printer.saisonFahererName(str(material.SkiFahrerName))
-                    ettiket_printer.saisonFahererName(str(material.SkiFahrerName))
-                # Stock Drucken
-                if material.stockbez_ID or material.stockbez_ID != -1:
-                    labelPrint = True
-                    ettiket_printer.saisonFahererName(str(material.SkiFahrerName))
-                    ettiket_printer.saisonFahererName(str(material.SkiFahrerName))
+            name = (material.SkiFahrerName or "").strip()
+            if not name:
+                continue
+
+            anzahl = 0
+            # Ski Drucken
+            if material.skinr:
+                anzahl += 2
+            # Schuh Drucken
+            if material.schuhnr:
+                anzahl += 2
+            # Stock Drucken
+            if material.stockbez_ID and material.stockbez_ID > 0:
+                anzahl += 2
+
+            for _ in range(anzahl):
+                labelPrint = True
+                ettiket_printer.saisonFahererName(name)
         if labelPrint:
             # print("Drucke Ettiketen...")
             ettiket_printer.drucken()
@@ -91,6 +92,8 @@ def print_serviceAuftrag_erriket(auftragid: int, db: Session = Depends(get_db)):
     """
     try:
         auftrag = crud_skiservice.getSkiserviceAuftrag(db, auftragid)
+        if not auftrag:
+            return {"success": False, "message": f"Error Drucken ettiket: Skiservice {auftragid} nicht gefunden."}
 
         # Sql Alchemy Modell in object
         skiserviceAuftrag = AuftragSchema.model_validate(auftrag)
@@ -99,9 +102,6 @@ def print_serviceAuftrag_erriket(auftragid: int, db: Session = Depends(get_db)):
     except Exception as e:
         return {"success": False, "message": f"Fehler beim Drucken ettiket: {str(e)}"}
 
-    if not auftrag:
-        return {"success": False, "message": f"Error Drucken ettiket: Skiservice {auftragid} nicht gefunden."}
-    
     return {"success": True, "message": f"Ettiket für Skiservice {auftragid} ausgedruckt!"}
 
 @router.post("/serviceskis", response_model=EttiketPrintRequest)
@@ -122,6 +122,8 @@ def print_serviceSki_ettiket(ettiket_data: EttiketPrintSkisSchema, db: Session =
             ettiket_data.auftrag_id = auftrag_id
             
         auftrag = crud_skiservice.getSkiserviceAuftrag(db, ettiket_data.auftrag_id)
+        if not auftrag:
+            return {"success": False, "message": f"Error Drucken ettiket: Skiservice {ettiket_data.auftrag_id} nicht gefunden."}
 
         # Sql Alchemy Modell in object
         skiserviceAuftrag = AuftragSchema.model_validate(auftrag)
@@ -129,8 +131,5 @@ def print_serviceSki_ettiket(ettiket_data: EttiketPrintSkisSchema, db: Session =
         skiServiceEttiketEinzelnDrucken(skiserviceAuftrag, ettiket_data.ski_ids)
     except Exception as e:
         return {"success": False, "message": f"Fehler beim Drucken ettiket: {str(e)}"}
-
-    if not auftrag:
-        return {"success": False, "message": f"Error Drucken ettiket: Skiservice {ettiket_data.auftrag_id} nicht gefunden."}
 
     return {"success": True, "message": f"Ettiket für Skiservice {ettiket_data.auftrag_id} ausgedruckt!"}

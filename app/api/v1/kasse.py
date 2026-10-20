@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
@@ -21,10 +21,15 @@ async def artikels(artikelkategorie: KasseArtikelKategorie = KasseArtikelKategor
         return KasseService(db).get_offene_auftraege()
     elif artikelkategorie == KasseArtikelKategorie.verleih:
         return KasseService(db).get_offene_verleih()
+    # Handware ist noch nicht umgesetzt
+    return []
 
 @router.post("/bezahlen", response_model=KasseHatBezahltSchema)
 async def bezahlen(artikels: KasseBezahlenSchema, db: Session = Depends(get_db)):
     """
     Markiert die angegebenen Artikels als bezahlt.
     """
-    return KasseService(db).bezahlen(artikels)
+    try:
+        return KasseService(db).bezahlen(artikels)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

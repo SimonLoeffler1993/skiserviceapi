@@ -18,14 +18,16 @@ class SkiScannerGUIManager:
         for websocket in list(self.active):
             try:
                 await websocket.send_text(message)
-            except WebSocketDisconnect:
+            except (WebSocketDisconnect, RuntimeError):
+                # Verbindung bereits geschlossen
                 await self.trennen(websocket)
 
     async def sende_data_broadcast(self, data: ScannerWebSocketMessage):
         for websocket in list(self.active):
             try:
                 await websocket.send_json(data.model_dump(mode="json"))
-            except WebSocketDisconnect:
+            except (WebSocketDisconnect, RuntimeError):
+                # Verbindung bereits geschlossen
                 await self.trennen(websocket)
 
 

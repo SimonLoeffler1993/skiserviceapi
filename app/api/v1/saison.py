@@ -21,8 +21,11 @@ async def get_all_saisons(db: Session = Depends(get_db)):
     return crud_saison.get_all_saisons(db)
 
 @router.get("/aktuelle", response_model=SaisonsNamen)
-async def get_aktuelle_saison(db: Session = Depends(get_db)):
-    return crud_saison.get_AktuelleSaison(db)
+def get_aktuelle_saison(db: Session = Depends(get_db)):
+    saison = crud_saison.get_AktuelleSaison(db)
+    if saison is None:
+        raise HTTPException(status_code=404, detail="Keine aktuelle Saison vorhanden.")
+    return saison
 
 @router.post("/erfassen", response_model=SaisonsNamen)
 async def erfasse_saison(saison: SaisonErstellen, db: Session = Depends(get_db)):

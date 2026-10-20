@@ -1,19 +1,22 @@
 import logging
 from app.schemas.skiservice import AuftragSchema
 from app.utils.skiEttiket import SkiEttiket
-from app.core.config import AnwendungSettings
+from app.services import einstellungen
 
 logger = logging.getLogger(__name__) 
 
-# Falls am Schluss ein "/" ist wird dieser entfernt, damit es beim zusammensetzten keine Probleme gibt
-appHost = AnwendungSettings.appHost.rstrip("/")
+def appHost() -> str:
+    # Falls am Schluss ein "/" ist wird dieser entfernt, damit es beim zusammensetzten keine Probleme gibt
+    return einstellungen.hole("HOST").rstrip("/")
+
+def kunden_name(vorname: str | None, nachname: str | None) -> str:
+    return " ".join(teil.strip() for teil in (vorname, nachname) if teil and teil.strip())
 
 def skiServiceEttiketDrucken(skiserviceAuftrag: AuftragSchema):
     serviceEttiket = SkiEttiket()
 
-    # Kunde aus Vor und Nachname, falls kein Vorname oder Nachname werden leerzeichen entfernt
-    kundeName = f"{skiserviceAuftrag.kunde.Vorname} {skiserviceAuftrag.kunde.Nachname}"
-    kundeName = kundeName.strip()
+    # Kunde aus Vor und Nachname, fehlende Teile werden weggelassen (sonst steht "None" auf dem Etikett)
+    kundeName = kunden_name(skiserviceAuftrag.kunde.Vorname, skiserviceAuftrag.kunde.Nachname)
 
     bisDatum = skiserviceAuftrag.abhol_date
 
@@ -22,7 +25,7 @@ def skiServiceEttiketDrucken(skiserviceAuftrag: AuftragSchema):
 
         skiName = ski.name or "Ski"
 
-        skiUrl = f"{appHost}/skiservice/anzeigen/{skiserviceAuftrag.id}?ski={ski.id}"
+        skiUrl = f"{appHost()}/skiservice/anzeigen/{skiserviceAuftrag.id}?ski={ski.id}"
         
         # Ettiket für Service
         serviceEttiket.skiAuftragEttiket(kundeName, skiName,skiUrl,ski.service,ski.bindung_check,bisDatum)
@@ -39,9 +42,8 @@ def skiServiceEttiketDrucken(skiserviceAuftrag: AuftragSchema):
 def skiServiceEttiketEinzelnDrucken(skiserviceAuftrag: AuftragSchema, skiIds: list[int]):
     serviceEttiket = SkiEttiket()
 
-    # Kunde aus Vor und Nachname, falls kein Vorname oder Nachname werden leerzeichen entfernt
-    kundeName = f"{skiserviceAuftrag.kunde.Vorname} {skiserviceAuftrag.kunde.Nachname}"
-    kundeName = kundeName.strip()
+    # Kunde aus Vor und Nachname, fehlende Teile werden weggelassen (sonst steht "None" auf dem Etikett)
+    kundeName = kunden_name(skiserviceAuftrag.kunde.Vorname, skiserviceAuftrag.kunde.Nachname)
 
     bisDatum = skiserviceAuftrag.abhol_date
 
@@ -53,7 +55,7 @@ def skiServiceEttiketEinzelnDrucken(skiserviceAuftrag: AuftragSchema, skiIds: li
 
         skiName = ski.name or "Ski"
 
-        skiUrl = f"{appHost}/skiservice/anzeigen/{skiserviceAuftrag.id}?ski={ski.id}"
+        skiUrl = f"{appHost()}/skiservice/anzeigen/{skiserviceAuftrag.id}?ski={ski.id}"
         
         # Ettiket für Service
         serviceEttiket.skiAuftragEttiket(kundeName, skiName,skiUrl,ski.service,ski.bindung_check,bisDatum)

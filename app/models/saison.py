@@ -12,3 +12,4 @@ class Saison(Base):
     Name: Mapped[str] = mapped_column(String(50))
     Verwendet: Mapped[int] = mapped_column(Integer)
     SaisonVerleihNummer: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    TagesVerleihNummer: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

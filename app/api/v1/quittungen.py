@@ -1,4 +1,5 @@
 import httpx
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -10,6 +11,7 @@ from app.crud import quittung as crud_quittung
 from app.crud import saisonverleih as crud_saisonverleih
 from app.schemas.quittung import QuittungNurExtern, QuittungRead, QuittungOutSchema
 from app.utils.lexware import LexwareAPI
+from app.services import einstellungen
 from app.services. quittung import QuittungsService
 
 router = APIRouter(
@@ -19,6 +21,7 @@ router = APIRouter(
 )
 
 lexware_api = LexwareAPI()
+logger = logging.getLogger(__name__)
 
 @router.get("/lexware/belege")
 async def get_lexware_belege(
@@ -57,13 +60,13 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
     quittung = crud_quittung.get_quittung(db, quittung_id)
     if not quittung:
         raise HTTPException(status_code=404, detail="Quittung not found")
-    if bezahlinfo:
+    # Nur Quittungen, die in Lexware angelegt sind, haben dort einen Bezahlstatus
+    if bezahlinfo and quittung.LexID and einstellungen.hole("LEXWARE_APIKEY"):
         try:
     
             # TODO Datum für Lex Sync in DB Speichern
             bezahlinfo_data = lexware_api.get_bezahlstatus(quittung.LexID)
             lexBez = False
-            print("Bezahlinfo von Lexware:", bezahlinfo_data)
             if bezahlinfo_data["voucherStatus"] == "paid":
                 quittung.Bezahlt = True
                 # Parse ISO 8601 datetime and convert to date
@@ -107,6 +110,9 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
 
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        except httpx.HTTPError:
+            # Lexware nicht erreichbar: Quittung ohne Bezahlinfo zurückgeben
+            logger.exception("Bezahlstatus von Lexware konnte nicht abgerufen werden")
     return quittung
 
 @router.get("/quittung/{quittung_id}/pdf")

@@ -2,11 +2,16 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Saisonverleih Zusammenfassung</title>
+    <title>{{ saisonverleih.Bezeichnung }} Zusammenfassung</title>
     <style>
+        @page {
+            size: A4;
+            margin: 18mm 16mm;
+        }
         body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
+            /* DejaVu ist im Docker Image installiert, Arial nicht */
+            font-family: "DejaVu Sans", Arial, sans-serif;
+            margin: 0;
             color: #2c3e50;
         }
         h1 {
@@ -54,6 +59,10 @@
             background-color: #e8f0fa;
         }
 
+        /* Preise nicht umbrechen */
+        th:last-child, td:last-child {
+            white-space: nowrap;
+        }
         .total-row td:last-child {
             text-align: right;
         }
@@ -76,19 +85,23 @@
     </style>
 </head>
 <body>
-    <h1>Saisonverleih Zusammenfassung</h1>
+    <h1>{% if saisonverleih.Art == "tag" %}Tagesverleih{% else %}Saisonverleih{% endif %} Zusammenfassung</h1>
 
     <div class="section info">
         <h2>Kundendaten</h2>
-        <p><strong>Name:</strong> {{ saisonverleih.Kunde.Vorname }} {{ saisonverleih.Kunde.Nachname }}</p>
-        <p><strong>Adresse:</strong> {{ saisonverleih.Kunde.Strasse }}, {{ saisonverleih.Kunde.Ort.Postlz }} {{ saisonverleih.Kunde.Ort.Ort }}</p>
-        <p><strong>Telefon:</strong> {{ saisonverleih.Kunde.Tel }}</p>
-        <p><strong>E-Mail:</strong> {{ saisonverleih.Kunde.Email }}</p>
+        <p><strong>Name:</strong> {{ [saisonverleih.Kunde.Vorname, saisonverleih.Kunde.Nachname] | select | join(" ") }}</p>
+        <p><strong>Adresse:</strong> {{ [saisonverleih.Kunde.Strasse, [saisonverleih.Kunde.Ort.Postlz if saisonverleih.Kunde.Ort else None, saisonverleih.Kunde.Ort.Ort if saisonverleih.Kunde.Ort else None] | select | join(" ")] | select | join(", ") }}</p>
+        <p><strong>Telefon:</strong> {{ saisonverleih.Kunde.Tel or "" }}</p>
+        <p><strong>E-Mail:</strong> {{ saisonverleih.Kunde.Email or "" }}</p>
     </div>
 
     <div class="section info">
         <h2>Saisondaten</h2>
         <p><strong>Saison:</strong> {{ saisonverleih.Saison.Name }}</p>
+        <p><strong>Nummer:</strong> {{ saisonverleih.Name }}</p>
+        {% if saisonverleih.Art == "tag" %}
+        <p><strong>Zeitraum:</strong> {{ saisonverleih.Start_Am.strftime("%d.%m.%Y") }} – {{ saisonverleih.Ende_Am.strftime("%d.%m.%Y") }} ({{ saisonverleih.Tage }} {{ "Tag" if saisonverleih.Tage == 1 else "Tage" }})</p>
+        {% endif %}
     </div>
 
     <div class="section">
@@ -139,6 +152,10 @@
         </table>
     </div>
 
-    <p class="footer">Rückgabe bis 30. April!</p>
+    {% if saisonverleih.Art == "tag" and saisonverleih.Ende_Am %}
+    <p class="footer">Rückgabe am {{ saisonverleih.Ende_Am.strftime("%d.%m.%Y") }}!</p>
+    {% elif saisonverleih.Saison and saisonverleih.Saison.Ende %}
+    <p class="footer">Rückgabe bis spätestens {{ saisonverleih.Saison.Ende.strftime("%d.%m.%Y") }}!</p>
+    {% endif %}
 </body>
 </html>

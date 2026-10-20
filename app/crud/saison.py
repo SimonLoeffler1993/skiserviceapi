@@ -1,24 +1,36 @@
 from sqlalchemy.orm import Session
 from app.models.saison import Saison
 from app.schemas.saison import SaisonErstellen
+from app.services import einstellungen
 
 def get_AktuelleSaison(db: Session):
     return db.query(Saison).filter(Saison.Verwendet == 1).first()
 
-def get_next_SaisonVerleihNummer(db: Session):
-    # TODO: #15 Saisonnummer erstllen überarbeiten, auch in DB wegen Sicherung
-    saisonData = db.query(Saison).filter(Saison.Verwendet == 1).first()
+def get_next_SaisonVerleihNummer(db: Session, art: str = "saison"):
+    """
+    Erhöht den Nummernzähler der aktuellen Saison und gibt die neue Verleihnummer zurück.
+    Saison- und Tagesverleih haben getrennte Nummernkreise.
+    Die Zeile wird gesperrt, damit parallele Anfragen keine doppelte Nummer erhalten.
+    Es wird nicht committet, damit die Nummer zusammen mit dem Verleih gespeichert wird.
+    """
+    saisonData = (
+        db.query(Saison)
+        .filter(Saison.Verwendet == 1)
+        .with_for_update()
+        .first()
+    )
+    if saisonData is None:
+        raise ValueError("Keine aktuelle Saison vorhanden.")
 
     # Nummer eins höher setzen
-    nexteNummer = saisonData.SaisonVerleihNummer + 1
+    if art == "tag":
+        nexteNummer = (saisonData.TagesVerleihNummer or 0) + 1
+        saisonData.TagesVerleihNummer = nexteNummer
+        return saisonData.Name + einstellungen.hole("KUERZEL_TAGESVERLEIH") + str(nexteNummer)
 
-    # in der Saison speichern
+    nexteNummer = (saisonData.SaisonVerleihNummer or 0) + 1
     saisonData.SaisonVerleihNummer = nexteNummer
-    db.commit()
-    db.refresh(saisonData)
-
-    # TODO Kürzel in Einstellungen frei Devinierbar machen   
-    return saisonData.Name + "SV" + str(nexteNummer)
+    return saisonData.Name + einstellungen.hole("KUERZEL_SAISONVERLEIH") + str(nexteNummer)
 
 
 def get_all_saisons(db: Session):
@@ -26,6 +38,10 @@ def get_all_saisons(db: Session):
 
 
 def erfasse_saison(db: Session, saison: SaisonErstellen):
+    # Es darf nur eine aktuelle Saison geben
+    if saison.Verwendet == 1:
+        db.query(Saison).filter(Saison.Verwendet == 1).update({Saison.Verwendet: 0})
+
     db_saison = Saison(
         Start=saison.Start,
         Ende=saison.Ende,

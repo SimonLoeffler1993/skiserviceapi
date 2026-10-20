@@ -27,7 +27,8 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 from app.core.config import dbSettings
-config.set_main_option("sqlalchemy.url", dbSettings.mysql_constring)
+# "%" muss für configparser verdoppelt werden
+config.set_main_option("sqlalchemy.url", dbSettings.mysql_constring.render_as_string(hide_password=False).replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:

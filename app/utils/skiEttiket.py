@@ -7,7 +7,7 @@ import logging
 
 import qrcode
 
-from app.core.config import EttikettierSettings
+from app.services import einstellungen
 
 logger = logging.getLogger(__name__) 
 
@@ -24,6 +24,26 @@ def korektur(gesamt, teil):
     return teil * 72 / gesamt
 
 
+DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+DEJAVU_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+def lade_schrift(groesse: int, fett: bool = False):
+    """
+    Lädt Arial aus dem fonts Ordner, sonst DejaVu (im Docker Container vorhanden),
+    sonst die Pillow Standard-Schrift in der gewünschten Größe.
+    """
+    kandidaten = [
+        os.path.join("fonts", "arialbd.ttf" if fett else "arial.ttf"),
+        DEJAVU_BOLD if fett else DEJAVU,
+    ]
+    for pfad in kandidaten:
+        try:
+            return ImageFont.truetype(pfad, groesse)
+        except OSError:
+            continue
+    logger.warning("Keine TrueType Schrift gefunden, Standard-Schriftart wird verwendet.")
+    return ImageFont.load_default(groesse)
+
 # Warum 18px? vermutlich Weil 3mm Rand auf 300dpi = 18px
 # Diese wurden mit mehren Test herausgefunden
 def labelmm2px(hoehe, breite, randpx=18):
@@ -33,10 +53,11 @@ def labelmm2px(hoehe, breite, randpx=18):
 
 # TODO: #11 Ettiketen Breite auf LabelSize
 class SkiEttiket:
-    def __init__(self, labelSize=EttikettierSettings.labelSize, printerModel=EttikettierSettings.printerModel, printerIdentifier=EttikettierSettings.printerIdent):
-        self.labelSize = labelSize
-        self.printerModel = printerModel
-        self.printerIdentifier = printerIdentifier
+    def __init__(self, labelSize: str | None = None, printerModel: str | None = None, printerIdentifier: str | None = None):
+        # Einstellungen erst beim Erstellen lesen, damit Änderungen im Center ohne Neustart greifen
+        self.labelSize = labelSize or einstellungen.hole("LABELSIZE")
+        self.printerModel = printerModel or einstellungen.hole("LABELPRINTERMODEL")
+        self.printerIdentifier = printerIdentifier or einstellungen.hole("LABELPRINTERIDENT")
         self.qlr = BrotherQLRaster(self.printerModel)
         self.qlr.exception_on_warning = True
 
@@ -46,12 +67,7 @@ class SkiEttiket:
         img = Image.new("RGB", (labelpxbreite, labelpxhoehe), "white")
         draw = ImageDraw.Draw(img)
 
-        try:
-            font_path = os.path.join("fonts", "arial.ttf")
-            font = ImageFont.truetype(font_path, schriftgroesse)
-        except:
-            font = ImageFont.load_default()
-            print("Warnung: Arial.ttf nicht gefunden, Standard-Schriftart wird verwendet.")
+        font = lade_schrift(schriftgroesse)
 
         textbbox = draw.textbbox((0, 0), name, font=font)
         textbreite = textbbox[2] - textbbox[0]
@@ -84,18 +100,11 @@ class SkiEttiket:
         img = Image.new("RGB", (labelpxbreite, labelpxhoehe), "white")
         draw = ImageDraw.Draw(img)
 
-        # TODO Schriftarten, Fehler im Docker Container
-        try:
-            font_path = os.path.join("fonts", "arial.ttf")
-            font_bold_path = os.path.join("fonts", "arialbd.ttf")
-            font7 = ImageFont.truetype(font_path, 24)
-            font7_bold = ImageFont.truetype(font_bold_path, 24)
-            font9_bold = ImageFont.truetype(font_bold_path, 28)
-            font20 = ImageFont.truetype(font_path, 45)
-            font28 = ImageFont.truetype(font_bold_path, 75)
-        except:
-            font = ImageFont.load_default()
-            print("Warnung: Arial.ttf nicht gefunden, Standard-Schriftart wird verwendet.")
+        font7 = lade_schrift(24)
+        font7_bold = lade_schrift(24, fett=True)
+        font9_bold = lade_schrift(28, fett=True)
+        font20 = lade_schrift(45)
+        font28 = lade_schrift(75, fett=True)
 
         # Textposition links, oben
         txt = "Leihschuh von:"
@@ -103,8 +112,7 @@ class SkiEttiket:
         textposition = (mm2px(1.5),neuehoehe)
         draw.text(textposition, txt, fill="black", font=font7)
 
-        # TODO: #8 Fima in Einstellungen
-        txt = "Simons Skiservice"
+        txt = einstellungen.hole("FIRMA_NAME")
         neuehoehe = mm2px(2.5) - korektur(20, 2.5)
         textposition = (mm2px(1.5),neuehoehe)
         draw.text(textposition, txt, fill="black", font=font9_bold)
@@ -144,8 +152,6 @@ class SkiEttiket:
         textposition = (labelpxbreite - qrgroesse + 8,0)
         draw.text(textposition, "#: " + qrdata, fill="black", font=font7_bold)
 
-        img.show()
-
         # Label erstellen
         create_label(
             qlr=self.qlr,
@@ -177,11 +183,9 @@ class SkiEttiket:
         img = Image.new("RGB", (labelpxbreite, labelpxhoehe), "white")
         draw = ImageDraw.Draw(img)
 
-        font_path      = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-        font_bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        font_name  = ImageFont.truetype(font_bold_path, 48)
-        font_label = ImageFont.truetype(font_bold_path, 48)
-        font_date  = ImageFont.truetype(font_bold_path, 44)
+        font_name  = lade_schrift(48, fett=True)
+        font_label = lade_schrift(48, fett=True)
+        font_date  = lade_schrift(44, fett=True)
 
         RAND = 8
         Y = RAND +2 # laufende Y-Position
@@ -275,14 +279,16 @@ class SkiEttiket:
         return True
 
 
-    def drucken(self):
+    def drucken(self) -> bool:
         try:
             send(
                 instructions=self.qlr.data,
                 printer_identifier=self.printerIdentifier,
             )
+            return True
         except Exception as e:
             logger.error("Fehler beim Ettiket Drucken: %s", e, exc_info=True)
+            return False
 
 if __name__ == "__main__":
     skiEttiket = SkiEttiket()

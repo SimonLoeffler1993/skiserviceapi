@@ -2,6 +2,7 @@
 
 from datetime import date
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.skiservice import Auftrag, Ski
@@ -65,7 +66,7 @@ class KasseService:
     def get_offene_verleih(self) -> list[KassenArtikelSchema]:
         verleih = (
             self.db.query(SaisonVerleih)
-            .filter(SaisonVerleih.Bezahlt != True)
+            .filter(or_(SaisonVerleih.Bezahlt.is_(None), SaisonVerleih.Bezahlt == False))
             .all()
         )
         return [self._verleih_zu_kassenartikel(a) for a in verleih]
@@ -94,7 +95,7 @@ class KasseService:
             # TODO: bezeichnung das Material als String
             KasseEinzelArtikelSchema(
                 id=material.ID,
-                bezeichnung=f"Saisonverleih",
+                bezeichnung=material.saisonverleih.Bezeichnung if material.saisonverleih else "Saisonverleih",
                 preis=float(material.Preis),
             )
         )
@@ -119,84 +120,100 @@ class KasseService:
     def bezahlen(self, zuBezahlen: KasseBezahlenSchema) -> KasseHatBezahltSchema:
         """
         Es wird eine Quittung erstellt und die angegebenen Artikels als bezahlt markiert.
+        Alles passiert in einer Transaktion: entweder wird alles gespeichert oder nichts.
+        Bereits bezahlte Artikel werden abgelehnt.
         """
-        # TODO #25 Fehler behandlung in der Funktion
+        if not zuBezahlen.artikels:
+            raise ValueError("Keine Artikel zum Bezahlen übergeben.")
 
         aktuelle_Saison = crud_saison.get_AktuelleSaison(self.db)
         if aktuelle_Saison is None:
             raise ValueError("Keine aktuelle Saison gefunden.")
 
-        quittung = Quittung(
-            Name="Quittung",
-            AnzAuftrag=0,
-            AnzVerleih=0,
-            Saison_ID=aktuelle_Saison.ID,
-            Bezahlt_Am=date.today(),
-            Erstellt_Am=date.today(),
-            Ueberweisung=zuBezahlen.ueberweisung,
-            Karte=zuBezahlen.karte,
-            Bar=zuBezahlen.bar,
-            Bezahlt=True,
-            BuchhaltungSync=False,
-            LexID="",
-            NurExtern=False
-        )
-        self.db.add(quittung)
-        self.db.commit()
-        self.db.refresh(quittung)
+        try:
+            quittung = Quittung(
+                Name="Quittung",
+                AnzAuftrag=0,
+                AnzVerleih=0,
+                Saison_ID=aktuelle_Saison.ID,
+                Bezahlt_Am=date.today(),
+                Erstellt_Am=date.today(),
+                Ueberweisung=zuBezahlen.ueberweisung,
+                Karte=zuBezahlen.karte,
+                Bar=zuBezahlen.bar,
+                Bezahlt=True,
+                BuchhaltungSync=False,
+                LexID="",
+                NurExtern=False
+            )
+            self.db.add(quittung)
+            # ID der Quittung holen, ohne zu committen
+            self.db.flush()
 
-        for artikel in zuBezahlen.artikels:
-            if artikel.service:
-                auftrag = self.db.query(Auftrag).filter(Auftrag.id == artikel.id).first()
-                if auftrag:
+            for artikel in zuBezahlen.artikels:
+                if artikel.service:
+                    auftrag = (
+                        self.db.query(Auftrag)
+                        .filter(Auftrag.id == artikel.id)
+                        .with_for_update()
+                        .first()
+                    )
+                    if auftrag is None:
+                        raise ValueError(f"Auftrag {artikel.id} nicht gefunden.")
+                    if auftrag.bezahlt == "ja":
+                        raise ValueError(f"Auftrag {auftrag.name} ist bereits bezahlt.")
+
                     # Markiere den Auftrag als bezahlt und aktualisiere die Quittung_ID
                     auftrag.bezahlt = "ja"
                     auftrag.bezahlt_am = date.today()
                     auftrag.quittung_id = quittung.ID
-                    self.db.commit()
-                    self.db.refresh(auftrag)
+                    quittung.AnzAuftrag += 1
 
                     # Skiservice Auftrag als Quittungsartikel hinzufügen
-                    quittung_artikel = QuittungArtikel(
+                    self.db.add(QuittungArtikel(
                         Quittung_ID=quittung.ID,
                         Artikel_ID=auftrag.id,
                         Artikel_Kategorie="Skiservice",
                         Auftrag_ID=auftrag.id,
                         Verleih_ID=None
+                    ))
+
+                elif artikel.verleih:
+                    verleih = (
+                        self.db.query(SaisonVerleih)
+                        .filter(SaisonVerleih.ID == artikel.id)
+                        .with_for_update()
+                        .first()
                     )
-                    self.db.add(quittung_artikel)
-                    self.db.commit()
-                    self.db.refresh(quittung_artikel)
+                    if verleih is None:
+                        raise ValueError(f"Verleih {artikel.id} nicht gefunden.")
+                    if verleih.Bezahlt:
+                        raise ValueError(f"Verleih {verleih.Name} ist bereits bezahlt.")
 
-
-
-            elif artikel.verleih:
-                verleih = self.db.query(SaisonVerleih).filter(SaisonVerleih.ID == artikel.id).first()
-                if verleih:
                     # Markiere den Verleih als bezahlt und aktualisiere die Quittung_ID
                     verleih.Bezahlt = True
                     verleih.Bezahlt_Am = date.today()
                     verleih.QuittungID = quittung.ID
-                    self.db.commit()
-                    self.db.refresh(verleih)
+                    quittung.AnzVerleih += 1
 
                     # Verleih als Quittungsartikel hinzufügen
-                    quittung_artikel = QuittungArtikel(
+                    self.db.add(QuittungArtikel(
                         Quittung_ID=quittung.ID,
                         Artikel_ID=verleih.ID,
                         Artikel_Kategorie="Verleih",
                         Auftrag_ID=None,
                         Verleih_ID=verleih.ID
-                    )
-                    self.db.add(quittung_artikel)
-                    self.db.commit()
-                    self.db.refresh(quittung_artikel)
+                    ))
 
-    
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        self.db.refresh(quittung)
 
         return KasseHatBezahltSchema(
             quittung_id=quittung.ID,
             bezahldatum=str(quittung.Bezahlt_Am),
-            # bezahlinfo={"AnzAuftrag": quittung.AnzAuftrag, "AnzVerleih": quittung.AnzVerleih},
             success=True
         )
