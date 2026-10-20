@@ -1,12 +1,17 @@
 import httpx
 
-from app.core.config import LexwareSettings
+from app.services import einstellungen
 
 
 class LexwareAPI:
-    def __init__(self):
-        self.baseURL = LexwareSettings.baseURl
-        self.apiKey = LexwareSettings.apiKey
+    # Einstellungen bei jedem Aufruf lesen, damit Änderungen im Center ohne Neustart greifen
+    @property
+    def baseURL(self) -> str:
+        return einstellungen.hole("LEXWARE_BASEURL").rstrip("/")
+
+    @property
+    def apiKey(self) -> str:
+        return einstellungen.hole("LEXWARE_APIKEY")
 
     def get_customers(self):
         # Hier könnte die Logik implementiert werden, um Kunden von der Lexware API abzurufen
@@ -17,14 +22,13 @@ class LexwareAPI:
         pass
 
     def get_bezahlstatus(self, invoice_id):
-        print(self.apiKey)
         url = f"{self.baseURL}/v1/payments/{invoice_id}"
         headers = {
             "cache-control": "no-cache",
             "Accept": "application/json",
             "Authorization": f"Bearer {self.apiKey}"
             }
-        response = httpx.get(url, headers=headers)
+        response = httpx.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         return response.json()
     
@@ -36,6 +40,17 @@ class LexwareAPI:
             "Accept": "application/json",
             "Authorization": f"Bearer {self.apiKey}"
             }
-        response = httpx.get(url, headers=headers)
+        response = httpx.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        return response.json()
+
+    def get_profil(self):
+        """Firmenprofil abrufen, wird zum Testen des API Keys verwendet."""
+        url = f"{self.baseURL}/v1/profile"
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self.apiKey}"
+            }
+        response = httpx.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         return response.json()

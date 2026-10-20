@@ -8,3 +8,4 @@ from app.models.saison import Saison
 from app.models.saisonverleih import SkiSaisonverleihPreise, SaisonVerleihMaterial, SaisonVerleih
 from app.models.skiservice import Ski, Auftrag, AuftragNummer
 from app.models.skiservicepreise import SkiServicePreise
+from app.models.einstellung import Einstellung

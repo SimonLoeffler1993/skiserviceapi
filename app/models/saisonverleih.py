@@ -69,8 +69,27 @@ class SaisonVerleih(Base):
     Abgerechnet: Mapped[int | None] = mapped_column(Integer)
     Name: Mapped[str] = mapped_column(String(100))
     Start_Am: Mapped[date] = mapped_column(Date)
+    # Nur beim Tagesverleih: letzter Verleihtag
+    Ende_Am: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # "saison" = Saisonverleih, "tag" = Tagesverleih
+    Art: Mapped[str] = mapped_column(String(10), nullable=False, default="saison", server_default="saison")
     QuittungID: Mapped[int | None] = mapped_column(Integer)
 
     Material: Mapped[list[SaisonVerleihMaterial]] = relationship(
-        SaisonVerleihMaterial, back_populates="saisonverleih"
+        SaisonVerleihMaterial, back_populates="saisonverleih", cascade="all, delete-orphan"
     )
+
+    @property
+    def Tage(self) -> int | None:
+        """Anzahl Verleihtage beim Tagesverleih (Start und Ende zählen mit)."""
+        if self.Art != "tag" or self.Start_Am is None or self.Ende_Am is None:
+            return None
+        return (self.Ende_Am - self.Start_Am).days + 1
+
+    @property
+    def Bezeichnung(self) -> str:
+        """Bezeichnung für Quittung, Kasse und PDF."""
+        if self.Art == "tag" and self.Start_Am and self.Ende_Am:
+            tage = self.Tage
+            return f"Tagesverleih {self.Start_Am:%d.%m.}–{self.Ende_Am:%d.%m.%Y} ({tage} {'Tag' if tage == 1 else 'Tage'})"
+        return "Saisonverleih"

@@ -1,41 +1,35 @@
 from dotenv import load_dotenv
+from sqlalchemy import URL
 import os
 
 # falls keine .env Datei existiert, werden die Umgebungsvariablen geladen
 load_dotenv()
 
+def env_int(name: str, standard: int) -> int:
+    """Liest eine Zahl aus der Umgebung; leere oder ungültige Werte ergeben den Standardwert."""
+    wert = (os.getenv(name) or "").strip()
+    try:
+        return int(wert) if wert else standard
+    except ValueError:
+        return standard
+
+# Nur die Datenbank wird über Umgebungsvariablen eingestellt.
+# Alle anderen Einstellungen stehen in der Datenbank, siehe app/services/einstellungen.py
 class DbSettings:
     host = os.getenv("DB_HOST", "localhost")
-    port = int(os.getenv("DB_PORT", 3306))
+    port = env_int("DB_PORT", 3306)
     user = os.getenv("DB_USER", "root")
     password =  os.getenv("DB_PASSWORD", "password")
     database = os.getenv("DB_NAME", "skiservice")
-    mysql_constring = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
+    # URL.create maskiert Sonderzeichen im Passwort
+    mysql_constring = URL.create(
+        "mysql+pymysql",
+        username=user,
+        password=password,
+        host=host,
+        port=port,
+        database=database,
+    )
 
 
 dbSettings = DbSettings()
-
-class PDFSettings:
-    STIRLING_URL = os.getenv("STIRLING_URL", "http://pdf.fa-loeffler.de")
-
-class EttikettierSettings:
-    printerIdent = os.getenv("LABELPRINTERIDENT", "tcp://192.168.188.159")
-    printerModel = os.getenv("LABELPRINTERMODEL", "QL-820NWB")
-    labelSize = os.getenv("LABELSIZE", "62")
-    printErstellung = os.getenv("PRINTSAISONVERLEIHCREATION", "false").strip().lower() == "true"
-    # TODO: #19 Einstellen ob Labeldrucker Rot Schwarz oder nur S/W Druckt
-
-class LexwareSettings:
-    baseURl = os.getenv("LEXWARE_BASEURL", "https://api.lexware.io")
-    apiKey = os.getenv("LEXWARE_APIKEY" )
-    sync = os.getenv("LEXWARE_SYNC", "false").strip().lower() == "true"
-
-class EmailSettings:
-    smtpServer = os.getenv("SMTP_SERVER", "")
-    smtpPort = int(os.getenv("SMTP_PORT", 587))
-    smtpUser = os.getenv("SMTP_USER", "")
-    smtpPassword = os.getenv("SMTP_PASSWORD", "")
-    emailFrom = os.getenv("EMAIL_FROM", "")
-
-class AnwendungSettings:
-    appHost = os.getenv("HOST","https://ms-skiservice.de")

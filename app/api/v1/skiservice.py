@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -6,7 +7,7 @@ from app.db.deps import get_db
 from app.crud import skiservice as crud_skiservice
 from app.crud import skiservicepreis as crud_skiservicepreis
 
-from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema, SkiBindungFertigSchema
+from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema, SkiBindungFertigSchema, AuftragUpdateSchema, SkiCreateSchema, SkiUpdateSchema
 from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
 from app.schemas.skiservicepreise import SkiServicePreiseBase, SkiServicePreiseSchema
 
@@ -70,7 +71,7 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
     if alleSkiFertig:
         nachricht = " Alle Ski sind fertig bearbeitet."
         if auftrag.benachrichtigt.lower() == "nein":
-            mailSend = sendeFertigMail(auftragSchema)
+            mailSend = await run_in_threadpool(sendeFertigMail, auftragSchema)
             if mailSend:
                 crud_skiservice.setzeBenachrichtigt(db, AuftragSkiFertig.id, benachrichtigt=True)
                 nachricht += " und Kunde benachrichtigt."
@@ -116,15 +117,16 @@ async def erstelle_auftrag(auftrag: AuftragCreateSchema, hintergrundProzess: Bac
     Erstellt einen neuen Skiservice-Auftrag.
     """
     new_auftrag = crud_skiservice.createSkiserviceAuftrag(db, auftrag)
+    if not new_auftrag:
+        raise HTTPException(status_code=400, detail="Auftrag konnte nicht angelegt werden.")
 
     # SQLAlchemy zu Pydantic
     skiauftrag = AuftragSchema.model_validate(new_auftrag)
 
-    if new_auftrag:
-        # Drucken im Hintergrund
-        hintergrundProzess.add_task(skiserviceauftrag.skiServiceEttiketDrucken, skiauftrag)
+    # Drucken im Hintergrund
+    hintergrundProzess.add_task(skiserviceauftrag.skiServiceEttiketDrucken, skiauftrag)
 
-    return new_auftrag
+    return skiauftrag
 
 @router.post("/bindungsservice", response_model=SkiServicePreiseSchema)
 async def set_bindungsservice(bindungsserviceid: int, db: Session = Depends(get_db)):
@@ -135,3 +137,59 @@ async def set_bindungsservice(bindungsserviceid: int, db: Session = Depends(get_
     if not updated_preis:
         raise HTTPException(status_code=404, detail="Bindungsservice nicht gefunden")
     return updated_preis
+
+# --- Bearbeiten / Löschen ---
+
+def _auftrag_oder_404(auftrag):
+    if auftrag is None:
+        raise HTTPException(status_code=404, detail="Auftrag oder Ski nicht gefunden")
+    return auftrag
+
+
+@router.patch("/auftrag/{skiservice_auftrag_id}", response_model=AuftragSchema)
+def aendere_auftrag(skiservice_auftrag_id: int, daten: AuftragUpdateSchema, db: Session = Depends(get_db)):
+    """
+    Ändert Kunde oder Abholdatum eines Auftrags.
+    """
+    return _auftrag_oder_404(crud_skiservice.aendereAuftrag(db, skiservice_auftrag_id, daten))
+
+
+@router.delete("/auftrag/{skiservice_auftrag_id}")
+def loesche_auftrag(skiservice_auftrag_id: int, db: Session = Depends(get_db)):
+    """
+    Löscht einen Auftrag mit allen Ski. Bezahlte Aufträge können nicht gelöscht werden.
+    """
+    try:
+        if not crud_skiservice.loescheAuftrag(db, skiservice_auftrag_id):
+            raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    except crud_skiservice.AuftragGesperrt as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"success": True}
+
+
+@router.post("/auftrag/{skiservice_auftrag_id}/ski", response_model=AuftragSchema)
+def fuege_ski_hinzu(skiservice_auftrag_id: int, ski: SkiCreateSchema, db: Session = Depends(get_db)):
+    try:
+        return _auftrag_oder_404(crud_skiservice.fuegeSkiHinzu(db, skiservice_auftrag_id, ski))
+    except crud_skiservice.AuftragGesperrt as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.patch("/auftrag/{skiservice_auftrag_id}/ski/{ski_id}", response_model=AuftragSchema)
+def aendere_ski(skiservice_auftrag_id: int, ski_id: int, daten: SkiUpdateSchema, db: Session = Depends(get_db)):
+    """
+    Ändert Service, Preis, Kommentar, Bindung oder den Fertig-Status eines Ski.
+    Bei bezahlten Aufträgen können nur Kommentar und Status geändert werden.
+    """
+    try:
+        return _auftrag_oder_404(crud_skiservice.aendereSki(db, skiservice_auftrag_id, ski_id, daten))
+    except crud_skiservice.AuftragGesperrt as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.delete("/auftrag/{skiservice_auftrag_id}/ski/{ski_id}", response_model=AuftragSchema)
+def entferne_ski(skiservice_auftrag_id: int, ski_id: int, db: Session = Depends(get_db)):
+    try:
+        return _auftrag_oder_404(crud_skiservice.entferneSki(db, skiservice_auftrag_id, ski_id))
+    except crud_skiservice.AuftragGesperrt as e:
+        raise HTTPException(status_code=409, detail=str(e))

@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Saisonverleih Zusammenfassung</title>
+    <title>{{ saisonverleih.Bezeichnung }} Zusammenfassung</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -76,7 +76,7 @@
     </style>
 </head>
 <body>
-    <h1>Saisonverleih Zusammenfassung</h1>
+    <h1>{% if saisonverleih.Art == "tag" %}Tagesverleih{% else %}Saisonverleih{% endif %} Zusammenfassung</h1>
 
     <div class="section info">
         <h2>Kundendaten</h2>
@@ -89,6 +89,10 @@
     <div class="section info">
         <h2>Saisondaten</h2>
         <p><strong>Saison:</strong> {{ saisonverleih.Saison.Name }}</p>
+        <p><strong>Nummer:</strong> {{ saisonverleih.Name }}</p>
+        {% if saisonverleih.Art == "tag" %}
+        <p><strong>Zeitraum:</strong> {{ saisonverleih.Start_Am.strftime("%d.%m.%Y") }} – {{ saisonverleih.Ende_Am.strftime("%d.%m.%Y") }} ({{ saisonverleih.Tage }} {{ "Tag" if saisonverleih.Tage == 1 else "Tage" }})</p>
+        {% endif %}
     </div>
 
     <div class="section">

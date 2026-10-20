@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, model_validator
+from typing import Literal, Optional, List
 from datetime import date
 
 from app.schemas.kunde import SkiKundeOut
@@ -30,8 +30,14 @@ class SaisonVerleihMaterialCreate(SaisonVerleihMaterialBase):
     SaisonVerlei_ID: int
 
 
-class SaisonVerleihMaterialUpdate(SaisonVerleihMaterialBase):
-    pass
+class SaisonVerleihMaterialUpdate(BaseModel):
+    # Nur gesetzte Felder werden geändert
+    skinr: Optional[str] = None
+    schuhnr: Optional[int] = None
+    stockbez_ID: Optional[int] = None
+    stocklaenge: Optional[int] = None
+    Preis: Optional[float] = None
+    SkiFahrerName: Optional[str] = None
 
 
 class SaisonVerleihMaterialRead(SaisonVerleihMaterialBase):
@@ -62,6 +68,9 @@ class SaisonVerleihBase(BaseModel):
     Saison_ID: int | None = None
     Abgerechnet: int | None = None
     Start_Am: date | None = None
+    # Nur beim Tagesverleih
+    Ende_Am: date | None = None
+    Art: Literal["saison", "tag"] = "saison"
     QuittungID: int | None = None
 
     model_config = {
@@ -71,13 +80,29 @@ class SaisonVerleihBase(BaseModel):
 class SaisonVerleihCreate(SaisonVerleihBase):
     Material: List[SaisonVerleihMaterialBase] = []
 
-class SaisonVerleihUpdate(SaisonVerleihBase):
-    pass
+    @model_validator(mode="after")
+    def pruefe_zeitraum(self):
+        if self.Art == "tag":
+            if self.Start_Am is None or self.Ende_Am is None:
+                raise ValueError("Beim Tagesverleih sind Start- und Enddatum Pflicht.")
+            if self.Ende_Am < self.Start_Am:
+                raise ValueError("Das Enddatum darf nicht vor dem Startdatum liegen.")
+        return self
+
+class SaisonVerleihUpdate(BaseModel):
+    # Nur gesetzte Felder werden geändert
+    Kunde_ID: int | None = None
+    Bemerkung: str | None = None
+    Art: Literal["saison", "tag"] | None = None
+    Start_Am: date | None = None
+    Ende_Am: date | None = None
 
 # -> Read mit verschachtelten Objekten
 class SaisonVerleihRead(SaisonVerleihBase):
     ID: int
     Name: str 
+    Tage: int | None = None
+    Bezeichnung: str = "Saisonverleih"
     Kunde: SkiKundeOut | None = None
     Saison: SaisonRead | None = None
     Material: List[SaisonVerleihMaterialRead] = [] 

@@ -7,7 +7,8 @@ from sqlalchemy.engine import CursorResult
 
 from app.models.skiservice import Auftrag, Ski, AuftragNummer
 from app.crud import saison as crud_saison
-from app.schemas.skiservice import AuftragCreateSchema
+from app.schemas.skiservice import AuftragCreateSchema, AuftragUpdateSchema, SkiCreateSchema, SkiUpdateSchema
+from app.services import einstellungen
 
 def getSkiserviceAuftrag(db: Session, skiservice_auftrag_id: int, mitski: bool = True):
     if mitski:
@@ -68,7 +69,7 @@ def createSkiserviceAuftrag(db: Session, auftrag_data: AuftragCreateSchema):
         return None
     
     auftragNummer = neuAuftragNummer(db)
-    name = aktuelle_saison.Name+ "S" + str(auftragNummer.NeuNr)
+    name = aktuelle_saison.Name + einstellungen.hole("KUERZEL_SKISERVICE") + str(auftragNummer.NeuNr)
 
     new_auftrag = Auftrag(
         kunden_id=auftrag_data.kunden_id,
@@ -126,3 +127,119 @@ def get_auftragid_from_skiid(db: Session, ski_id: int) -> Optional[int]:
     if ski:
         return ski.auftrag_id
     return None
+
+# --- Bearbeiten / Löschen ---
+
+class AuftragGesperrt(Exception):
+    """Bezahlte Aufträge dürfen nicht mehr geändert oder gelöscht werden."""
+
+
+def _ist_bezahlt(auftrag: Auftrag) -> bool:
+    return auftrag.bezahlt == "ja" or auftrag.quittung_id is not None
+
+
+def _fertig_status_aktualisieren(auftrag: Auftrag):
+    """Setzt den Auftrag auf fertig, wenn alle Ski fertig sind, sonst wieder auf offen."""
+    if auftrag.skis and all(ski.status == 1 for ski in auftrag.skis):
+        if auftrag.wie != "1":
+            auftrag.wie = "1"
+            auftrag.fertig_date = datetime.now().strftime("%d.%m.%Y")
+    else:
+        auftrag.wie = None
+        auftrag.fertig_date = None
+
+
+def aendereAuftrag(db: Session, auftrag_id: int, daten: AuftragUpdateSchema):
+    auftrag = getSkiserviceAuftrag(db, auftrag_id)
+    if auftrag is None:
+        return None
+    aenderungen = daten.model_dump(exclude_unset=True)
+    if "kunden_id" in aenderungen and aenderungen["kunden_id"] is not None:
+        auftrag.kunden_id = aenderungen["kunden_id"]
+    if "abhol_date" in aenderungen:
+        auftrag.abhol_date = aenderungen["abhol_date"] or None
+    db.commit()
+    db.refresh(auftrag)
+    return auftrag
+
+
+def fuegeSkiHinzu(db: Session, auftrag_id: int, ski_daten: SkiCreateSchema):
+    auftrag = getSkiserviceAuftrag(db, auftrag_id)
+    if auftrag is None:
+        return None
+    if _ist_bezahlt(auftrag):
+        raise AuftragGesperrt("Der Auftrag ist bezahlt und kann nicht mehr erweitert werden.")
+
+    # Laufende Nummer aus den vorhandenen Ski-Namen ermitteln (z.B. 25/26S12-3)
+    nummern = [int(s.name.rsplit("-", 1)[1]) for s in auftrag.skis if s.name and s.name.rsplit("-", 1)[-1].isdigit()]
+    naechste = max(nummern, default=0) + 1
+
+    auftrag.skis.append(Ski(
+        name=f"{auftrag.name}-{naechste}",
+        service=ski_daten.service,
+        preis=ski_daten.preis,
+        komentar=ski_daten.komentar,
+        bindung_preis=ski_daten.bindung_preis,
+        bindung_check=ski_daten.bindung_check,
+    ))
+    _fertig_status_aktualisieren(auftrag)
+    db.commit()
+    db.refresh(auftrag)
+    return auftrag
+
+
+def aendereSki(db: Session, auftrag_id: int, ski_id: int, daten: SkiUpdateSchema):
+    auftrag = getSkiserviceAuftrag(db, auftrag_id)
+    if auftrag is None:
+        return None
+    ski = next((s for s in auftrag.skis if s.id == ski_id), None)
+    if ski is None:
+        return None
+
+    aenderungen = daten.model_dump(exclude_unset=True)
+    preisrelevant = {"service", "preis", "bindung_check", "bindung_preis"} & aenderungen.keys()
+    if preisrelevant and _ist_bezahlt(auftrag):
+        raise AuftragGesperrt("Der Auftrag ist bezahlt, Service und Preise können nicht mehr geändert werden.")
+
+    for feld, wert in aenderungen.items():
+        if wert is None and feld not in ("komentar",):
+            continue
+        setattr(ski, feld, wert)
+
+    if "status" in aenderungen:
+        ski.fertig_date = datetime.now().strftime("%d.%m.%Y") if ski.status == 1 else None
+        _fertig_status_aktualisieren(auftrag)
+
+    db.commit()
+    db.refresh(auftrag)
+    return auftrag
+
+
+def entferneSki(db: Session, auftrag_id: int, ski_id: int):
+    auftrag = getSkiserviceAuftrag(db, auftrag_id)
+    if auftrag is None:
+        return None
+    if _ist_bezahlt(auftrag):
+        raise AuftragGesperrt("Der Auftrag ist bezahlt, es können keine Ski entfernt werden.")
+    ski = next((s for s in auftrag.skis if s.id == ski_id), None)
+    if ski is None:
+        return None
+    if len(auftrag.skis) == 1:
+        raise AuftragGesperrt("Der letzte Ski kann nicht entfernt werden. Bitte stattdessen den Auftrag löschen.")
+
+    auftrag.skis.remove(ski)
+    _fertig_status_aktualisieren(auftrag)
+    db.commit()
+    db.refresh(auftrag)
+    return auftrag
+
+
+def loescheAuftrag(db: Session, auftrag_id: int) -> bool:
+    auftrag = getSkiserviceAuftrag(db, auftrag_id)
+    if auftrag is None:
+        return False
+    if _ist_bezahlt(auftrag):
+        raise AuftragGesperrt("Der Auftrag ist bezahlt und kann nicht gelöscht werden.")
+    db.delete(auftrag)
+    db.commit()
+    return True

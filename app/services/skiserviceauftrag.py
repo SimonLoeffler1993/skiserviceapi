@@ -1,12 +1,13 @@
 import logging
 from app.schemas.skiservice import AuftragSchema
 from app.utils.skiEttiket import SkiEttiket
-from app.core.config import AnwendungSettings
+from app.services import einstellungen
 
 logger = logging.getLogger(__name__) 
 
-# Falls am Schluss ein "/" ist wird dieser entfernt, damit es beim zusammensetzten keine Probleme gibt
-appHost = AnwendungSettings.appHost.rstrip("/")
+def appHost() -> str:
+    # Falls am Schluss ein "/" ist wird dieser entfernt, damit es beim zusammensetzten keine Probleme gibt
+    return einstellungen.hole("HOST").rstrip("/")
 
 def skiServiceEttiketDrucken(skiserviceAuftrag: AuftragSchema):
     serviceEttiket = SkiEttiket()
@@ -22,7 +23,7 @@ def skiServiceEttiketDrucken(skiserviceAuftrag: AuftragSchema):
 
         skiName = ski.name or "Ski"
 
-        skiUrl = f"{appHost}/skiservice/anzeigen/{skiserviceAuftrag.id}?ski={ski.id}"
+        skiUrl = f"{appHost()}/skiservice/anzeigen/{skiserviceAuftrag.id}?ski={ski.id}"
         
         # Ettiket für Service
         serviceEttiket.skiAuftragEttiket(kundeName, skiName,skiUrl,ski.service,ski.bindung_check,bisDatum)
@@ -53,7 +54,7 @@ def skiServiceEttiketEinzelnDrucken(skiserviceAuftrag: AuftragSchema, skiIds: li
 
         skiName = ski.name or "Ski"
 
-        skiUrl = f"{appHost}/skiservice/anzeigen/{skiserviceAuftrag.id}?ski={ski.id}"
+        skiUrl = f"{appHost()}/skiservice/anzeigen/{skiserviceAuftrag.id}?ski={ski.id}"
         
         # Ettiket für Service
         serviceEttiket.skiAuftragEttiket(kundeName, skiName,skiUrl,ski.service,ski.bindung_check,bisDatum)

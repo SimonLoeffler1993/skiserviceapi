@@ -8,6 +8,7 @@ from decimal import Decimal
 from weasyprint import HTML
 
 from app.models.quittung import Quittung
+from app.services import einstellungen
 from app.schemas.quittung import QuittungArtikelSchema, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
 from app.crud import skiservice as crud_skiservice
 from app.crud import saisonverleih as crud_saisonverleih
@@ -102,7 +103,7 @@ def _VerleihzuArtikel(verleihID: int, db: Session) -> QuittungGruppeArtikel:
     for verleih_Preis, anzahl in verleih_counter.items():
         artikelgruppe.artikels.append(QuittungArtikelSchema(
             type=QuittungsTyp.Verleih,
-            bezeichnung="Saisonverleih",
+            bezeichnung=verleih.Bezeichnung,
             preis=verleih_Preis,
             anzahl=anzahl,
             toID=verleihID
@@ -150,13 +151,13 @@ class QuittungsService:
 
     def renderPDF(self, data: QuittungOutSchema) -> bytes:
         FIRMA = {
-            "name": "Simons Skiservice",
-            "strasse": "Am Anennberg 12",          # z. B. "Musterstraße 1"
-            "ort": "Fronreute",     # z. B. "88273 Fronreute"
-            "telefon": "07502/94 27 162",
-            "email": "info@ms-skiservice.de",
-            "mwst_satz": 19,      # z. B. 19 -> zeigt Netto/MwSt. an
-            "kleinunternehmer": False,
+            "name": einstellungen.hole("FIRMA_NAME"),
+            "strasse": einstellungen.hole("FIRMA_STRASSE"),
+            "ort": einstellungen.hole("FIRMA_ORT"),
+            "telefon": einstellungen.hole("FIRMA_TELEFON"),
+            "email": einstellungen.hole("FIRMA_EMAIL"),
+            "mwst_satz": einstellungen.hole("FIRMA_MWST_SATZ"),      # z. B. 19 -> zeigt Netto/MwSt. an
+            "kleinunternehmer": einstellungen.hole("FIRMA_KLEINUNTERNEHMER"),
         }
 
         html = templates.get_template("quittung.html").render(quittung=data, firma=FIRMA, heute=_datum(date.today()))

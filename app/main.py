@@ -8,8 +8,10 @@ from app.api.v1.material import ski, schuh, stock
 from app.api.v1.scanner import skiscanner
 from app.api.v1 import skiservice
 from app.api.v1 import kasse
+from app.api.v1 import einstellungen
 from app.db.base import Base
 from app.db.session import engine
+from app.services import einstellungen as einstellungen_service
 
 # TODO: #10 Logging einstellungen
 logging.basicConfig(
@@ -22,6 +24,11 @@ logging.basicConfig(
 async def lifespan(app: FastAPI):
     # Startup
     # Base.metadata.create_all(bind=engine)
+    try:
+        # Alte Umgebungsvariablen einmalig in die Einstellungen übernehmen
+        einstellungen_service.aus_umgebung_uebernehmen()
+    except Exception:
+        logging.getLogger(__name__).exception("Einstellungen konnten nicht aus der Umgebung übernommen werden")
     yield
 
 app = FastAPI(title="SkiApp API", version="0.0.1", lifespan=lifespan)
@@ -53,6 +60,7 @@ app.include_router(quittungen.router, prefix=appPrefix)
 app.include_router(skiscanner.router, prefix=appPrefix)
 app.include_router(skiservice.router, prefix=appPrefix)
 app.include_router(kasse.router, prefix=appPrefix)
+app.include_router(einstellungen.router, prefix=appPrefix)
 
 @app.get("/")
 def read_root():

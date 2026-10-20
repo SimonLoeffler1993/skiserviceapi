@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, Field, field_serializer
 from datetime import date, datetime
 from typing import Optional
 from decimal import Decimal
@@ -85,3 +85,21 @@ class AuftragCreateSchema(BaseModel):
     skis: list[SkiCreateSchema]
 
 
+
+
+# --- Bearbeiten ---
+# Nur gesetzte Felder werden geändert
+class AuftragUpdateSchema(BaseModel):
+    kunden_id: Optional[int] = None
+    # TT.MM.JJJJ, leerer Text entfernt das Datum
+    abhol_date: Optional[str] = None
+
+
+class SkiUpdateSchema(BaseModel):
+    service: Optional[str] = None
+    preis: Optional[float] = Field(default=None, ge=0)
+    komentar: Optional[str] = None
+    bindung_check: Optional[bool] = None
+    bindung_preis: Optional[float] = Field(default=None, ge=0)
+    # 0 = offen, 1 = fertig
+    status: Optional[int] = Field(default=None, ge=0, le=1)
