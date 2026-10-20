@@ -80,10 +80,10 @@
 
     <div class="section info">
         <h2>Kundendaten</h2>
-        <p><strong>Name:</strong> {{ saisonverleih.Kunde.Vorname }} {{ saisonverleih.Kunde.Nachname }}</p>
-        <p><strong>Adresse:</strong> {{ saisonverleih.Kunde.Strasse }}, {{ saisonverleih.Kunde.Ort.Postlz }} {{ saisonverleih.Kunde.Ort.Ort }}</p>
-        <p><strong>Telefon:</strong> {{ saisonverleih.Kunde.Tel }}</p>
-        <p><strong>E-Mail:</strong> {{ saisonverleih.Kunde.Email }}</p>
+        <p><strong>Name:</strong> {{ [saisonverleih.Kunde.Vorname, saisonverleih.Kunde.Nachname] | select | join(" ") }}</p>
+        <p><strong>Adresse:</strong> {{ [saisonverleih.Kunde.Strasse, [saisonverleih.Kunde.Ort.Postlz if saisonverleih.Kunde.Ort else None, saisonverleih.Kunde.Ort.Ort if saisonverleih.Kunde.Ort else None] | select | join(" ")] | select | join(", ") }}</p>
+        <p><strong>Telefon:</strong> {{ saisonverleih.Kunde.Tel or "" }}</p>
+        <p><strong>E-Mail:</strong> {{ saisonverleih.Kunde.Email or "" }}</p>
     </div>
 
     <div class="section info">

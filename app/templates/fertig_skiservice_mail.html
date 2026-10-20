@@ -6,7 +6,7 @@
 </head>
 
 <body>
-    <p style="margin: 0 0 8px; font-size: 14px; color: #444;">Hallo {{ auftrag.kunde.Vorname }} {{ auftrag.kunde.Nachname }},</p>
+    <p style="margin: 0 0 8px; font-size: 14px; color: #444;">Hallo {{ [auftrag.kunde.Vorname, auftrag.kunde.Nachname] | select | join(" ") }},</p>
     <p style="margin: 0 0 20px; font-size: 16px; font-weight: bold; color: #111;">Deine Ski sind abholbereit!
     </p>
     <p style="margin: 0 0 24px; font-size: 14px; color: #444; line-height: 1.6;">
