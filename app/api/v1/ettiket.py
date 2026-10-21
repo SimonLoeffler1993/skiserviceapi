@@ -69,16 +69,16 @@ def print_saisonfahrer_ettiket(saisonverleih_id: int, db: Session = Depends(get_
     return {"success": True, "message": f"Ettiket for Saisonverleih ID {saisonverleih_id} printed."}
 
 @router.post("/schuh/{schuhID}" , response_model=EttiketPrintRequest)
-def print_schuh_ettiket(schuhID: str, db: Session = Depends(get_db)):
+def print_schuh_ettiket(schuhID: int, db: Session = Depends(get_db)):
     """
-    Druckt Ettiket für Schuh
+    Druckt Ettiket für Schuh (interne ID). QR-Code und Nummer zeigen die Schuh-Nr.
     """
-    schuh = crud_materialschuh.get_eigen_schuhe(db, schuhID)
+    schuh = crud_materialschuh.get_eigen_schuh_by_id(db, schuhID)
     if not schuh:
         return {"success": False, "message": f"Error Drucken ettiket: Schuh {schuhID} nicht gefunden."}
     try:
         ettiket_printer = SkiEttiket()
-        ettiket_printer.SchuhEttiket(hersteller=schuh.Modell.Hersteller.Name, modell=schuh.Modell.Modell, groesse=str(schuh.Groese), qrdata=schuhID)
+        ettiket_printer.SchuhEttiket(hersteller=schuh.Modell.Hersteller.Name, modell=schuh.Modell.Modell, groesse=str(schuh.Groese), qrdata=schuh.SchuhNr)
         ettiket_printer.drucken()
     except Exception as e:
         return {"success": False, "message": f"Error printing ettiket: {str(e)}"}

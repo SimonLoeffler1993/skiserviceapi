@@ -5,6 +5,9 @@ import logging
 from typing import Optional
 
 from app.models.saisonverleih import SkiSaisonverleihPreise, SaisonVerleih, SaisonVerleihMaterial
+from app.models.materialski import EigenSki
+from app.models.materialschuh import EigenSchuh
+from app.models.materialstock import Skistock
 from app.schemas.saisonverleih import SaisonVerleihCreate, SaisonVerleihPreisBase, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate
 from app.crud import saison as crud_saison
 from app.utils.skiEttiket import SkiEttiket
@@ -129,6 +132,29 @@ def belegung_text(belegung: dict) -> str:
     return f"{belegung['Material']} ist bereits verliehen: {belegung['Name']} ({zeitraum}, {belegung['Kunde']})"
 
 
+def material_nicht_verfuegbar(db: Session, skinr: Optional[str], schuhnr: Optional[int], stockbez_ID: Optional[int]) -> Optional[str]:
+    """Prüft, ob Ski, Schuh und Stock existieren und nicht ausgemustert sind. Gibt sonst eine Meldung zurück."""
+    if skinr:
+        ski = db.query(EigenSki).filter(EigenSki.SkiNr == skinr).first()
+        if ski is None:
+            return f"Ski {skinr} existiert nicht."
+        if ski.Ausgemustert:
+            return f"Ski {skinr} ist ausgemustert."
+    if schuhnr:
+        schuh = db.get(EigenSchuh, schuhnr)
+        if schuh is None:
+            return "Der Schuh existiert nicht."
+        if schuh.Ausgemustert:
+            return f"Schuh {schuh.SchuhNr} ist ausgemustert."
+    if stockbez_ID and stockbez_ID > 0:
+        stock = db.get(Skistock, stockbez_ID)
+        if stock is None:
+            return "Der Stock existiert nicht."
+        if stock.Ausgemustert:
+            return f"Stock {stock.Bezeichnung} ist ausgemustert."
+    return None
+
+
 def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
 
     # Namen in Array
@@ -156,6 +182,12 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
             Ende_Am=saisonverleih.Ende_Am if saisonverleih.Art == "tag" else None,
             QuittungID=saisonverleih.QuittungID
         )
+
+        # Ausgemustertes Material darf nicht mehr verliehen werden
+        for material in saisonverleih.Material:
+            fehler = material_nicht_verfuegbar(db, material.skinr or None, material.schuhnr or None, material.stockbez_ID)
+            if fehler:
+                return {"success": False, "data": None, "error": fehler}
 
         # Beim Tagesverleih prüfen, ob Ski oder Schuh im Zeitraum schon verliehen sind
         if saisonverleih.Art == "tag":
@@ -293,6 +325,9 @@ def fuege_material_hinzu(db: Session, saisonverleih_id: int, material: SaisonVer
         return None
     _pruefe_nicht_bezahlt(saisonverleih)
     werte = _material_werte(material)
+    fehler = material_nicht_verfuegbar(db, werte.get("skinr"), werte.get("schuhnr"), werte.get("stockbez_ID"))
+    if fehler:
+        raise VerleihGesperrt(fehler)
     if saisonverleih.Art == "tag":
         belegungen = finde_belegungen(
             db, saisonverleih.Start_Am, saisonverleih.Ende_Am,
