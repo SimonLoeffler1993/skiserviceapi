@@ -26,6 +26,7 @@ class BindungsdatenRead(BindungsdatenBase):
     ID: int
     Kunde_ID: int
     Ski_ID: Optional[int] = None
+    Material_ID: Optional[int] = None
     Erfasst_Am: date
     Archiviert: bool
 
@@ -36,6 +37,8 @@ class BindungsdatenListeEintrag(BindungsdatenRead):
     Auftrag_Name: Optional[str] = None
     Ski_Name: Optional[str] = None
     Service: Optional[str] = None
+    Verleih_ID: Optional[int] = None
+    Verleih_Name: Optional[str] = None
 
 
 class BindungsdatenArchivieren(BaseModel):

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from enum import Enum 
+from typing import Optional
 
 
 class BezahlInfoSchema(BaseModel):
@@ -51,8 +52,16 @@ class QuittungRead(QuittungBase):
     }
 
 class QuittungNurExtern(BaseModel):
-    SaisonverleihID: int
+    # Genau eines von beiden: Saisonverleih oder Skiservice-Auftrag
+    SaisonverleihID: Optional[int] = None
+    AuftragID: Optional[int] = None
     LexOfficeID: str
+
+    @model_validator(mode="after")
+    def pruefe_ziel(self):
+        if (self.SaisonverleihID is None) == (self.AuftragID is None):
+            raise ValueError("Bitte genau eines angeben: SaisonverleihID oder AuftragID.")
+        return self
 
     model_config = {
         "from_attributes": True

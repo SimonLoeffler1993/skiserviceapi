@@ -48,6 +48,8 @@ class SaisonVerleihMaterial(Base):
     stocklaenge: Mapped[int | None] = mapped_column(Integer)
     Preis: Mapped[float] = mapped_column(Double)
     SkiFahrerName: Mapped[str | None] = mapped_column(String(150), default=None)
+    # Bindungsdaten des Fahrers (optional)
+    bindungsdaten: Mapped[Optional["Bindungsdaten"]] = relationship("Bindungsdaten", back_populates="material", uselist=False)
 
 
 class SaisonVerleih(Base):

@@ -8,14 +8,17 @@ from app.db.base import Base
 from app.models.kunde import SkiKunde
 
 
-# Bindungsdaten eines Fahrers zum Zeitpunkt eines Skiservice.
-# Jeder Ski bekommt einen eigenen Datensatz, über Kunde_ID lassen sich alle Daten eines Kunden abfragen.
-# Wird ein Ski oder Auftrag gelöscht, bleibt der Datensatz beim Kunden erhalten (Ski_ID wird geleert).
+# Bindungsdaten eines Fahrers zum Zeitpunkt eines Skiservice oder Verleihs.
+# Jeder Service-Ski bzw. jede Verleih-Materialzeile bekommt einen eigenen Datensatz,
+# über Kunde_ID lassen sich alle Daten eines Kunden abfragen.
+# Wird Ski, Auftrag, Material oder Verleih gelöscht, bleibt der Datensatz beim Kunden erhalten (Verweis wird geleert).
 class Bindungsdaten(Base):
     __tablename__ = "bindungsdaten"
     ID: Mapped[int] = mapped_column(Integer, primary_key=True)
     Kunde_ID: Mapped[int] = mapped_column(ForeignKey("adresse.ID"), index=True, nullable=False)
     Ski_ID: Mapped[int | None] = mapped_column(ForeignKey("ski.ID", ondelete="SET NULL"), unique=True, nullable=True)
+    # Materialzeile eines Saison- oder Tagesverleihs
+    Material_ID: Mapped[int | None] = mapped_column(ForeignKey("saisonverleihmaterial.ID", ondelete="SET NULL"), unique=True, nullable=True)
     Fahrer: Mapped[str | None] = mapped_column(String(100))
     # Sohlenlänge in mm
     Sohle: Mapped[int | None] = mapped_column(Integer)
@@ -32,3 +35,4 @@ class Bindungsdaten(Base):
 
     kunde: Mapped[SkiKunde] = relationship(SkiKunde)
     ski: Mapped["Ski | None"] = relationship("Ski", back_populates="bindungsdaten")
+    material: Mapped["SaisonVerleihMaterial | None"] = relationship("SaisonVerleihMaterial", back_populates="bindungsdaten")

@@ -9,6 +9,7 @@ from typing import Optional
 from app.db.deps import get_db
 from app.crud import quittung as crud_quittung
 from app.crud import saisonverleih as crud_saisonverleih
+from app.crud import skiservice as crud_skiservice
 from app.schemas.quittung import QuittungNurExtern, QuittungRead, QuittungOutSchema
 from app.utils.lexware import LexwareAPI
 from app.services import einstellungen
@@ -143,25 +144,36 @@ async def get_quittung_json(quittung_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
 
 @router.post("/quittung/nurextern")
-async def create_quittung_nur_extern(quittung_data: QuittungNurExtern, db: Session = Depends(get_db)):
-    # Zuerst Prüfen ob es eine Saisonverleih gibt
-    saisonverleih = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id=quittung_data.SaisonverleihID)
-    if saisonverleih is None:
-        raise HTTPException(status_code=404, detail="Saisonverleih not found")
-    
-    print(f"Saisonverleih wurde gefunden: ID {saisonverleih.ID}")
-    
-    neuExQuittung = crud_quittung.create_NurExtern_quittung(db, saisonverleih_id=quittung_data.SaisonverleihID, lexoffice_id=quittung_data.LexOfficeID)
-    if neuExQuittung is None:
-        raise HTTPException(status_code=500, detail="Fehler beim Erstellen der Quittung")
-    
-    print(f"Neue Quittung wurde erstellt: ID {neuExQuittung.ID}")
-    
-    # Saisonverleih mit Quittung verknüpfen
-    success = crud_saisonverleih.set_Saisonverleih_Quittung(db, saisonverleih_id=quittung_data.SaisonverleihID, quittung_id=neuExQuittung.ID)
-    if not success:
-        raise HTTPException(status_code=500, detail="Fehler beim Verknüpfen der Quittung mit dem Saisonverleih")
-    
+def create_quittung_nur_extern(quittung_data: QuittungNurExtern, db: Session = Depends(get_db)):
+    """
+    Weist einem Saisonverleih oder einem Skiservice-Auftrag einen externen Lexware-Beleg als Quittung zu.
+    """
+    # Ziel prüfen, bevor die Quittung angelegt wird
+    if quittung_data.SaisonverleihID is not None:
+        ziel = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id=quittung_data.SaisonverleihID)
+        if ziel is None:
+            raise HTTPException(status_code=404, detail="Saisonverleih nicht gefunden")
+        if ziel.QuittungID is not None:
+            raise HTTPException(status_code=409, detail="Dem Saisonverleih ist bereits eine Quittung zugewiesen")
+    else:
+        ziel = crud_skiservice.getSkiserviceAuftrag(db, quittung_data.AuftragID, mitski=False)
+        if ziel is None:
+            raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+        if ziel.quittung_id is not None:
+            raise HTTPException(status_code=409, detail="Dem Auftrag ist bereits eine Quittung zugewiesen")
+
+    try:
+        neuExQuittung = crud_quittung.create_NurExtern_quittung(db, lexoffice_id=quittung_data.LexOfficeID)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Mit der Quittung verknüpfen
+    if quittung_data.SaisonverleihID is not None:
+        ziel.QuittungID = neuExQuittung.ID
+    else:
+        ziel.quittung_id = neuExQuittung.ID
+    db.commit()
+
     return {"erfolgreich": True, "quittung_id": neuExQuittung.ID}
 
 @router.get("/test")

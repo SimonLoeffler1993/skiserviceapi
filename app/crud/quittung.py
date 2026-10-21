@@ -19,7 +19,8 @@ def get_quittung(db: Session, quittung_id: int):
 
     return db_quittung
 
-def create_NurExtern_quittung(db: Session, saisonverleih_id: int, lexoffice_id: str):
+def create_NurExtern_quittung(db: Session, lexoffice_id: str):
+    """Legt eine Quittung an, deren Beleg nur in Lexware existiert (für Saisonverleih oder Skiservice)."""
     aktuelle_saison = crud_saison.get_AktuelleSaison(db)
     if aktuelle_saison is None:
         raise ValueError("Keine aktuelle Saison gefunden. Bitte erstelle eine Saison, bevor du eine Quittung erstellst.")
@@ -39,5 +40,4 @@ def create_NurExtern_quittung(db: Session, saisonverleih_id: int, lexoffice_id: 
     db.commit()
     db.refresh(db_quittung)
 
-    print(f"Quittung mit ID {db_quittung.ID} für Saisonverleih ID {saisonverleih_id} und LexOffice ID {lexoffice_id} erstellt.")
     return db_quittung
