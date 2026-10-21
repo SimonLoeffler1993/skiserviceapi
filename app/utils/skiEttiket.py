@@ -169,11 +169,14 @@ class SkiEttiket:
 
         return True
     
-    def skiAuftragEttiket(self, name: str, skiName: str, url: str, service: str, bindung: bool, fertig_datum: str | None = None):
+    def skiAuftragEttiket(self, name: str, skiName: str, url: str, service: str, bindung: bool, fertig_datum: str | None = None, bindung_text: str | None = None):
         ettiket_laenge = 57
 
         if bindung:
             ettiket_laenge +=4
+            # Zeile mit den Bindungsdaten
+            if bindung_text:
+                ettiket_laenge +=4
 
         if fertig_datum:
             ettiket_laenge +=4
@@ -247,6 +250,18 @@ class SkiEttiket:
             service_x = (labelpxbreite - bindung_breite) // 2
             draw.text((service_x, Y), "BINDUNG", fill="black", font=font_label)
             Y += bindung_hoehe + 12
+
+            if bindung_text:
+                # Schrift verkleinern, bis die Zeile auf das Etikett passt
+                groesse = 36
+                font_daten = lade_schrift(groesse, fett=True)
+                while groesse > 20 and draw.textlength(bindung_text, font=font_daten) > labelpxbreite - 2 * RAND - 10:
+                    groesse -= 2
+                    font_daten = lade_schrift(groesse, fett=True)
+                daten_bbox = draw.textbbox((0, 0), bindung_text, font=font_daten)
+                daten_x = (labelpxbreite - (daten_bbox[2] - daten_bbox[0])) // 2
+                draw.text((daten_x, Y), bindung_text, fill="black", font=font_daten)
+                Y += daten_bbox[3] - daten_bbox[1] + 12
 
         # --- 4. Fertig-Datum (optional, zentriert) ---
         if fertig_datum:

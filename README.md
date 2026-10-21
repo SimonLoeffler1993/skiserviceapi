@@ -15,6 +15,7 @@ Zentrales Backend der Skiservice-Anwendung. Alle Frontends sprechen ausschließl
 
 - **Kunden** mit Postleitzahlen-Verzeichnis (wird beim Start eingespielt)
 - **Skiservice-Aufträge**: anlegen, bearbeiten (Ski hinzufügen/ändern/entfernen, Abholdatum), löschen, fertigmelden mit Mail an den Kunden
+- **Bindungsdaten** (Fahrer, Sohlenlänge, Gewicht, Größe, Fahrkönnen, Alter) je Ski in der Tabelle `bindungsdaten`, mit Verweis auf den Kunden: `GET /kunden/{id}/bindungsdaten` liefert alle Einträge eines Kunden, alte Einträge lassen sich archivieren. Die Werte stehen auch auf dem Ski-Etikett
 - **Saison- und Tagesverleih**: eigener Nummernkreis je Art (`25/26SV12`, `25/26TV3`), Belegungsprüfung beim Tagesverleih, Vertrag als PDF (WeasyPrint, ohne externen Dienst)
 - **Kasse**: offene Aufträge und Verleihe, Bezahlen in einer Transaktion, Quittung als PDF
 - **Etikettendruck** auf Brother-QL-Druckern (QR-Code je Ski)

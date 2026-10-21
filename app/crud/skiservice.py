@@ -9,6 +9,7 @@ from app.models.skiservice import Auftrag, Ski, AuftragNummer
 from app.crud import saison as crud_saison
 from app.schemas.skiservice import AuftragCreateSchema, AuftragUpdateSchema, SkiCreateSchema, SkiUpdateSchema
 from app.services import einstellungen
+from app.crud.bindungsdaten import setze_bindungsdaten
 
 def getSkiserviceAuftrag(db: Session, skiservice_auftrag_id: int, mitski: bool = True):
     if mitski:
@@ -85,6 +86,8 @@ def createSkiserviceAuftrag(db: Session, auftrag_data: AuftragCreateSchema):
             bindung_check=ski.bindung_check
         ) for i, ski in enumerate(auftrag_data.skis)]
     )
+    for ski, ski_daten in zip(new_auftrag.skis, auftrag_data.skis):
+        setze_bindungsdaten(db, ski, auftrag_data.kunden_id, ski_daten.bindungsdaten, ski_daten.vorlage_id)
     db.add(new_auftrag)
     db.commit()
     db.refresh(new_auftrag)
@@ -156,6 +159,10 @@ def aendereAuftrag(db: Session, auftrag_id: int, daten: AuftragUpdateSchema):
     aenderungen = daten.model_dump(exclude_unset=True)
     if "kunden_id" in aenderungen and aenderungen["kunden_id"] is not None:
         auftrag.kunden_id = aenderungen["kunden_id"]
+        # Bindungsdaten gehören zum Kunden des Auftrags
+        for ski in auftrag.skis:
+            if ski.bindungsdaten is not None:
+                ski.bindungsdaten.Kunde_ID = auftrag.kunden_id
     if "abhol_date" in aenderungen:
         auftrag.abhol_date = aenderungen["abhol_date"] or None
     db.commit()
@@ -174,14 +181,16 @@ def fuegeSkiHinzu(db: Session, auftrag_id: int, ski_daten: SkiCreateSchema):
     nummern = [int(s.name.rsplit("-", 1)[1]) for s in auftrag.skis if s.name and s.name.rsplit("-", 1)[-1].isdigit()]
     naechste = max(nummern, default=0) + 1
 
-    auftrag.skis.append(Ski(
+    neuer_ski = Ski(
         name=f"{auftrag.name}-{naechste}",
         service=ski_daten.service,
         preis=ski_daten.preis,
         komentar=ski_daten.komentar,
         bindung_preis=ski_daten.bindung_preis,
         bindung_check=ski_daten.bindung_check,
-    ))
+    )
+    auftrag.skis.append(neuer_ski)
+    setze_bindungsdaten(db, neuer_ski, auftrag.kunden_id, ski_daten.bindungsdaten, ski_daten.vorlage_id)
     _fertig_status_aktualisieren(auftrag)
     db.commit()
     db.refresh(auftrag)
@@ -197,6 +206,10 @@ def aendereSki(db: Session, auftrag_id: int, ski_id: int, daten: SkiUpdateSchema
         return None
 
     aenderungen = daten.model_dump(exclude_unset=True)
+    # Bindungsdaten werden getrennt behandelt
+    bindung_geaendert = "bindungsdaten" in aenderungen or aenderungen.get("bindung_check") is False
+    aenderungen.pop("bindungsdaten", None)
+    aenderungen.pop("vorlage_id", None)
     preisrelevant = {"service", "preis", "bindung_check", "bindung_preis"} & aenderungen.keys()
     if preisrelevant and _ist_bezahlt(auftrag):
         raise AuftragGesperrt("Der Auftrag ist bezahlt, Service und Preise können nicht mehr geändert werden.")
@@ -209,6 +222,10 @@ def aendereSki(db: Session, auftrag_id: int, ski_id: int, daten: SkiUpdateSchema
     if "status" in aenderungen:
         ski.fertig_date = datetime.now().strftime("%d.%m.%Y") if ski.status == 1 else None
         _fertig_status_aktualisieren(auftrag)
+
+    # Bindungsdaten sind auch nach dem Bezahlen änderbar, sie betreffen keinen Preis
+    if bindung_geaendert:
+        setze_bindungsdaten(db, ski, auftrag.kunden_id, daten.bindungsdaten, daten.vorlage_id)
 
     db.commit()
     db.refresh(auftrag)

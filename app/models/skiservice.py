@@ -30,6 +30,8 @@ class Ski(Base):
 
     # Relation zu Auftrag
     auftrag: Mapped["Auftrag"] = relationship("Auftrag", back_populates="skis")
+    # Bindungsdaten des Fahrers (nur bei Bindungscheck)
+    bindungsdaten: Mapped[Optional["Bindungsdaten"]] = relationship("Bindungsdaten", back_populates="ski", uselist=False)
 
 
 class Auftrag(Base):
