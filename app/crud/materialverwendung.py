@@ -29,23 +29,32 @@ def verwendung(db: Session, bedingung) -> list[dict]:
         .options(joinedload(SaisonVerleihMaterial.saisonverleih).joinedload(SaisonVerleih.Kunde))
         .all()
     )
-    ergebnis = []
+    # Ein Eintrag pro Verleih, auch wenn das Material mehrfach darin steckt
+    # (z.B. derselbe Stocktyp für zwei Kinder). Die Fahrer werden zusammengefasst.
+    ergebnis: dict[int, dict] = {}
     for material in eintraege:
         verleih = material.saisonverleih
         if verleih is None:
             continue
-        kunde = verleih.Kunde
-        ergebnis.append({
-            "ID": verleih.ID,
-            "Name": verleih.Name,
-            "Art": verleih.Art,
-            "Start_Am": verleih.Start_Am,
-            "Ende_Am": verleih.Ende_Am,
-            "Kunde": " ".join(t for t in ((kunde.Vorname if kunde else None), (kunde.Nachname if kunde else None)) if t) or "Unbekannt",
-            "Fahrer": material.SkiFahrerName,
-            "Zurueck": bool(verleih.Zurueck),
-        })
-    return sorted(ergebnis, key=lambda e: e["ID"], reverse=True)
+        eintrag = ergebnis.get(verleih.ID)
+        if eintrag is None:
+            kunde = verleih.Kunde
+            eintrag = ergebnis[verleih.ID] = {
+                "ID": verleih.ID,
+                "Name": verleih.Name,
+                "Art": verleih.Art,
+                "Start_Am": verleih.Start_Am,
+                "Ende_Am": verleih.Ende_Am,
+                "Kunde": " ".join(t for t in ((kunde.Vorname if kunde else None), (kunde.Nachname if kunde else None)) if t) or "Unbekannt",
+                "Fahrer": [],
+                "Zurueck": bool(verleih.Zurueck),
+            }
+        fahrer = (material.SkiFahrerName or "").strip()
+        if fahrer and fahrer not in eintrag["Fahrer"]:
+            eintrag["Fahrer"].append(fahrer)
+    for eintrag in ergebnis.values():
+        eintrag["Fahrer"] = ", ".join(eintrag["Fahrer"]) or None
+    return sorted(ergebnis.values(), key=lambda e: e["ID"], reverse=True)
 
 
 def anzahl_verleihe(db: Session, bedingung) -> int:
