@@ -19,9 +19,14 @@ def _zahl(wert: float, stellen: int) -> str:
     return f"{float(wert):.{stellen}f}".replace(".", ",")
 
 def bindungsdaten_text(ski: SkiSchema) -> str | None:
+    """Bindungszeile eines Service-Ski, nur mit Bindungscheck."""
+    if not ski.bindung_check:
+        return None
+    return bindungsdaten_zeile(ski.bindungsdaten)
+
+def bindungsdaten_zeile(daten) -> str | None:
     """Kurze Zeile fürs Etikett, z.B. "Lena · 305mm · 75kg · 1,80m · Typ 2 · 34J". Fehlende Werte fallen weg."""
-    daten = ski.bindungsdaten
-    if not ski.bindung_check or daten is None:
+    if daten is None:
         return None
     teile = []
     if daten.Fahrer:

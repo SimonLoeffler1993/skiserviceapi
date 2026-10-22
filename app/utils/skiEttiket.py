@@ -44,6 +44,22 @@ def lade_schrift(groesse: int, fett: bool = False):
     logger.warning("Keine TrueType Schrift gefunden, Standard-Schriftart wird verwendet.")
     return ImageFont.load_default(groesse)
 
+def passende_schrift(draw, text: str, max_breite: int, groesse: int, min_groesse: int, fett: bool = False):
+    """Schrift so lange verkleinern, bis der Text in die Breite passt (höchstens bis min_groesse)."""
+    schrift = lade_schrift(groesse, fett)
+    while groesse > min_groesse and draw.textlength(text, font=schrift) > max_breite:
+        groesse -= 2
+        schrift = lade_schrift(groesse, fett)
+    return schrift
+
+def kuerze_text(draw, text: str, max_breite: int, schrift) -> str:
+    """Text mit "…" kürzen, falls er trotz kleinster Schrift nicht passt."""
+    if draw.textlength(text, font=schrift) <= max_breite:
+        return text
+    while text and draw.textlength(text + "…", font=schrift) > max_breite:
+        text = text[:-1]
+    return text.rstrip() + "…"
+
 # Warum 18px? vermutlich Weil 3mm Rand auf 300dpi = 18px
 # Diese wurden mit mehren Test herausgefunden
 def labelmm2px(hoehe, breite, randpx=18):
@@ -293,6 +309,72 @@ class SkiEttiket:
 
         return True
 
+
+    def verleihEttiket(self, name: str, teil: str, info: str, url: str, bindung_text: str | None = None):
+        """
+        Kleines Etikett für einen Leihski oder Leihschuh, quer: QR-Code links, Text rechts.
+        Darunter optional die Bindungsdaten über die ganze Breite.
+        """
+        _, labelpxbreite = labelmm2px(0, 62)
+        RAND = 10
+        ABSTAND = 8
+        qr_groesse = 190
+        text_x = RAND + qr_groesse + 16
+        text_breite = labelpxbreite - text_x - RAND
+
+        # Hilfsbild nur zum Messen, die Höhe steht erst danach fest
+        messen = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+        zeilen = [
+            (name, passende_schrift(messen, name, text_breite, 44, 26, fett=True)),
+            (teil, passende_schrift(messen, teil, text_breite, 52, 28, fett=True)),
+            (info, passende_schrift(messen, info, text_breite, 30, 20)),
+        ]
+        zeilen = [(kuerze_text(messen, text, text_breite, schrift), schrift) for text, schrift in zeilen]
+        hoehen = [messen.textbbox((0, 0), text, font=schrift)[3] for text, schrift in zeilen]
+        oben = max(qr_groesse, sum(hoehen) + ABSTAND * (len(zeilen) - 1))
+
+        bindung_schrift = None
+        bindung_hoehe = 0
+        if bindung_text:
+            bindung_schrift = passende_schrift(messen, bindung_text, labelpxbreite - 2 * RAND, 32, 18, fett=True)
+            bindung_text = kuerze_text(messen, bindung_text, labelpxbreite - 2 * RAND, bindung_schrift)
+            bindung_hoehe = messen.textbbox((0, 0), bindung_text, font=bindung_schrift)[3] + ABSTAND
+
+        labelpxhoehe = RAND * 2 + oben + bindung_hoehe
+        img = Image.new("RGB", (labelpxbreite, labelpxhoehe), "white")
+        draw = ImageDraw.Draw(img)
+
+        # QR-Code zur Verleih-Ansicht
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=4, border=1)
+        qr.add_data(url)
+        qr.make(fit=True)
+        qrimg = qr.make_image(fill_color="black", back_color="white").resize((qr_groesse, qr_groesse))
+        img.paste(qrimg, (RAND, RAND))
+
+        # Textblock rechts, vertikal neben dem QR-Code zentriert
+        y = RAND + (oben - (sum(hoehen) + ABSTAND * (len(zeilen) - 1))) // 2
+        for (text, schrift), hoehe in zip(zeilen, hoehen):
+            draw.text((text_x, y), text, fill="black", font=schrift)
+            y += hoehe + ABSTAND
+
+        if bindung_text and bindung_schrift:
+            breite = draw.textlength(bindung_text, font=bindung_schrift)
+            draw.text(((labelpxbreite - breite) // 2, RAND + oben + ABSTAND), bindung_text, fill="black", font=bindung_schrift)
+
+        create_label(
+            qlr=self.qlr,
+            image=img,
+            label_size=self.labelSize,
+            rotate=0,
+            threshold=70,
+            dither=False,
+            compress=True,
+            red=False,
+            dpi_600=False,
+            hq=True,
+            cut=True
+        )
+        return True
 
     def drucken(self) -> bool:
         try:

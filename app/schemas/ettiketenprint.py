@@ -7,3 +7,14 @@ class EttiketPrintRequest(BaseModel):
 class EttiketPrintSkisSchema(BaseModel):
     auftrag_id: int | None = None
     ski_ids: list[int]
+
+class VerleihEttiketPrintSchema(BaseModel):
+    # Schlüssel wie "12-ski" / "12-schuh", ohne Angabe alle Etiketten des Verleihs
+    etiketten: list[str] | None = None
+
+class VerleihEttiketEintrag(BaseModel):
+    Schluessel: str
+    Name: str
+    # SkiFahrerName, None wenn keiner angegeben ist
+    Fahrer: str | None = None
+    Teil: str
