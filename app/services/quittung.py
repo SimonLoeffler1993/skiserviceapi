@@ -9,7 +9,10 @@ from weasyprint import HTML
 
 from app.models.quittung import Quittung
 from app.services import einstellungen
-from app.schemas.quittung import QuittungArtikelSchema, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
+from app.schemas.quittung import QuittungArtikelSchema, QuittungKundeSchema, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
+from app.models.kunde import SkiKunde
+from app.models.saisonverleih import SaisonVerleih
+from app.models.skiservice import Auftrag
 from app.crud import skiservice as crud_skiservice
 from app.crud import saisonverleih as crud_saisonverleih
 
@@ -34,6 +37,21 @@ templates.env.filters["eur"] = _eur
 def _voller_name(vorname: str | None, nachname: str | None) -> str:
     """Fügt Vor- und Nachname zusammen, fehlende Teile werden übersprungen."""
     return " ".join(teil.strip() for teil in (vorname, nachname) if teil and teil.strip())
+
+def _quittung_kunde(kunden: dict[int, SkiKunde]) -> QuittungKundeSchema | None:
+    """Ein Kunde mit Anschrift, bei unterschiedlichen Kunden (anhand der ID) ein Sammelkunde."""
+    if not kunden:
+        return None
+    if len(kunden) > 1:
+        return QuittungKundeSchema(sammel=True, name="Sammelkunde")
+    kunde = next(iter(kunden.values()))
+    return QuittungKundeSchema(
+        id=kunde.ID,
+        name=_voller_name(kunde.Vorname, kunde.Nachname),
+        strasse=(kunde.Strasse or "").strip() or None,
+        plz=kunde.Ort.Postlz if kunde.Ort else kunde.Plz,
+        ort=kunde.Ort.Ort if kunde.Ort else None,
+    )
 
 def _AuftragzuArtikel(auftrag_id: int, db: Session) -> QuittungGruppeArtikel:
     auftrag = crud_skiservice.getSkiserviceAuftrag(db, auftrag_id)
@@ -140,12 +158,23 @@ class QuittungsService:
             pass #TODO Qittung direkt von Lexoffice holen und zurückgeben
 
            
+        # Kunden der Aufträge und Verleihe, nach ID
+        kunden: dict[int, SkiKunde] = {}
         for artikel in quittung.artikels:
             if artikel.Auftrag_ID is not None:
                 quittungOut.artikelgruppen.append(_AuftragzuArtikel(artikel.Auftrag_ID, self.db))
+                # Bereits geladen, db.get liest aus der Session
+                auftrag = self.db.get(Auftrag, artikel.Auftrag_ID)
+                if auftrag and auftrag.kunde:
+                    kunden[auftrag.kunde.ID] = auftrag.kunde
 
             if artikel.Verleih_ID is not None:
                 quittungOut.artikelgruppen.append(_VerleihzuArtikel(artikel.Verleih_ID, self.db))
+                verleih = self.db.get(SaisonVerleih, artikel.Verleih_ID)
+                if verleih and verleih.Kunde:
+                    kunden[verleih.Kunde.ID] = verleih.Kunde
+
+        quittungOut.kunde = _quittung_kunde(kunden)
         
         return quittungOut
 

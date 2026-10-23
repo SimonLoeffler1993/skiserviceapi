@@ -73,6 +73,15 @@ class QuittungsTyp(str, Enum):
     Verleih = "Verleih"
     Handware = "Handware"
 
+class QuittungKundeSchema(BaseModel):
+    # Bei Artikeln unterschiedlicher Kunden: "Sammelkunde" ohne Anschrift
+    sammel: bool = False
+    id: int | None = None
+    name: str
+    strasse: str | None = None
+    plz: int | None = None
+    ort: str | None = None
+
 class QuittungOutSchema(BaseModel):
     id: int
     name: str
@@ -87,6 +96,7 @@ class QuittungOutSchema(BaseModel):
     lexID: str | None = None
     artikelgruppen: list[QuittungGruppeArtikel] = []
     nurExtern: bool = False
+    kunde: QuittungKundeSchema | None = None
 
 class QuittungGruppeArtikel(BaseModel):
     type: QuittungsTyp

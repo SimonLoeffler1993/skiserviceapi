@@ -23,6 +23,10 @@
   .titel h1 { font-size: 20pt; margin: 0 0 2mm 0; letter-spacing: 1px; text-transform: uppercase; }
   .titel .nr { font-size: 10pt; color: #555; }
 
+  .kunde { margin-bottom: 8mm; font-size: 10.5pt; line-height: 1.45; }
+  .kunde .label { display: block; font-size: 7.5pt; text-transform: uppercase; color: #777; margin-bottom: 1mm; }
+  .kunde .name { font-weight: bold; }
+
   .meta { width: 100%; border-collapse: collapse; margin-bottom: 8mm; }
   .meta td { padding: 2mm 3mm; vertical-align: top; border: 1px solid #ddd; width: 33.33%; }
   .meta .label { display: block; font-size: 7.5pt; text-transform: uppercase; color: #777; margin-bottom: 1mm; }
@@ -90,6 +94,19 @@
     </td>
   </tr>
 </table>
+
+{# ---------- Kunde ---------- #}
+{% if quittung.kunde %}
+<div class="kunde">
+  <span class="label">Kunde</span>
+  <div class="name">{{ quittung.kunde.name }}</div>
+  {% if not quittung.kunde.sammel %}
+    {% if quittung.kunde.strasse %}<div>{{ quittung.kunde.strasse }}</div>{% endif %}
+    {% set ort = [quittung.kunde.plz, quittung.kunde.ort] | select | join(" ") %}
+    {% if ort %}<div>{{ ort }}</div>{% endif %}
+  {% endif %}
+</div>
+{% endif %}
 
 {# ---------- Meta ---------- #}
 <table class="meta">
