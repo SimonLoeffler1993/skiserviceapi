@@ -25,6 +25,12 @@ class Quittung(Base):
     # Relation zu den Artikels, die in dieser Quittung enthalten sind
     artikels: Mapped[list["QuittungArtikel"]] = relationship("QuittungArtikel", back_populates="quittung", cascade="all, delete-orphan")
 
+    @property
+    def Nummer(self) -> str:
+        """Angezeigte Nummer, z.B. "26/27Q12" oder die Lexware Rechnungsnummer. Altbestand ohne Nummer: die ID."""
+        name = (self.Name or "").strip()
+        return name if name.lower() not in ("", "quittung", "externer beleg") else str(self.ID)
+
 # mit CACADE werden alle QuittungArtikel gelöscht, wenn die Quittung gelöscht wird.
 class QuittungArtikel(Base):
     __tablename__ = "quittung_artikel"

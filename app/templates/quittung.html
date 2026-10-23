@@ -4,12 +4,12 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Quittung {{ quittung.id }}</title>
+<title>Quittung {{ quittung.nummer }}</title>
 <style>
   @page {
     size: A4;
     margin: 20mm 18mm 22mm 18mm;
-    @bottom-left  { content: "{{ firma_name }} · Quittung Nr. {{ quittung.id }}"; font-size: 8pt; color: #888; font-family: "DejaVu Sans", Arial, sans-serif; }
+    @bottom-left  { content: "{{ firma_name }} · Quittung Nr. {{ quittung.nummer }}"; font-size: 8pt; color: #888; font-family: "DejaVu Sans", Arial, sans-serif; }
     @bottom-right { content: "Seite " counter(page) " von " counter(pages); font-size: 8pt; color: #888; font-family: "DejaVu Sans", Arial, sans-serif; }
   }
   * { box-sizing: border-box; }
@@ -99,7 +99,7 @@
     </td>
     <td class="titel">
       <h1>Quittung</h1>
-      <div class="nr">Nr. {{ quittung.id }}</div>
+      <div class="nr">Nr. {{ quittung.nummer }}</div>
     </td>
   </tr>
 </table>
@@ -120,7 +120,7 @@
 {# ---------- Meta ---------- #}
 <table class="meta">
   <tr>
-    <td><span class="label">Bezeichnung</span><span class="wert">{{ quittung.name }}</span></td>
+    <td><span class="label">Quittungsnummer</span><span class="wert">{{ quittung.nummer }}</span></td>
     <td><span class="label">Datum</span><span class="wert">{{ (quittung.bezahlt_Am or quittung.erstellt_Am) | datum or heute }}</span></td>
     <!-- <td><span class="label">Saison</span><span class="wert">{{ quittung.saison_ID }}</span></td> -->
   </tr>

@@ -13,3 +13,4 @@ class Saison(Base):
     Verwendet: Mapped[int] = mapped_column(Integer)
     SaisonVerleihNummer: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     TagesVerleihNummer: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    QuittungNummer: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

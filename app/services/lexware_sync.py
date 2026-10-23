@@ -16,7 +16,9 @@ from app.models.kunde import SkiKunde
 from app.models.quittung import Quittung
 from app.schemas.quittung import QuittungGruppeArtikel, QuittungKundeSchema
 from app.services import einstellungen
-from app.services.quittung import QuittungsService, _AuftragzuArtikel, _VerleihzuArtikel, _quittung_kunde
+from app.services.quittung import (
+    QuittungsService, _AuftragzuArtikel, _VerleihzuArtikel, _quittung_kunde, quittung_dateiname, quittung_nummer,
+)
 from app.utils.lexware import LexwareAPI, LexwareFehler
 
 logger = logging.getLogger(__name__)
@@ -68,13 +70,13 @@ def _beleg_daten(quittung: Quittung, gruppen: list[QuittungGruppeArtikel], kunde
     return {
         "type": "salesinvoice",
         "voucherStatus": "open",
-        "voucherNumber": f"Q-{quittung.ID}",
+        "voucherNumber": quittung_nummer(quittung),
         "voucherDate": datum.isoformat(),
         "totalGrossAmount": brutto,
         "totalTaxAmount": steuer,
         "taxType": "gross",
         "useCollectiveContact": True,
-        "remark": f"Quittung {quittung.ID} · {_bemerkung(gruppen, kunde)}"[:1000],
+        "remark": f"Quittung {quittung_nummer(quittung)} · {_bemerkung(gruppen, kunde)}"[:1000],
         "voucherItems": [{
             "amount": brutto,
             "taxAmount": steuer,
@@ -110,7 +112,7 @@ def quittung_pdf_hochladen(db: Session, quittung_id: int) -> Quittung:
         time.sleep(PAUSE)
 
     pdf = service.renderPDF(daten)
-    api.lade_beleg_datei_hoch(quittung.LexID, pdf, f"quittung-{quittung_id}.pdf")
+    api.lade_beleg_datei_hoch(quittung.LexID, pdf, quittung_dateiname(quittung))
     quittung.BuchhaltungSync = True
     db.commit()
     db.refresh(quittung)

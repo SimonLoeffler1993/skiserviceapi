@@ -13,7 +13,7 @@ from app.crud import skiservice as crud_skiservice
 from app.schemas.quittung import QuittungListeEintrag, QuittungNurExtern, QuittungRead, QuittungOutSchema
 from app.utils.lexware import LexwareAPI
 from app.services import einstellungen
-from app.services. quittung import QuittungsService, quittungen_liste
+from app.services. quittung import QuittungsService, quittung_dateiname, quittungen_liste
 from app.crud import saison as crud_saison
 from app.services.lexware_sync import SyncKonflikt, quittung_pdf_hochladen
 from app.utils.lexware import LexwareFehler
@@ -118,6 +118,7 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
                 # eigenes Response Model mit Bezahlinfo erstellen
             quittungResponse = {
                 ** quittung.__dict__,
+                "Nummer": quittung.Nummer,
                 "BezahlInfo": bezInfo
             }
             return quittungResponse
@@ -159,7 +160,7 @@ def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
             pdf, dateiname = LexwareAPI().hole_rechnung_pdf(quittung.LexID)
         except LexwareFehler as e:
             raise HTTPException(status_code=502, detail=f"PDF konnte nicht aus Lexware geladen werden: {e}")
-        dateiname = dateiname or f"{quittung.Name or f'quittung-{quittung_id}'}.pdf"
+        dateiname = dateiname or quittung_dateiname(quittung)
         return Response(
             content=pdf,
             media_type="application/pdf",
@@ -173,7 +174,7 @@ def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
         return Response(
                 content=pdf,
                 media_type="application/pdf",
-                headers={"Content-Disposition": f'inline; filename="quittung-{quittung_id}.pdf"'},
+                headers={"Content-Disposition": f'inline; filename="{quittung_dateiname(quittung)}"'},
             )
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))

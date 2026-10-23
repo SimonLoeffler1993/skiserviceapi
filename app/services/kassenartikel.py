@@ -184,7 +184,7 @@ class KasseService:
                 quittung.AnzVerleih = 0
             else:
                 quittung = Quittung(
-                    Name="Quittung",
+                    Name=crud_saison.get_next_QuittungNummer(self.db),
                     AnzAuftrag=0,
                     AnzVerleih=0,
                     Saison_ID=aktuelle_Saison.ID,

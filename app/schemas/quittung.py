@@ -52,6 +52,7 @@ def _lexware_modus() -> str | None:
 
 class QuittungRead(QuittungBase):
     ID: int
+    Nummer: str | None = None
     NurExtern: bool | None = None
     # Aktuelle Lexware Übertragung ("pdf" / "rechnung"), None wenn aus
     LexwareModus: str | None = Field(default_factory=_lexware_modus)
@@ -94,6 +95,8 @@ class QuittungKundeSchema(BaseModel):
 class QuittungOutSchema(BaseModel):
     id: int
     name: str
+    # Angezeigte Quittungsnummer, z.B. "26/27Q12" (Altbestand: die ID)
+    nummer: str = ""
     saison_ID: int
     bezahlt: bool 
     bezahlt_Am: date | None = None
@@ -128,6 +131,8 @@ class QuittungBezug(BaseModel):
 class QuittungListeEintrag(BaseModel):
     """Zeile der Quittungsliste im Center, mit Artikeln zum Aufklappen."""
     ID: int
+    # Angezeigte Quittungsnummer, z.B. "26/27Q12"
+    Nummer: str
     Name: str | None = None
     Erstellt_Am: date | None = None
     Bezahlt_Am: date | None = None

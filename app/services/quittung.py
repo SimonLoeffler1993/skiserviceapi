@@ -39,6 +39,13 @@ def _voller_name(vorname: str | None, nachname: str | None) -> str:
     """Fügt Vor- und Nachname zusammen, fehlende Teile werden übersprungen."""
     return " ".join(teil.strip() for teil in (vorname, nachname) if teil and teil.strip())
 
+def quittung_nummer(quittung: Quittung) -> str:
+    return quittung.Nummer
+
+def quittung_dateiname(quittung: Quittung) -> str:
+    """z.B. quittung-26-27Q12.pdf"""
+    return f"quittung-{quittung_nummer(quittung).replace('/', '-')}.pdf"
+
 def _quittung_kunde(kunden: dict[int, SkiKunde]) -> QuittungKundeSchema | None:
     """Ein Kunde mit Anschrift, bei unterschiedlichen Kunden (anhand der ID) ein Sammelkunde."""
     if not kunden:
@@ -184,6 +191,7 @@ def quittungen_liste(db: Session, saison_id: int) -> list[QuittungListeEintrag]:
         kunde = _quittung_kunde(kunden)
         liste.append(QuittungListeEintrag(
             ID=q.ID,
+            Nummer=quittung_nummer(q),
             Name=q.Name,
             Erstellt_Am=q.Erstellt_Am,
             Bezahlt_Am=q.Bezahlt_Am,
@@ -214,6 +222,7 @@ class QuittungsService:
         quittungOut = QuittungOutSchema(
             id=quittung.ID,
             name=quittung.Name,
+            nummer=quittung_nummer(quittung),
             saison_ID=quittung.Saison_ID,
             bezahlt=quittung.Bezahlt,
             bezahlt_Am=quittung.Bezahlt_Am,
@@ -274,7 +283,7 @@ class QuittungsService:
             if data.ueberweisung and summe > 0:
                 # z.B. "Quittung 12 · 26/27S5, 26/27SV7"
                 nummern = [g.bezeichnung.split(" - ")[1] for g in data.artikelgruppen if g.bezeichnung.count(" - ") >= 1]
-                verwendungszweck = f"Quittung {data.id}" + (f" - {', '.join(nummern)}" if nummern else "")
+                verwendungszweck = data.nummer + (f" - {', '.join(nummern)}" if nummern else "")
                 girocode = girocode_png_data_uri(inhaber, iban, bic, summe, verwendungszweck)
 
         html = templates.get_template("quittung.html").render(

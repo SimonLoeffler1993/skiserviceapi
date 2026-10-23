@@ -108,6 +108,8 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           beschreibung="Ergibt z.B. 25/26TV3"),
     EinstellungDefinition("KUERZEL_SKISERVICE", "anwendung", "Kürzel Skiservice Nummer", standard="S",
                           beschreibung="Ergibt z.B. 25/26S12"),
+    EinstellungDefinition("KUERZEL_QUITTUNG", "anwendung", "Kürzel Quittungsnummer", standard="Q",
+                          beschreibung="Ergibt z.B. 25/26Q12"),
 ]
 
 DEFINITION_NACH_SCHLUESSEL = {d.schluessel: d for d in DEFINITIONEN}

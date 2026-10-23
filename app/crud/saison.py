@@ -33,6 +33,25 @@ def get_next_SaisonVerleihNummer(db: Session, art: str = "saison"):
     return saisonData.Name + einstellungen.hole("KUERZEL_SAISONVERLEIH") + str(nexteNummer)
 
 
+def get_next_QuittungNummer(db: Session) -> str:
+    """
+    Nächste Quittungsnummer der aktuellen Saison, z.B. "26/27Q12".
+    Wie beim Verleih gesperrt und ohne Commit, die Nummer wird mit der Quittung gespeichert.
+    """
+    saisonData = (
+        db.query(Saison)
+        .filter(Saison.Verwendet == 1)
+        .with_for_update()
+        .first()
+    )
+    if saisonData is None:
+        raise ValueError("Keine aktuelle Saison vorhanden.")
+
+    nexteNummer = (saisonData.QuittungNummer or 0) + 1
+    saisonData.QuittungNummer = nexteNummer
+    return saisonData.Name + einstellungen.hole("KUERZEL_QUITTUNG") + str(nexteNummer)
+
+
 def get_all_saisons(db: Session):
     return db.query(Saison).all()
 
