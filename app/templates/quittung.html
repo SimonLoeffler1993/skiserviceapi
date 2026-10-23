@@ -60,6 +60,15 @@
   .unterschrift .linie { width: 70mm; border-top: 1px solid #1a1a1a; padding-top: 1.5mm; font-size: 8pt; color: #777; }
 
   .hinweis { margin-top: 8mm; font-size: 8pt; color: #777; }
+
+  .ueberweisung { width: 100%; border-collapse: collapse; }
+  .ueberweisung td { vertical-align: top; padding: 0; }
+  .ueberweisung .qr { width: 34mm; text-align: center; padding-left: 4mm; }
+  .ueberweisung .qr img { width: 30mm; height: 30mm; }
+  .ueberweisung .qr .text { font-size: 7pt; color: #777; }
+  .zweck { margin-top: 2mm; font-family: "DejaVu Sans Mono", monospace; font-size: 9pt; }
+
+  .bank { page-break-inside: avoid; margin-top: 8mm; padding-top: 2mm; border-top: 1px solid #ddd; font-size: 8pt; color: #555; }
 </style>
 </head>
 <body>
@@ -171,7 +180,30 @@
 
 {# ---------- Zahlung ---------- #}
 <div class="zahlung">
-  {% if quittung.bezahlt %}
+  {% if quittung.ueberweisung %}
+  <table class="ueberweisung">
+    <tr>
+      <td>
+        <span class="status offen">Bitte überweisen Sie den Betrag von {{ summe | eur }}</span>
+        {% if bank %}
+          an {{ bank.inhaber }}{% if bank.name %} ({{ bank.name }}){% endif %}<br>
+          IBAN {{ bank.iban }}{% if bank.bic %} · BIC {{ bank.bic }}{% endif %}
+        {% endif %}
+        {% if verwendungszweck %}
+          <div>unter Angabe des Verwendungszwecks:</div>
+          <div class="zweck">{{ verwendungszweck }}</div>
+        {% endif %}
+        <br>Zahlungsart: Überweisung
+      </td>
+      {% if girocode %}
+      <td class="qr">
+        <img src="{{ girocode }}" alt="GiroCode">
+        <div class="text">GiroCode – mit der Banking-App scannen</div>
+      </td>
+      {% endif %}
+    </tr>
+  </table>
+  {% elif quittung.bezahlt %}
     <span class="status bezahlt">Betrag dankend erhalten</span>
     {% if quittung.bezahlt_Am %} am {{ quittung.bezahlt_Am | datum }}{% endif %}
   {% else %}
@@ -180,13 +212,18 @@
   {% set arten = [] %}
   {% if quittung.bar %}{% set _ = arten.append("Bar") %}{% endif %}
   {% if quittung.karte %}{% set _ = arten.append("Karte") %}{% endif %}
-  {% if quittung.ueberweisung %}{% set _ = arten.append("Überweisung") %}{% endif %}
-  {% if arten %}<br>Zahlungsart: {{ arten | join(", ") }}{% endif %}
+  {% if arten and not quittung.ueberweisung %}<br>Zahlungsart: {{ arten | join(", ") }}{% endif %}
 </div>
 
-{% if quittung.bezahlt %}
+{% if quittung.bezahlt and not quittung.ueberweisung %}
 <div class="unterschrift">
   <div class="linie">Ort, Datum, Unterschrift</div>
+</div>
+{% endif %}
+
+{% if bank %}
+<div class="bank">
+  <strong>Bankverbindung:</strong> {{ bank.inhaber }}{% if bank.name %} · {{ bank.name }}{% endif %} · IBAN {{ bank.iban }}{% if bank.bic %} · BIC {{ bank.bic }}{% endif %}
 </div>
 {% endif %}
 

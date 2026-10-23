@@ -9,6 +9,7 @@ from weasyprint import HTML
 
 from app.models.quittung import Quittung
 from app.services import einstellungen
+from app.utils.girocode import girocode_png_data_uri, iban_formatiert
 from app.schemas.quittung import QuittungArtikelSchema, QuittungBezug, QuittungKundeSchema, QuittungListeEintrag, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
 from app.models.kunde import SkiKunde
 from app.models.saisonverleih import SaisonVerleih
@@ -259,7 +260,27 @@ class QuittungsService:
             "kleinunternehmer": einstellungen.hole("FIRMA_KLEINUNTERNEHMER"),
         }
 
-        html = templates.get_template("quittung.html").render(quittung=data, firma=FIRMA, heute=_datum(date.today()))
+        summe = round(sum(a.preis * a.anzahl for g in data.artikelgruppen for a in g.artikels), 2)
+
+        # Bankverbindung immer, GiroCode nur bei Überweisung
+        bank = None
+        girocode = None
+        verwendungszweck = None
+        iban = einstellungen.hole("BANK_IBAN")
+        if iban:
+            inhaber = (einstellungen.hole("BANK_KONTOINHABER") or "").strip() or FIRMA["name"]
+            bic = einstellungen.hole("BANK_BIC") or None
+            bank = {"inhaber": inhaber, "iban": iban_formatiert(iban), "bic": bic, "name": einstellungen.hole("BANK_NAME")}
+            if data.ueberweisung and summe > 0:
+                # z.B. "Quittung 12 · 26/27S5, 26/27SV7"
+                nummern = [g.bezeichnung.split(" - ")[1] for g in data.artikelgruppen if g.bezeichnung.count(" - ") >= 1]
+                verwendungszweck = f"Quittung {data.id}" + (f" - {', '.join(nummern)}" if nummern else "")
+                girocode = girocode_png_data_uri(inhaber, iban, bic, summe, verwendungszweck)
+
+        html = templates.get_template("quittung.html").render(
+            quittung=data, firma=FIRMA, heute=_datum(date.today()),
+            summe=summe, bank=bank, girocode=girocode, verwendungszweck=verwendungszweck,
+        )
         pdf = HTML(string=html, base_url=str(templates)).write_pdf()
 
         if not pdf:
