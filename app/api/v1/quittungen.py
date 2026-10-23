@@ -10,10 +10,11 @@ from app.db.deps import get_db
 from app.crud import quittung as crud_quittung
 from app.crud import saisonverleih as crud_saisonverleih
 from app.crud import skiservice as crud_skiservice
-from app.schemas.quittung import QuittungNurExtern, QuittungRead, QuittungOutSchema
+from app.schemas.quittung import QuittungListeEintrag, QuittungNurExtern, QuittungRead, QuittungOutSchema
 from app.utils.lexware import LexwareAPI
 from app.services import einstellungen
-from app.services. quittung import QuittungsService
+from app.services. quittung import QuittungsService, quittungen_liste
+from app.crud import saison as crud_saison
 from app.services.lexware_sync import SyncKonflikt, quittung_pdf_hochladen
 from app.utils.lexware import LexwareFehler
 
@@ -54,6 +55,16 @@ async def get_lexware_quittung(lex_quittung_id: str):
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
     
+@router.get("/liste", response_model=list[QuittungListeEintrag])
+def liste_quittungen(saison: Optional[int] = None, db: Session = Depends(get_db)):
+    """Alle Quittungen einer Saison (ohne Angabe die aktuelle), neueste zuerst, mit Artikeln."""
+    if saison is None:
+        aktuelle = crud_saison.get_AktuelleSaison(db)
+        if aktuelle is None:
+            raise HTTPException(status_code=404, detail="Keine aktuelle Saison gefunden")
+        saison = aktuelle.ID
+    return quittungen_liste(db, saison)
+
 @router.get("/quittung/{quittung_id}", response_model=QuittungRead)
 async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session = Depends(get_db)):
     """

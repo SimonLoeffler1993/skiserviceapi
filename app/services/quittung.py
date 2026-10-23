@@ -1,15 +1,15 @@
 
 from fastapi import HTTPException
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from collections import Counter
+from sqlalchemy.orm import Session, selectinload
+from collections import Counter, defaultdict
 from datetime import date
 from decimal import Decimal
 from weasyprint import HTML
 
 from app.models.quittung import Quittung
 from app.services import einstellungen
-from app.schemas.quittung import QuittungArtikelSchema, QuittungKundeSchema, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
+from app.schemas.quittung import QuittungArtikelSchema, QuittungBezug, QuittungKundeSchema, QuittungListeEintrag, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
 from app.models.kunde import SkiKunde
 from app.models.saisonverleih import SaisonVerleih
 from app.models.skiservice import Auftrag
@@ -53,17 +53,11 @@ def _quittung_kunde(kunden: dict[int, SkiKunde]) -> QuittungKundeSchema | None:
         ort=kunde.Ort.Ort if kunde.Ort else None,
     )
 
-def _AuftragzuArtikel(auftrag_id: int, db: Session) -> QuittungGruppeArtikel:
-    auftrag = crud_skiservice.getSkiserviceAuftrag(db, auftrag_id)
+def auftrag_gruppe(auftrag: Auftrag) -> QuittungGruppeArtikel:
+    """Artikelgruppe eines geladenen Auftrags: gleiche Services mit gleichem Preis werden zusammengezählt."""
     service_Counter: Counter[tuple[str, float]] = Counter()
     bindung_Counter: Counter[float] = Counter()
 
-    if not auftrag:
-        raise HTTPException(
-                    status_code=404,
-                    detail=f"Quittung verweist auf Auftrag {auftrag_id}, der nicht existiert",
-                )
-    
     for ski in auftrag.skis:
         # Wen Service und Preis identisch ist wird Hochgezählt
         service_Counter[(ski.service, ski.preis)] += 1
@@ -73,7 +67,7 @@ def _AuftragzuArtikel(auftrag_id: int, db: Session) -> QuittungGruppeArtikel:
     kunde = auftrag.kunde
     name = _voller_name(kunde.Vorname, kunde.Nachname) if kunde else ""
     bez = f"Skiservice - {auftrag.name} - {name}"
-    artikelgruppe = QuittungGruppeArtikel(type=QuittungsTyp.Auftrag, toID=auftrag_id, bezeichnung=bez)
+    artikelgruppe = QuittungGruppeArtikel(type=QuittungsTyp.Auftrag, toID=auftrag.id, bezeichnung=bez)
         
     for (service, preis), anzahl in service_Counter.items():
         artikelgruppe.artikels.append(QuittungArtikelSchema(
@@ -81,7 +75,7 @@ def _AuftragzuArtikel(auftrag_id: int, db: Session) -> QuittungGruppeArtikel:
             bezeichnung=service,
             preis=preis,
             anzahl=anzahl,
-            toID=auftrag_id
+            toID=auftrag.id
         ))
 
     for bindung_preis, anzahl in bindung_Counter.items():
@@ -91,29 +85,21 @@ def _AuftragzuArtikel(auftrag_id: int, db: Session) -> QuittungGruppeArtikel:
             bezeichnung="Bindungscheck",
             preis=bindung_preis,
             anzahl=anzahl,
-            toID=auftrag_id
+            toID=auftrag.id
         ))
 
     return artikelgruppe
 
-def _VerleihzuArtikel(verleihID: int, db: Session) -> QuittungGruppeArtikel:
-    # ertmal daten aus DB lesen
-    verleih = crud_saisonverleih.get_saisonverleih(db, verleihID)
+def verleih_gruppe(verleih: SaisonVerleih) -> QuittungGruppeArtikel:
+    """Artikelgruppe eines geladenen Verleihs: Material mit gleichem Preis wird zusammengezählt."""
     # TODO #26 Verleih bezeichnung mit auf der Quittung
     verleih_counter: Counter[float] = Counter()
-
-    #Wen nix gefunden wird auch nix zurück
-    if not verleih:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Quittung verweist auf Verleih {verleihID}, der nicht existiert",
-        )
 
     # artikel Init
     kunde = verleih.Kunde
     name = _voller_name(kunde.Vorname, kunde.Nachname) if kunde else ""
     bez = f"Verleih - {verleih.Name} - {name}"
-    artikelgruppe = QuittungGruppeArtikel(type=QuittungsTyp.Verleih, toID=verleihID, bezeichnung=bez)
+    artikelgruppe = QuittungGruppeArtikel(type=QuittungsTyp.Verleih, toID=verleih.ID, bezeichnung=bez)
 
     for ski in verleih.Material:
         verleih_counter[ski.Preis] += 1
@@ -124,10 +110,94 @@ def _VerleihzuArtikel(verleihID: int, db: Session) -> QuittungGruppeArtikel:
             bezeichnung=verleih.Bezeichnung,
             preis=verleih_Preis,
             anzahl=anzahl,
-            toID=verleihID
+            toID=verleih.ID
         ))
 
     return artikelgruppe
+
+def _AuftragzuArtikel(auftrag_id: int, db: Session) -> QuittungGruppeArtikel:
+    auftrag = crud_skiservice.getSkiserviceAuftrag(db, auftrag_id)
+    if not auftrag:
+        raise HTTPException(
+                    status_code=404,
+                    detail=f"Quittung verweist auf Auftrag {auftrag_id}, der nicht existiert",
+                )
+    return auftrag_gruppe(auftrag)
+
+def _VerleihzuArtikel(verleihID: int, db: Session) -> QuittungGruppeArtikel:
+    verleih = crud_saisonverleih.get_saisonverleih(db, verleihID)
+    #Wen nix gefunden wird auch nix zurück
+    if not verleih:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Quittung verweist auf Verleih {verleihID}, der nicht existiert",
+        )
+    return verleih_gruppe(verleih)
+
+def zahlart_text(bar: bool | None, karte: bool | None, ueberweisung: bool | None) -> str:
+    """z.B. "Bar" oder "EC, Überweisung", leer wenn nichts angegeben"""
+    return ", ".join(name for name, aktiv in (("Bar", bar), ("EC", karte), ("Überweisung", ueberweisung)) if aktiv)
+
+def quittungen_liste(db: Session, saison_id: int) -> list[QuittungListeEintrag]:
+    """
+    Alle Quittungen einer Saison mit Artikeln, Betrag, Kunde und Bezügen.
+    Aufträge und Verleihe werden gesammelt geladen (je eine Abfrage), nicht pro Quittung.
+    """
+    quittungen = (
+        db.query(Quittung)
+        .filter(Quittung.Saison_ID == saison_id)
+        .order_by(Quittung.ID.desc())
+        .all()
+    )
+    ids = [q.ID for q in quittungen]
+    if not ids:
+        return []
+
+    auftraege = (
+        db.query(Auftrag)
+        .filter(Auftrag.quittung_id.in_(ids))
+        .options(selectinload(Auftrag.skis), selectinload(Auftrag.kunde).selectinload(SkiKunde.Ort))
+        .order_by(Auftrag.id)
+        .all()
+    )
+    verleihe = (
+        db.query(SaisonVerleih)
+        .filter(SaisonVerleih.QuittungID.in_(ids))
+        .options(selectinload(SaisonVerleih.Material), selectinload(SaisonVerleih.Kunde).selectinload(SkiKunde.Ort))
+        .order_by(SaisonVerleih.ID)
+        .all()
+    )
+    nach_quittung_a: dict[int, list[Auftrag]] = defaultdict(list)
+    for a in auftraege:
+        nach_quittung_a[a.quittung_id].append(a)
+    nach_quittung_v: dict[int, list[SaisonVerleih]] = defaultdict(list)
+    for v in verleihe:
+        nach_quittung_v[v.QuittungID].append(v)
+
+    liste = []
+    for q in quittungen:
+        q_auftraege = nach_quittung_a.get(q.ID, [])
+        q_verleihe = nach_quittung_v.get(q.ID, [])
+        gruppen = [auftrag_gruppe(a) for a in q_auftraege] + [verleih_gruppe(v) for v in q_verleihe]
+        kunden = {k.ID: k for k in [a.kunde for a in q_auftraege] + [v.Kunde for v in q_verleihe] if k is not None}
+        kunde = _quittung_kunde(kunden)
+        liste.append(QuittungListeEintrag(
+            ID=q.ID,
+            Name=q.Name,
+            Erstellt_Am=q.Erstellt_Am,
+            Bezahlt_Am=q.Bezahlt_Am,
+            Bezahlt=bool(q.Bezahlt),
+            Zahlart=zahlart_text(q.Bar, q.Karte, q.Ueberweisung),
+            Betrag=round(sum(a.preis * a.anzahl for g in gruppen for a in g.artikels), 2),
+            Kunde=kunde.name if kunde else None,
+            Bezuege=[QuittungBezug(art="auftrag", id=a.id, name=a.name) for a in q_auftraege]
+                    + [QuittungBezug(art="verleih", id=v.ID, name=v.Name) for v in q_verleihe],
+            NurExtern=bool(q.NurExtern),
+            LexID=q.LexID or None,
+            BuchhaltungSync=bool(q.BuchhaltungSync),
+            artikelgruppen=gruppen,
+        ))
+    return liste
 
 class QuittungsService:
     def __init__(self, db: Session):

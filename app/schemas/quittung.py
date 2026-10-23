@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 from enum import Enum 
@@ -119,3 +120,25 @@ class QuittungArtikelSchema(BaseModel):
     anzahl: int
     toID: int
 
+class QuittungBezug(BaseModel):
+    art: Literal["auftrag", "verleih"]
+    id: int
+    name: str | None = None
+
+class QuittungListeEintrag(BaseModel):
+    """Zeile der Quittungsliste im Center, mit Artikeln zum Aufklappen."""
+    ID: int
+    Name: str | None = None
+    Erstellt_Am: date | None = None
+    Bezahlt_Am: date | None = None
+    Bezahlt: bool
+    # z.B. "Bar" oder "EC, Überweisung"
+    Zahlart: str
+    Betrag: float
+    # Kundenname bzw. "Sammelkunde"
+    Kunde: str | None = None
+    Bezuege: list[QuittungBezug] = []
+    NurExtern: bool
+    LexID: str | None = None
+    BuchhaltungSync: bool
+    artikelgruppen: list[QuittungGruppeArtikel] = []
