@@ -70,7 +70,9 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
 
     if alleSkiFertig:
         nachricht = " Alle Ski sind fertig bearbeitet."
-        if auftrag.benachrichtigt.lower() == "nein":
+        if not AuftragSkiFertig.mail:
+            nachricht = " Alle Ski sind fertig bearbeitet (ohne Mail)."
+        elif auftrag.benachrichtigt.lower() == "nein":
             mailSend = await run_in_threadpool(sendeFertigMail, auftragSchema)
             if mailSend:
                 crud_skiservice.setzeBenachrichtigt(db, AuftragSkiFertig.id, benachrichtigt=True)

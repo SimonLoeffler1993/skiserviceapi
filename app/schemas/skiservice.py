@@ -81,6 +81,8 @@ class AuftragSchema(BaseModel):
 class AuftragSkiFertigSchema(BaseModel):
     id: int
     ski_ids: list[int]
+    # Fertig-Mail senden, wenn danach alle Ski fertig sind
+    mail: bool = True
 
 class SkiBindungFertigSchema(BaseModel):
     ski_ids: list[int]

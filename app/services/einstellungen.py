@@ -76,6 +76,9 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("SMTP_PASSWORD", "mail", "Passwort", typ="passwort"),
     EinstellungDefinition("EMAIL_FROM", "mail", "Absender Adresse"),
     EinstellungDefinition("MAIL_BETREFF_FERTIG", "mail", "Betreff Fertig-Mail", standard="Dein Skiservice ist fertig!"),
+    EinstellungDefinition("MAIL_FERTIG_INHALT", "mail", "Inhalt Fertig-Mail", typ="auswahl", standard="preise",
+                          optionen=["fertig", "preise"],
+                          beschreibung="Nur die Fertig-Meldung oder zusätzlich die Auflistung der Leistungen mit Preisen."),
 
     # Lexware
     EinstellungDefinition("LEXWARE_BASEURL", "lexware", "API Adresse", standard="https://api.lexware.io"),
