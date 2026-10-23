@@ -6,3 +6,4 @@ SQLUpdate/*.sql
 /testdocker
 .env.*
 .venv/
+dbcopy.py

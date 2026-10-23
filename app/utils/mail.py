@@ -58,16 +58,21 @@ def sendeMail(msg: MIMEMultipart | MIMEText):
             server.login(smtpUser, einstellungen.hole("SMTP_PASSWORD"))
         server.send_message(msg)
 
+def fertigMailHtml(auftrag: AuftragSchema) -> str:
+    """HTML der Fertig-Mail, je nach Einstellung mit oder ohne Preisauflistung."""
+    mit_preisen = einstellungen.hole("MAIL_FERTIG_INHALT") == "preise"
+    ski_zusammenfassung = skizusammenfassen(auftrag.skis) if mit_preisen else {}
+    total_preis = sum(service["gesamtpreis"] for service in ski_zusammenfassung.values())
+
+    return templates.get_template("fertig_skiservice_mail.html").render(
+        auftrag=auftrag, skiservices=ski_zusammenfassung, total_preis=total_preis, mit_preisen=mit_preisen)
+
 def sendeFertigMail(auftrag: AuftragSchema):
     if not auftrag.kunde or not auftrag.kunde.Email:
         logger.info("Keine E-Mail Adresse beim Kunden hinterlegt, keine Fertig-Mail versendet.")
         return False
 
-    ski_zusammenfassung = skizusammenfassen(auftrag.skis)
-
-    total_preis = sum(service["gesamtpreis"] for service in ski_zusammenfassung.values())
-
-    html = templates.get_template("fertig_skiservice_mail.html").render(auftrag=auftrag, skiservices=ski_zusammenfassung, total_preis=total_preis)
+    html = fertigMailHtml(auftrag)
 
     msg = MIMEMultipart()
     msg['From'] = einstellungen.hole("EMAIL_FROM")

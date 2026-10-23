@@ -7,6 +7,7 @@ from app.schemas.saison import SaisonRead
 from app.schemas.materialski import EigenSkiRead
 from app.schemas.materialschuh import EigenSchuhRead
 from app.schemas.materialstock import SkiStockOut
+from app.schemas.bindungsdaten import BindungsdatenBase, BindungsdatenRead
 
 
 
@@ -18,6 +19,10 @@ class SaisonVerleihMaterialBase(BaseModel):
     stocklaenge: Optional[int] = None
     Preis: float
     SkiFahrerName: Optional[str] = None # Name der Person, die das Material fährt (kann vom Kunden abweichen)
+    # Optional, leer bzw. null entfernt die Bindungsdaten
+    bindungsdaten: Optional[BindungsdatenBase] = None
+    # Aus "Letzte Daten abfragen" übernommener Datensatz, wird beim Speichern archiviert
+    vorlage_id: Optional[int] = None
 
     model_config = {
         "from_attributes": True
@@ -31,7 +36,9 @@ class SaisonVerleihMaterialCreate(SaisonVerleihMaterialBase):
 
 
 class SaisonVerleihMaterialUpdate(BaseModel):
-    # Nur gesetzte Felder werden geändert
+    # Nur gesetzte Felder werden geändert. bindungsdaten: null entfernt sie
+    bindungsdaten: Optional[BindungsdatenBase] = None
+    vorlage_id: Optional[int] = None
     skinr: Optional[str] = None
     schuhnr: Optional[int] = None
     stockbez_ID: Optional[int] = None
@@ -45,6 +52,7 @@ class SaisonVerleihMaterialRead(SaisonVerleihMaterialBase):
     Ski: EigenSkiRead | None = None
     Schuh: EigenSchuhRead | None = None
     Stock: SkiStockOut | None = None
+    bindungsdaten: BindungsdatenRead | None = None
     # Optional: verschachtelte Infos aus den Relationen (falls du eigene Out-Schemas hast)
     # Ski: Optional[EigenSkiRead] = None
     # Schuh: Optional[EigenSchuhRead] = None

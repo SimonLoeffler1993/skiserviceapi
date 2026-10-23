@@ -31,7 +31,8 @@ class SaisonVerleihMaterial(Base):
         "SaisonVerleih", back_populates="Material"
     )
 
-    skinr: Mapped[str | None] = mapped_column(String(50), ForeignKey("eigenski.SkiNr"))
+    # ON UPDATE CASCADE: Wird die Ski-Nr. geändert, ziehen die Verleihe automatisch mit
+    skinr: Mapped[str | None] = mapped_column(String(50), ForeignKey("eigenski.SkiNr", onupdate="CASCADE"))
     Ski: Mapped[Optional[EigenSki]] = relationship(
         EigenSki,
         primaryjoin="SaisonVerleihMaterial.skinr == EigenSki.SkiNr",
@@ -47,6 +48,8 @@ class SaisonVerleihMaterial(Base):
     stocklaenge: Mapped[int | None] = mapped_column(Integer)
     Preis: Mapped[float] = mapped_column(Double)
     SkiFahrerName: Mapped[str | None] = mapped_column(String(150), default=None)
+    # Bindungsdaten des Fahrers (optional)
+    bindungsdaten: Mapped[Optional["Bindungsdaten"]] = relationship("Bindungsdaten", back_populates="material", uselist=False)
 
 
 class SaisonVerleih(Base):

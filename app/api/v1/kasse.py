@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
 from app.services.kassenartikel import KasseService
+from app.services.lexware_sync import lexware_modus, quittung_pdf_hochladen_hintergrund
+from app.utils.lexware import LexwareFehler
 from app.schemas.kasse import KasseBezahlenSchema, KasseHatBezahltSchema, KassenArtikelSchema, KasseEinzelArtikelSchema, KasseArtikelKategorie
 
 router = APIRouter(
@@ -25,11 +27,18 @@ async def artikels(artikelkategorie: KasseArtikelKategorie = KasseArtikelKategor
     return []
 
 @router.post("/bezahlen", response_model=KasseHatBezahltSchema)
-async def bezahlen(artikels: KasseBezahlenSchema, db: Session = Depends(get_db)):
+def bezahlen(artikels: KasseBezahlenSchema, hintergrund: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Markiert die angegebenen Artikels als bezahlt.
+    Lexware Modus "pdf": die Quittung wird danach im Hintergrund als Beleg mit PDF hochgeladen.
+    Lexware Modus "rechnung": die Rechnung wird direkt in Lexware angelegt, schlägt das fehl, wird nichts bezahlt.
     """
     try:
-        return KasseService(db).bezahlen(artikels)
+        ergebnis = KasseService(db).bezahlen(artikels)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except LexwareFehler as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    if lexware_modus() == "pdf":
+        hintergrund.add_task(quittung_pdf_hochladen_hintergrund, ergebnis.quittung_id)
+    return ergebnis

@@ -9,10 +9,14 @@ from typing import Optional
 from app.db.deps import get_db
 from app.crud import quittung as crud_quittung
 from app.crud import saisonverleih as crud_saisonverleih
-from app.schemas.quittung import QuittungNurExtern, QuittungRead, QuittungOutSchema
+from app.crud import skiservice as crud_skiservice
+from app.schemas.quittung import QuittungListeEintrag, QuittungNurExtern, QuittungRead, QuittungOutSchema
 from app.utils.lexware import LexwareAPI
 from app.services import einstellungen
-from app.services. quittung import QuittungsService
+from app.services. quittung import QuittungsService, quittung_dateiname, quittungen_liste
+from app.crud import saison as crud_saison
+from app.services.lexware_sync import SyncKonflikt, quittung_pdf_hochladen
+from app.utils.lexware import LexwareFehler
 
 router = APIRouter(
     prefix="/quittungen",
@@ -51,6 +55,16 @@ async def get_lexware_quittung(lex_quittung_id: str):
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
     
+@router.get("/liste", response_model=list[QuittungListeEintrag])
+def liste_quittungen(saison: Optional[int] = None, db: Session = Depends(get_db)):
+    """Alle Quittungen einer Saison (ohne Angabe die aktuelle), neueste zuerst, mit Artikeln."""
+    if saison is None:
+        aktuelle = crud_saison.get_AktuelleSaison(db)
+        if aktuelle is None:
+            raise HTTPException(status_code=404, detail="Keine aktuelle Saison gefunden")
+        saison = aktuelle.ID
+    return quittungen_liste(db, saison)
+
 @router.get("/quittung/{quittung_id}", response_model=QuittungRead)
 async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session = Depends(get_db)):
     """
@@ -104,6 +118,7 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
                 # eigenes Response Model mit Bezahlinfo erstellen
             quittungResponse = {
                 ** quittung.__dict__,
+                "Nummer": quittung.Nummer,
                 "BezahlInfo": bezInfo
             }
             return quittungResponse
@@ -115,11 +130,43 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
             logger.exception("Bezahlstatus von Lexware konnte nicht abgerufen werden")
     return quittung
 
+@router.post("/quittung/{quittung_id}/lexware", response_model=QuittungRead)
+def quittung_nach_lexware(quittung_id: int, db: Session = Depends(get_db)):
+    """
+    Lädt eine eigene Quittung als Beleg mit PDF nach Lexware hoch (z.B. wenn der automatische Upload fehlgeschlagen ist).
+    """
+    try:
+        quittung = quittung_pdf_hochladen(db, quittung_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except SyncKonflikt as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except LexwareFehler as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return crud_quittung.get_quittung(db, quittung.ID)
+
 @router.get("/quittung/{quittung_id}/pdf")
-async def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
+def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
     """
     Holt das PDF einer Quittung anhand der ID.
     """
+    quittung = crud_quittung.get_quittung(db, quittung_id)
+    if quittung is None:
+        raise HTTPException(status_code=404, detail="Quittung nicht gefunden")
+
+    # Externe Quittung: das Original liegt in Lexware
+    if quittung.NurExtern and quittung.LexID:
+        try:
+            pdf, dateiname = LexwareAPI().hole_rechnung_pdf(quittung.LexID)
+        except LexwareFehler as e:
+            raise HTTPException(status_code=502, detail=f"PDF konnte nicht aus Lexware geladen werden: {e}")
+        dateiname = dateiname or quittung_dateiname(quittung)
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{dateiname}"'},
+        )
+
     try:
         quittungsdata = QuittungsService(db).get_quittung(quittung_id)
         pdf = QuittungsService(db).renderPDF(quittungsdata)
@@ -127,7 +174,7 @@ async def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
         return Response(
                 content=pdf,
                 media_type="application/pdf",
-                headers={"Content-Disposition": f'inline; filename="quittung-{quittung_id}.pdf"'},
+                headers={"Content-Disposition": f'inline; filename="{quittung_dateiname(quittung)}"'},
             )
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
@@ -143,25 +190,36 @@ async def get_quittung_json(quittung_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
 
 @router.post("/quittung/nurextern")
-async def create_quittung_nur_extern(quittung_data: QuittungNurExtern, db: Session = Depends(get_db)):
-    # Zuerst Prüfen ob es eine Saisonverleih gibt
-    saisonverleih = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id=quittung_data.SaisonverleihID)
-    if saisonverleih is None:
-        raise HTTPException(status_code=404, detail="Saisonverleih not found")
-    
-    print(f"Saisonverleih wurde gefunden: ID {saisonverleih.ID}")
-    
-    neuExQuittung = crud_quittung.create_NurExtern_quittung(db, saisonverleih_id=quittung_data.SaisonverleihID, lexoffice_id=quittung_data.LexOfficeID)
-    if neuExQuittung is None:
-        raise HTTPException(status_code=500, detail="Fehler beim Erstellen der Quittung")
-    
-    print(f"Neue Quittung wurde erstellt: ID {neuExQuittung.ID}")
-    
-    # Saisonverleih mit Quittung verknüpfen
-    success = crud_saisonverleih.set_Saisonverleih_Quittung(db, saisonverleih_id=quittung_data.SaisonverleihID, quittung_id=neuExQuittung.ID)
-    if not success:
-        raise HTTPException(status_code=500, detail="Fehler beim Verknüpfen der Quittung mit dem Saisonverleih")
-    
+def create_quittung_nur_extern(quittung_data: QuittungNurExtern, db: Session = Depends(get_db)):
+    """
+    Weist einem Saisonverleih oder einem Skiservice-Auftrag einen externen Lexware-Beleg als Quittung zu.
+    """
+    # Ziel prüfen, bevor die Quittung angelegt wird
+    if quittung_data.SaisonverleihID is not None:
+        ziel = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id=quittung_data.SaisonverleihID)
+        if ziel is None:
+            raise HTTPException(status_code=404, detail="Saisonverleih nicht gefunden")
+        if ziel.QuittungID is not None:
+            raise HTTPException(status_code=409, detail="Dem Saisonverleih ist bereits eine Quittung zugewiesen")
+    else:
+        ziel = crud_skiservice.getSkiserviceAuftrag(db, quittung_data.AuftragID, mitski=False)
+        if ziel is None:
+            raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+        if ziel.quittung_id is not None:
+            raise HTTPException(status_code=409, detail="Dem Auftrag ist bereits eine Quittung zugewiesen")
+
+    try:
+        neuExQuittung = crud_quittung.create_NurExtern_quittung(db, lexoffice_id=quittung_data.LexOfficeID)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Mit der Quittung verknüpfen
+    if quittung_data.SaisonverleihID is not None:
+        ziel.QuittungID = neuExQuittung.ID
+    else:
+        ziel.quittung_id = neuExQuittung.ID
+    db.commit()
+
     return {"erfolgreich": True, "quittung_id": neuExQuittung.ID}
 
 @router.get("/test")

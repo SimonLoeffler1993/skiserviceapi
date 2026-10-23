@@ -5,10 +5,14 @@ import logging
 from typing import Optional
 
 from app.models.saisonverleih import SkiSaisonverleihPreise, SaisonVerleih, SaisonVerleihMaterial
+from app.models.materialski import EigenSki
+from app.models.materialschuh import EigenSchuh
+from app.models.materialstock import Skistock
 from app.schemas.saisonverleih import SaisonVerleihCreate, SaisonVerleihPreisBase, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate
 from app.crud import saison as crud_saison
 from app.utils.skiEttiket import SkiEttiket
 from app.services import einstellungen
+from app.crud.bindungsdaten import setze_bindungsdaten
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +133,29 @@ def belegung_text(belegung: dict) -> str:
     return f"{belegung['Material']} ist bereits verliehen: {belegung['Name']} ({zeitraum}, {belegung['Kunde']})"
 
 
+def material_nicht_verfuegbar(db: Session, skinr: Optional[str], schuhnr: Optional[int], stockbez_ID: Optional[int]) -> Optional[str]:
+    """Prüft, ob Ski, Schuh und Stock existieren und nicht ausgemustert sind. Gibt sonst eine Meldung zurück."""
+    if skinr:
+        ski = db.query(EigenSki).filter(EigenSki.SkiNr == skinr).first()
+        if ski is None:
+            return f"Ski {skinr} existiert nicht."
+        if ski.Ausgemustert:
+            return f"Ski {skinr} ist ausgemustert."
+    if schuhnr:
+        schuh = db.get(EigenSchuh, schuhnr)
+        if schuh is None:
+            return "Der Schuh existiert nicht."
+        if schuh.Ausgemustert:
+            return f"Schuh {schuh.SchuhNr} ist ausgemustert."
+    if stockbez_ID and stockbez_ID > 0:
+        stock = db.get(Skistock, stockbez_ID)
+        if stock is None:
+            return "Der Stock existiert nicht."
+        if stock.Ausgemustert:
+            return f"Stock {stock.Bezeichnung} ist ausgemustert."
+    return None
+
+
 def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
 
     # Namen in Array
@@ -157,6 +184,12 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
             QuittungID=saisonverleih.QuittungID
         )
 
+        # Ausgemustertes Material darf nicht mehr verliehen werden
+        for material in saisonverleih.Material:
+            fehler = material_nicht_verfuegbar(db, material.skinr or None, material.schuhnr or None, material.stockbez_ID)
+            if fehler:
+                return {"success": False, "data": None, "error": fehler}
+
         # Beim Tagesverleih prüfen, ob Ski oder Schuh im Zeitraum schon verliehen sind
         if saisonverleih.Art == "tag":
             for material in saisonverleih.Material:
@@ -178,16 +211,16 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
             skinr = material.skinr or None
             schuhnr = material.schuhnr or None
 
-            db_saisonverleih.Material.append(
-                SaisonVerleihMaterial(
-                    skinr=skinr,
-                    schuhnr=schuhnr,
-                    stockbez_ID=stockbez_ID,
-                    stocklaenge=material.stocklaenge,
-                    Preis=material.Preis,
-                    SkiFahrerName=material.SkiFahrerName
-                )
+            neues_material = SaisonVerleihMaterial(
+                skinr=skinr,
+                schuhnr=schuhnr,
+                stockbez_ID=stockbez_ID,
+                stocklaenge=material.stocklaenge,
+                Preis=material.Preis,
+                SkiFahrerName=material.SkiFahrerName
             )
+            db_saisonverleih.Material.append(neues_material)
+            setze_bindungsdaten(db, neues_material, saisonverleih.Kunde_ID, material.bindungsdaten, material.vorlage_id)
 
         db.add(db_saisonverleih)
         db.commit()
@@ -263,6 +296,12 @@ def aendere_saisonverleih(db: Session, saisonverleih_id: int, daten: SaisonVerle
             continue
         setattr(saisonverleih, feld, wert)
 
+    # Bindungsdaten gehören zum Kunden des Verleihs
+    if aenderungen.get("Kunde_ID") is not None:
+        for material in saisonverleih.Material:
+            if material.bindungsdaten is not None:
+                material.bindungsdaten.Kunde_ID = saisonverleih.Kunde_ID
+
     if saisonverleih.Art == "tag":
         if saisonverleih.Start_Am is None or saisonverleih.Ende_Am is None:
             raise ValueError("Beim Tagesverleih sind Start- und Enddatum Pflicht.")
@@ -277,8 +316,8 @@ def aendere_saisonverleih(db: Session, saisonverleih_id: int, daten: SaisonVerle
 
 
 def _material_werte(material) -> dict:
-    """Bereinigt leere Werte wie beim Anlegen."""
-    werte = material.model_dump(exclude_unset=True)
+    """Bereinigt leere Werte wie beim Anlegen. Bindungsdaten werden getrennt gespeichert."""
+    werte = material.model_dump(exclude_unset=True, exclude={"bindungsdaten", "vorlage_id"})
     if "stockbez_ID" in werte:
         werte["stockbez_ID"] = werte["stockbez_ID"] if werte["stockbez_ID"] and werte["stockbez_ID"] > 0 else None
     for feld in ("skinr", "schuhnr"):
@@ -293,6 +332,9 @@ def fuege_material_hinzu(db: Session, saisonverleih_id: int, material: SaisonVer
         return None
     _pruefe_nicht_bezahlt(saisonverleih)
     werte = _material_werte(material)
+    fehler = material_nicht_verfuegbar(db, werte.get("skinr"), werte.get("schuhnr"), werte.get("stockbez_ID"))
+    if fehler:
+        raise VerleihGesperrt(fehler)
     if saisonverleih.Art == "tag":
         belegungen = finde_belegungen(
             db, saisonverleih.Start_Am, saisonverleih.Ende_Am,
@@ -300,7 +342,9 @@ def fuege_material_hinzu(db: Session, saisonverleih_id: int, material: SaisonVer
         )
         if belegungen:
             raise VerleihGesperrt(belegung_text(belegungen[0]))
-    saisonverleih.Material.append(SaisonVerleihMaterial(**werte))
+    neues_material = SaisonVerleihMaterial(**werte)
+    saisonverleih.Material.append(neues_material)
+    setze_bindungsdaten(db, neues_material, saisonverleih.Kunde_ID, material.bindungsdaten, material.vorlage_id)
     db.commit()
     db.refresh(saisonverleih)
     return saisonverleih
@@ -315,12 +359,14 @@ def aendere_material(db: Session, saisonverleih_id: int, material_id: int, daten
         return None
 
     werte = _material_werte(daten)
-    # Nur der Fahrername darf nach dem Bezahlen noch geändert werden
+    # Nur Fahrername und Bindungsdaten dürfen nach dem Bezahlen noch geändert werden
     if set(werte.keys()) - {"SkiFahrerName"}:
         _pruefe_nicht_bezahlt(saisonverleih)
 
     for feld, wert in werte.items():
         setattr(material, feld, wert)
+    if "bindungsdaten" in daten.model_fields_set:
+        setze_bindungsdaten(db, material, saisonverleih.Kunde_ID, daten.bindungsdaten, daten.vorlage_id)
     db.commit()
     db.refresh(saisonverleih)
     return saisonverleih

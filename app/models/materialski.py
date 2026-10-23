@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import Integer, String, ForeignKey, Double
+from sqlalchemy import Boolean, Integer, String, ForeignKey, Double
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -42,3 +42,5 @@ class EigenSki(Base):
     EK: Mapped[Optional[float]] = mapped_column(Double)
     Saison: Mapped[Optional[str]] = mapped_column(String(20))
     SkiNr: Mapped[Optional[str]] = mapped_column(String(50), unique=True)
+    # Ausgemustert: nicht mehr verleihbar, bleibt aber für bestehende Verleihe erhalten
+    Ausgemustert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")

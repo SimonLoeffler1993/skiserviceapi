@@ -4,6 +4,7 @@ from typing import Optional
 from decimal import Decimal
 
 from app.schemas.kunde import SkiKundeOut
+from app.schemas.bindungsdaten import BindungsdatenBase, BindungsdatenRead
 
 
 class SkiSchema(BaseModel):
@@ -23,6 +24,7 @@ class SkiSchema(BaseModel):
     sack: int
     bindung_status: bool = False
     gepueft: Optional[date] = None
+    bindungsdaten: Optional[BindungsdatenRead] = None
 
     model_config = {"from_attributes": True}
 
@@ -32,6 +34,10 @@ class SkiCreateSchema(BaseModel):
     komentar: Optional[str] = None
     bindung_preis: float
     bindung_check: bool
+    # Nur bei Bindungscheck, alle Werte optional
+    bindungsdaten: Optional[BindungsdatenBase] = None
+    # Aus "Letzte Daten abfragen" übernommener Datensatz, wird beim Speichern archiviert
+    vorlage_id: Optional[int] = None
 
 
 class AuftragSchema(BaseModel):
@@ -75,6 +81,8 @@ class AuftragSchema(BaseModel):
 class AuftragSkiFertigSchema(BaseModel):
     id: int
     ski_ids: list[int]
+    # Fertig-Mail senden, wenn danach alle Ski fertig sind
+    mail: bool = True
 
 class SkiBindungFertigSchema(BaseModel):
     ski_ids: list[int]
@@ -103,3 +111,6 @@ class SkiUpdateSchema(BaseModel):
     bindung_preis: Optional[float] = Field(default=None, ge=0)
     # 0 = offen, 1 = fertig
     status: Optional[int] = Field(default=None, ge=0, le=1)
+    # Leere Werte bzw. null entfernen die Bindungsdaten
+    bindungsdaten: Optional[BindungsdatenBase] = None
+    vorlage_id: Optional[int] = None

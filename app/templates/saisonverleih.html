@@ -127,7 +127,7 @@
                     </td>
                     <td>
                         {% if item.Schuh %}
-                        {{ item.Schuh.Modell.Hersteller.Name }} {{ item.Schuh.Modell.Modell }} / {{ item.Schuh.Groese }}
+                        {{ item.Schuh.Modell.Hersteller.Name }} {{ item.Schuh.Modell.Modell }} / {{ item.Schuh.Groese }}<br>{{ item.Schuh.SchuhNr }}
                         {% else %}
                         kein Schuh
                         {% endif %}

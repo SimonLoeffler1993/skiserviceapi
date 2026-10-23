@@ -40,6 +40,7 @@ class EinstellungDefinition:
 
 GRUPPEN = {
     "firma": "Firma",
+    "bank": "Bankverbindung",
     "drucker": "Etikettendrucker",
     "mail": "E-Mail",
     "lexware": "Lexware Office",
@@ -57,6 +58,14 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("FIRMA_MWST_SATZ", "firma", "MwSt. Satz in %", typ="zahl", standard=19,
                           beschreibung="0 = keine MwSt. auf der Quittung ausweisen."),
     EinstellungDefinition("FIRMA_KLEINUNTERNEHMER", "firma", "Kleinunternehmer (§ 19 UStG)", typ="bool", standard=False),
+
+    # Bankverbindung (Quittung, GiroCode bei Überweisung)
+    EinstellungDefinition("BANK_KONTOINHABER", "bank", "Kontoinhaber",
+                          beschreibung="Leer = Firmenname. Höchstens 70 Zeichen (GiroCode)."),
+    EinstellungDefinition("BANK_IBAN", "bank", "IBAN",
+                          beschreibung="Steht auf der Quittung, bei Überweisung zusätzlich als QR-Code (GiroCode)."),
+    EinstellungDefinition("BANK_BIC", "bank", "BIC", beschreibung="Optional."),
+    EinstellungDefinition("BANK_NAME", "bank", "Bank", beschreibung="z.B. Sparkasse Bodensee"),
 
     # Etikettendrucker
     EinstellungDefinition("LABELPRINTERIDENT", "drucker", "Drucker Adresse", standard="tcp://192.168.188.159",
@@ -76,11 +85,19 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("SMTP_PASSWORD", "mail", "Passwort", typ="passwort"),
     EinstellungDefinition("EMAIL_FROM", "mail", "Absender Adresse"),
     EinstellungDefinition("MAIL_BETREFF_FERTIG", "mail", "Betreff Fertig-Mail", standard="Dein Skiservice ist fertig!"),
+    EinstellungDefinition("MAIL_FERTIG_INHALT", "mail", "Inhalt Fertig-Mail", typ="auswahl", standard="preise",
+                          optionen=["fertig", "preise"],
+                          beschreibung="Nur die Fertig-Meldung oder zusätzlich die Auflistung der Leistungen mit Preisen."),
 
     # Lexware
     EinstellungDefinition("LEXWARE_BASEURL", "lexware", "API Adresse", standard="https://api.lexware.io"),
     EinstellungDefinition("LEXWARE_APIKEY", "lexware", "API Key", typ="passwort"),
-    EinstellungDefinition("LEXWARE_SYNC", "lexware", "Quittungen synchronisieren", typ="bool", standard=False),
+    EinstellungDefinition("LEXWARE_SYNC", "lexware", "Quittungen synchronisieren", typ="bool", standard=False,
+                          beschreibung="Bezahlte Quittungen automatisch an Lexware übertragen."),
+    EinstellungDefinition("LEXWARE_MODUS", "lexware", "Übertragung", typ="auswahl", standard="pdf",
+                          optionen=["pdf", "rechnung"],
+                          beschreibung="PDF: eigene Quittung erstellen und als Beleg mit PDF hochladen. "
+                                       "Rechnung: Rechnung direkt in Lexware anlegen, in der Anwendung nur externe Quittung."),
 
     # Anwendung
     EinstellungDefinition("HOST", "anwendung", "Öffentliche Adresse", standard="https://ms-skiservice.de",
@@ -91,6 +108,8 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           beschreibung="Ergibt z.B. 25/26TV3"),
     EinstellungDefinition("KUERZEL_SKISERVICE", "anwendung", "Kürzel Skiservice Nummer", standard="S",
                           beschreibung="Ergibt z.B. 25/26S12"),
+    EinstellungDefinition("KUERZEL_QUITTUNG", "anwendung", "Kürzel Quittungsnummer", standard="Q",
+                          beschreibung="Ergibt z.B. 25/26Q12"),
 ]
 
 DEFINITION_NACH_SCHLUESSEL = {d.schluessel: d for d in DEFINITIONEN}
@@ -171,6 +190,16 @@ def alle_fuer_anzeige() -> list[dict]:
     return ergebnis
 
 
+def iban_gueltig(iban: str) -> bool:
+    """Prüfsumme nach ISO 13616 (Mod 97)."""
+    iban = iban.replace(" ", "").upper()
+    if not (15 <= len(iban) <= 34) or not iban[:2].isalpha() or not iban[2:4].isdigit() or not iban.isalnum():
+        return False
+    umgestellt = iban[4:] + iban[:4]
+    zahl = "".join(str(int(zeichen, 36)) for zeichen in umgestellt)
+    return int(zahl) % 97 == 1
+
+
 def speichern(db: Session, werte: dict[str, Any]):
     """
     Speichert die übergebenen Einstellungen.
@@ -179,6 +208,18 @@ def speichern(db: Session, werte: dict[str, Any]):
     unbekannt = [s for s in werte if s not in DEFINITION_NACH_SCHLUESSEL]
     if unbekannt:
         raise ValueError(f"Unbekannte Einstellungen: {', '.join(unbekannt)}")
+
+    werte = dict(werte)
+    # Bankdaten ohne Leerzeichen und in Großbuchstaben speichern
+    for schluessel in ("BANK_IBAN", "BANK_BIC"):
+        if isinstance(werte.get(schluessel), str):
+            werte[schluessel] = werte[schluessel].replace(" ", "").upper()
+    if werte.get("BANK_IBAN") and not iban_gueltig(werte["BANK_IBAN"]):
+        raise ValueError("Die IBAN ist ungültig.")
+    if werte.get("BANK_BIC") and len(werte["BANK_BIC"]) not in (8, 11):
+        raise ValueError("Die BIC muss 8 oder 11 Zeichen lang sein.")
+    if isinstance(werte.get("BANK_KONTOINHABER"), str) and len(werte["BANK_KONTOINHABER"].strip()) > 70:
+        raise ValueError("Der Kontoinhaber darf höchstens 70 Zeichen lang sein.")
 
     # Erst alles prüfen, dann schreiben
     for schluessel, wert in werte.items():

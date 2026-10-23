@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from enum import Enum 
+from typing import Optional
 
 
 class BezahlInfoSchema(BaseModel):
@@ -43,16 +45,33 @@ class QuittungUpdate(BaseModel):
     LexID: str | None = None
 
 
+def _lexware_modus() -> str | None:
+    # Spät importieren, damit das Schema ohne Einstellungen/DB geladen werden kann
+    from app.services.lexware_sync import lexware_modus
+    return lexware_modus()
+
 class QuittungRead(QuittungBase):
     ID: int
+    Nummer: str | None = None
+    NurExtern: bool | None = None
+    # Aktuelle Lexware Übertragung ("pdf" / "rechnung"), None wenn aus
+    LexwareModus: str | None = Field(default_factory=_lexware_modus)
 
     model_config = {
         "from_attributes": True
     }
 
 class QuittungNurExtern(BaseModel):
-    SaisonverleihID: int
+    # Genau eines von beiden: Saisonverleih oder Skiservice-Auftrag
+    SaisonverleihID: Optional[int] = None
+    AuftragID: Optional[int] = None
     LexOfficeID: str
+
+    @model_validator(mode="after")
+    def pruefe_ziel(self):
+        if (self.SaisonverleihID is None) == (self.AuftragID is None):
+            raise ValueError("Bitte genau eines angeben: SaisonverleihID oder AuftragID.")
+        return self
 
     model_config = {
         "from_attributes": True
@@ -64,9 +83,20 @@ class QuittungsTyp(str, Enum):
     Verleih = "Verleih"
     Handware = "Handware"
 
+class QuittungKundeSchema(BaseModel):
+    # Bei Artikeln unterschiedlicher Kunden: "Sammelkunde" ohne Anschrift
+    sammel: bool = False
+    id: int | None = None
+    name: str
+    strasse: str | None = None
+    plz: int | None = None
+    ort: str | None = None
+
 class QuittungOutSchema(BaseModel):
     id: int
     name: str
+    # Angezeigte Quittungsnummer, z.B. "26/27Q12" (Altbestand: die ID)
+    nummer: str = ""
     saison_ID: int
     bezahlt: bool 
     bezahlt_Am: date | None = None
@@ -78,6 +108,7 @@ class QuittungOutSchema(BaseModel):
     lexID: str | None = None
     artikelgruppen: list[QuittungGruppeArtikel] = []
     nurExtern: bool = False
+    kunde: QuittungKundeSchema | None = None
 
 class QuittungGruppeArtikel(BaseModel):
     type: QuittungsTyp
@@ -92,3 +123,27 @@ class QuittungArtikelSchema(BaseModel):
     anzahl: int
     toID: int
 
+class QuittungBezug(BaseModel):
+    art: Literal["auftrag", "verleih"]
+    id: int
+    name: str | None = None
+
+class QuittungListeEintrag(BaseModel):
+    """Zeile der Quittungsliste im Center, mit Artikeln zum Aufklappen."""
+    ID: int
+    # Angezeigte Quittungsnummer, z.B. "26/27Q12"
+    Nummer: str
+    Name: str | None = None
+    Erstellt_Am: date | None = None
+    Bezahlt_Am: date | None = None
+    Bezahlt: bool
+    # z.B. "Bar" oder "EC, Überweisung"
+    Zahlart: str
+    Betrag: float
+    # Kundenname bzw. "Sammelkunde"
+    Kunde: str | None = None
+    Bezuege: list[QuittungBezug] = []
+    NurExtern: bool
+    LexID: str | None = None
+    BuchhaltungSync: bool
+    artikelgruppen: list[QuittungGruppeArtikel] = []

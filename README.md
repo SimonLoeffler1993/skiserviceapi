@@ -15,12 +15,19 @@ Zentrales Backend der Skiservice-Anwendung. Alle Frontends sprechen ausschließl
 
 - **Kunden** mit Postleitzahlen-Verzeichnis (wird beim Start eingespielt)
 - **Skiservice-Aufträge**: anlegen, bearbeiten (Ski hinzufügen/ändern/entfernen, Abholdatum), löschen, fertigmelden mit Mail an den Kunden
+- **Bindungsdaten** (Fahrer, Sohlenlänge, Gewicht, Größe, Fahrkönnen, Alter) je Ski in der Tabelle `bindungsdaten`, mit Verweis auf den Kunden: `GET /kunden/{id}/bindungsdaten` liefert alle Einträge eines Kunden, alte Einträge lassen sich archivieren. Die Werte stehen auch auf dem Ski-Etikett
 - **Saison- und Tagesverleih**: eigener Nummernkreis je Art (`25/26SV12`, `25/26TV3`), Belegungsprüfung beim Tagesverleih, Vertrag als PDF (WeasyPrint, ohne externen Dienst)
 - **Kasse**: offene Aufträge und Verleihe, Bezahlen in einer Transaktion, Quittung als PDF
 - **Etikettendruck** auf Brother-QL-Druckern (QR-Code je Ski)
 - **Lexware Office**: Bezahlstatus von Belegen
 - **Einstellungen** in der Datenbank, pflegbar im Skiservice Center
 - **Echtzeit**: Server-Sent Events zum Kundenterminal, WebSocket für den Ski-Scanner
+
+- **Material** (Ski, Schuhe, Stöcke, Hersteller, Skiarten, Modelle): bearbeiten und löschen. Hersteller, Skiarten und Modelle lassen sich nur löschen, wenn nichts mehr darauf verweist (bei Skiarten auch keine Saisonverleih-Preise).
+  - Steckt Ski, Schuh oder Stock in einem Verleih, kann er nicht gelöscht, nur **ausgemustert** werden (`PATCH …/ausgemustert`). Er verschwindet dann aus der Auswahl, bestehende Verleihe bleiben vollständig.
+  - `GET …/verwendung` listet die Verleihe, in denen er steckt.
+  - Die Ski-Nr. ist änderbar, Verleihe ziehen über `ON UPDATE CASCADE` automatisch mit.
+  - Schuhe haben eine eigene, eindeutige Schuh-Nr. (Standard: interne ID), z. B. für Inventur-Aufkleber. Verleihe verweisen intern auf die ID.
 
 Bezahlte Aufträge und Verleihe sind gegen Ändern und Löschen gesperrt (HTTP 409). Nur Kommentar, Bemerkung und Fahrername bleiben änderbar.
 
