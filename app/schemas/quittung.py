@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from enum import Enum 
 from typing import Optional
 
@@ -44,8 +44,16 @@ class QuittungUpdate(BaseModel):
     LexID: str | None = None
 
 
+def _lexware_modus() -> str | None:
+    # Spät importieren, damit das Schema ohne Einstellungen/DB geladen werden kann
+    from app.services.lexware_sync import lexware_modus
+    return lexware_modus()
+
 class QuittungRead(QuittungBase):
     ID: int
+    NurExtern: bool | None = None
+    # Aktuelle Lexware Übertragung ("pdf" / "rechnung"), None wenn aus
+    LexwareModus: str | None = Field(default_factory=_lexware_modus)
 
     model_config = {
         "from_attributes": True

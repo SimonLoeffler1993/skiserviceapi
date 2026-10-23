@@ -83,7 +83,12 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     # Lexware
     EinstellungDefinition("LEXWARE_BASEURL", "lexware", "API Adresse", standard="https://api.lexware.io"),
     EinstellungDefinition("LEXWARE_APIKEY", "lexware", "API Key", typ="passwort"),
-    EinstellungDefinition("LEXWARE_SYNC", "lexware", "Quittungen synchronisieren", typ="bool", standard=False),
+    EinstellungDefinition("LEXWARE_SYNC", "lexware", "Quittungen synchronisieren", typ="bool", standard=False,
+                          beschreibung="Bezahlte Quittungen automatisch an Lexware übertragen."),
+    EinstellungDefinition("LEXWARE_MODUS", "lexware", "Übertragung", typ="auswahl", standard="pdf",
+                          optionen=["pdf", "rechnung"],
+                          beschreibung="PDF: eigene Quittung erstellen und als Beleg mit PDF hochladen. "
+                                       "Rechnung: Rechnung direkt in Lexware anlegen, in der Anwendung nur externe Quittung."),
 
     # Anwendung
     EinstellungDefinition("HOST", "anwendung", "Öffentliche Adresse", standard="https://ms-skiservice.de",

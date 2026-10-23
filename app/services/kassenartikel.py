@@ -1,5 +1,6 @@
 # app/services/kasse_service.py
 
+import logging
 from datetime import date
 
 from sqlalchemy import or_
@@ -11,6 +12,10 @@ from app.schemas.kasse import KasseBezahlenSchema, KasseHatBezahltSchema, Kassen
 from app.models.kunde import SkiKunde
 from app.models.quittung import Quittung, QuittungArtikel
 from app.crud import saison as crud_saison
+from app.crud import quittung as crud_quittung
+from app.services.lexware_sync import lexware_modus, rechnung_anlegen
+
+logger = logging.getLogger(__name__)
 
 def get_kundenname(kunde: SkiKunde | None) -> str:
     if kunde is not None:
@@ -122,6 +127,8 @@ class KasseService:
         Es wird eine Quittung erstellt und die angegebenen Artikels als bezahlt markiert.
         Alles passiert in einer Transaktion: entweder wird alles gespeichert oder nichts.
         Bereits bezahlte Artikel werden abgelehnt.
+        Im Lexware Modus "rechnung" wird statt der eigenen Quittung eine Rechnung in Lexware angelegt
+        und in der Anwendung nur eine externe Quittung hinterlegt.
         """
         if not zuBezahlen.artikels:
             raise ValueError("Keine Artikel zum Bezahlen übergeben.")
@@ -130,26 +137,11 @@ class KasseService:
         if aktuelle_Saison is None:
             raise ValueError("Keine aktuelle Saison gefunden.")
 
+        lex_id = None
         try:
-            quittung = Quittung(
-                Name="Quittung",
-                AnzAuftrag=0,
-                AnzVerleih=0,
-                Saison_ID=aktuelle_Saison.ID,
-                Bezahlt_Am=date.today(),
-                Erstellt_Am=date.today(),
-                Ueberweisung=zuBezahlen.ueberweisung,
-                Karte=zuBezahlen.karte,
-                Bar=zuBezahlen.bar,
-                Bezahlt=True,
-                BuchhaltungSync=False,
-                LexID="",
-                NurExtern=False
-            )
-            self.db.add(quittung)
-            # ID der Quittung holen, ohne zu committen
-            self.db.flush()
-
+            # Erst alles sperren und prüfen, damit Lexware nur bei gültigen Artikeln angefragt wird
+            auftraege: list[Auftrag] = []
+            verleihe: list[SaisonVerleih] = []
             for artikel in zuBezahlen.artikels:
                 if artikel.service:
                     auftrag = (
@@ -162,21 +154,7 @@ class KasseService:
                         raise ValueError(f"Auftrag {artikel.id} nicht gefunden.")
                     if auftrag.bezahlt == "ja":
                         raise ValueError(f"Auftrag {auftrag.name} ist bereits bezahlt.")
-
-                    # Markiere den Auftrag als bezahlt und aktualisiere die Quittung_ID
-                    auftrag.bezahlt = "ja"
-                    auftrag.bezahlt_am = date.today()
-                    auftrag.quittung_id = quittung.ID
-                    quittung.AnzAuftrag += 1
-
-                    # Skiservice Auftrag als Quittungsartikel hinzufügen
-                    self.db.add(QuittungArtikel(
-                        Quittung_ID=quittung.ID,
-                        Artikel_ID=auftrag.id,
-                        Artikel_Kategorie="Skiservice",
-                        Auftrag_ID=auftrag.id,
-                        Verleih_ID=None
-                    ))
+                    auftraege.append(auftrag)
 
                 elif artikel.verleih:
                     verleih = (
@@ -189,25 +167,79 @@ class KasseService:
                         raise ValueError(f"Verleih {artikel.id} nicht gefunden.")
                     if verleih.Bezahlt:
                         raise ValueError(f"Verleih {verleih.Name} ist bereits bezahlt.")
+                    verleihe.append(verleih)
 
-                    # Markiere den Verleih als bezahlt und aktualisiere die Quittung_ID
-                    verleih.Bezahlt = True
-                    verleih.Bezahlt_Am = date.today()
-                    verleih.QuittungID = quittung.ID
-                    quittung.AnzVerleih += 1
+            if lexware_modus() == "rechnung":
+                kunden = {k.ID: k for k in [a.kunde for a in auftraege] + [v.Kunde for v in verleihe] if k is not None}
+                lex_id, nummer = rechnung_anlegen(
+                    self.db, [a.id for a in auftraege], [v.ID for v in verleihe], kunden,
+                    bar=zuBezahlen.bar, karte=zuBezahlen.karte, ueberweisung=zuBezahlen.ueberweisung,
+                )
+                quittung = crud_quittung.create_NurExtern_quittung(self.db, lex_id, name=nummer, commit=False)
+                quittung.Bezahlt_Am = date.today()
+                quittung.Ueberweisung = zuBezahlen.ueberweisung
+                quittung.Karte = zuBezahlen.karte
+                quittung.Bar = zuBezahlen.bar
+                quittung.AnzAuftrag = 0
+                quittung.AnzVerleih = 0
+            else:
+                quittung = Quittung(
+                    Name="Quittung",
+                    AnzAuftrag=0,
+                    AnzVerleih=0,
+                    Saison_ID=aktuelle_Saison.ID,
+                    Bezahlt_Am=date.today(),
+                    Erstellt_Am=date.today(),
+                    Ueberweisung=zuBezahlen.ueberweisung,
+                    Karte=zuBezahlen.karte,
+                    Bar=zuBezahlen.bar,
+                    Bezahlt=True,
+                    BuchhaltungSync=False,
+                    LexID="",
+                    NurExtern=False
+                )
+                self.db.add(quittung)
+                # ID der Quittung holen, ohne zu committen
+                self.db.flush()
 
-                    # Verleih als Quittungsartikel hinzufügen
-                    self.db.add(QuittungArtikel(
-                        Quittung_ID=quittung.ID,
-                        Artikel_ID=verleih.ID,
-                        Artikel_Kategorie="Verleih",
-                        Auftrag_ID=None,
-                        Verleih_ID=verleih.ID
-                    ))
+            for auftrag in auftraege:
+                # Markiere den Auftrag als bezahlt und aktualisiere die Quittung_ID
+                auftrag.bezahlt = "ja"
+                auftrag.bezahlt_am = date.today()
+                auftrag.quittung_id = quittung.ID
+                quittung.AnzAuftrag += 1
+
+                # Skiservice Auftrag als Quittungsartikel hinzufügen
+                self.db.add(QuittungArtikel(
+                    Quittung_ID=quittung.ID,
+                    Artikel_ID=auftrag.id,
+                    Artikel_Kategorie="Skiservice",
+                    Auftrag_ID=auftrag.id,
+                    Verleih_ID=None
+                ))
+
+            for verleih in verleihe:
+                # Markiere den Verleih als bezahlt und aktualisiere die Quittung_ID
+                verleih.Bezahlt = True
+                verleih.Bezahlt_Am = date.today()
+                verleih.QuittungID = quittung.ID
+                quittung.AnzVerleih += 1
+
+                # Verleih als Quittungsartikel hinzufügen
+                self.db.add(QuittungArtikel(
+                    Quittung_ID=quittung.ID,
+                    Artikel_ID=verleih.ID,
+                    Artikel_Kategorie="Verleih",
+                    Auftrag_ID=None,
+                    Verleih_ID=verleih.ID
+                ))
 
             self.db.commit()
         except Exception:
             self.db.rollback()
+            if lex_id:
+                logger.error("Lexware Rechnung %s wurde angelegt, die Zahlung konnte aber nicht gespeichert werden. "
+                             "Bitte die Rechnung in Lexware prüfen bzw. stornieren.", lex_id)
             raise
 
         self.db.refresh(quittung)

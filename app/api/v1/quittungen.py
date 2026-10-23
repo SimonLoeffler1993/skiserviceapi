@@ -14,6 +14,8 @@ from app.schemas.quittung import QuittungNurExtern, QuittungRead, QuittungOutSch
 from app.utils.lexware import LexwareAPI
 from app.services import einstellungen
 from app.services. quittung import QuittungsService
+from app.services.lexware_sync import SyncKonflikt, quittung_pdf_hochladen
+from app.utils.lexware import LexwareFehler
 
 router = APIRouter(
     prefix="/quittungen",
@@ -116,11 +118,43 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
             logger.exception("Bezahlstatus von Lexware konnte nicht abgerufen werden")
     return quittung
 
+@router.post("/quittung/{quittung_id}/lexware", response_model=QuittungRead)
+def quittung_nach_lexware(quittung_id: int, db: Session = Depends(get_db)):
+    """
+    Lädt eine eigene Quittung als Beleg mit PDF nach Lexware hoch (z.B. wenn der automatische Upload fehlgeschlagen ist).
+    """
+    try:
+        quittung = quittung_pdf_hochladen(db, quittung_id)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except SyncKonflikt as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except LexwareFehler as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return crud_quittung.get_quittung(db, quittung.ID)
+
 @router.get("/quittung/{quittung_id}/pdf")
-async def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
+def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
     """
     Holt das PDF einer Quittung anhand der ID.
     """
+    quittung = crud_quittung.get_quittung(db, quittung_id)
+    if quittung is None:
+        raise HTTPException(status_code=404, detail="Quittung nicht gefunden")
+
+    # Externe Quittung: das Original liegt in Lexware
+    if quittung.NurExtern and quittung.LexID:
+        try:
+            pdf, dateiname = LexwareAPI().hole_rechnung_pdf(quittung.LexID)
+        except LexwareFehler as e:
+            raise HTTPException(status_code=502, detail=f"PDF konnte nicht aus Lexware geladen werden: {e}")
+        dateiname = dateiname or f"{quittung.Name or f'quittung-{quittung_id}'}.pdf"
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{dateiname}"'},
+        )
+
     try:
         quittungsdata = QuittungsService(db).get_quittung(quittung_id)
         pdf = QuittungsService(db).renderPDF(quittungsdata)
