@@ -79,6 +79,9 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           beschreibung="z.B. tcp://192.168.1.50"),
     EinstellungDefinition("LABELPRINTERMODEL", "drucker", "Druckermodell", standard="QL-820NWB"),
     EinstellungDefinition("LABELSIZE", "drucker", "Etikettenbreite", standard="62"),
+    EinstellungDefinition("LABELFARBE", "drucker", "Etikettenrolle", typ="auswahl", standard="schwarz",
+                          optionen=["schwarz", "rotschwarz"],
+                          beschreibung="Rot/Schwarz (z.B. DK-22251) gibt es nur in 62 mm. Gedruckt wird in Schwarz."),
     EinstellungDefinition("PRINTSAISONVERLEIHCREATION", "drucker", "Etiketten beim Anlegen eines Verleihs drucken",
                           typ="bool", standard=False),
 

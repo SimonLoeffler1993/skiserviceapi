@@ -3,6 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 from brother_ql import BrotherQLRaster, create_label
 from brother_ql.backends.helpers import send
+from brother_ql.labels import ALL_LABELS
 import logging
 
 import qrcode
@@ -67,6 +68,9 @@ def labelmm2px(hoehe, breite, randpx=18):
     neubreite = mm2px(breite) - randpx * 2
     return round(neuhoehe), round(neubreite)
 
+# Bekannte Medientypen von brother_ql, z.B. "62" oder "62red"
+ALLE_LABELS = {label.identifier for label in ALL_LABELS}
+
 # TODO: #11 Ettiketen Breite auf LabelSize
 class SkiEttiket:
     def __init__(self, labelSize: str | None = None, printerModel: str | None = None, printerIdentifier: str | None = None):
@@ -74,8 +78,30 @@ class SkiEttiket:
         self.labelSize = labelSize or einstellungen.hole("LABELSIZE")
         self.printerModel = printerModel or einstellungen.hole("LABELPRINTERMODEL")
         self.printerIdentifier = printerIdentifier or einstellungen.hole("LABELPRINTERIDENT")
+        # Rot/Schwarz-Rolle (z.B. DK-22251): Medientyp "62red", gedruckt wird weiterhin schwarz
+        self.rot = einstellungen.hole("LABELFARBE") == "rotschwarz"
+        if self.rot:
+            self.labelSize = f"{self.labelSize}red"
+            if self.labelSize not in ALLE_LABELS:
+                raise ValueError("Rot/Schwarz-Etiketten gibt es nur in 62 mm, bitte Etikettenbreite oder Etikettenrolle prüfen.")
         self.qlr = BrotherQLRaster(self.printerModel)
         self.qlr.exception_on_warning = True
+
+    def _erstellen(self, img: Image.Image):
+        """Bild in Druckdaten umwandeln, mit den gemeinsamen Druckeinstellungen."""
+        create_label(
+            qlr=self.qlr,
+            image=img,
+            label_size=self.labelSize,
+            rotate=0,
+            threshold=70,
+            dither=False,
+            compress=True,
+            red=self.rot,
+            dpi_600=False,
+            hq=True,
+            cut=True
+        )
 
     def saisonFahererName(self,name, hoehe=20, schriftgroesse=72):
         # Bild für Label vorbereiten
@@ -95,19 +121,7 @@ class SkiEttiket:
         # img.save("saisonFahererName.png")
 
         # Label erstellen
-        create_label(
-            qlr=self.qlr,
-            image=img,            
-            label_size=self.labelSize,   
-            rotate=0,
-            threshold=70,
-            dither=False,
-            compress=True,
-            red=True,
-            dpi_600=False,
-            hq=True,
-            cut=True
-        )
+        self._erstellen(img)
 
         return True
 
@@ -169,19 +183,7 @@ class SkiEttiket:
         draw.text(textposition, "#: " + qrdata, fill="black", font=font7_bold)
 
         # Label erstellen
-        create_label(
-            qlr=self.qlr,
-            image=img,            
-            label_size=self.labelSize,   
-            rotate=0,
-            threshold=70,
-            dither=False,
-            compress=True,
-            red=False,
-            dpi_600=False,
-            hq=True,
-            cut=True
-        )
+        self._erstellen(img)
 
         return True
     
@@ -291,19 +293,7 @@ class SkiEttiket:
         # img.show()
 
         try:
-            create_label(
-                qlr=self.qlr,
-                image=img,
-                label_size=self.labelSize,
-                rotate=0,
-                threshold=70,
-                dither=False,
-                compress=True,
-                red=False,
-                dpi_600=False,
-                hq=True,
-                cut=True
-            )
+            self._erstellen(img)
         except Exception as e:
             logger.error("Fehler beim vorbereiten zum Ettiket Drucken: %s", e, exc_info=True)
 
@@ -361,19 +351,7 @@ class SkiEttiket:
             breite = draw.textlength(bindung_text, font=bindung_schrift)
             draw.text(((labelpxbreite - breite) // 2, RAND + oben + ABSTAND), bindung_text, fill="black", font=bindung_schrift)
 
-        create_label(
-            qlr=self.qlr,
-            image=img,
-            label_size=self.labelSize,
-            rotate=0,
-            threshold=70,
-            dither=False,
-            compress=True,
-            red=False,
-            dpi_600=False,
-            hq=True,
-            cut=True
-        )
+        self._erstellen(img)
         return True
 
     def drucken(self) -> bool:
