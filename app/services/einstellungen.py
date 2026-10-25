@@ -47,6 +47,13 @@ GRUPPEN = {
     "anwendung": "Anwendung",
 }
 
+# Startstatus eines neuen Verleihs, getrennt für Saison- und Tagesverleih
+VERLEIH_STARTSTATUS_OPTIONEN = ["vorbereitung", "vorbereitet", "unterwegs"]
+VERLEIH_STARTSTATUS_TEXT = (
+    "In Vorbereitung: Material wird noch hergerichtet. Vorbereitet: Material ist fertig, "
+    "wird automatisch gesetzt, sobald alle Bindungen geprüft sind. Unterwegs: gilt als heute abgeholt."
+)
+
 DEFINITIONEN: list[EinstellungDefinition] = [
     # Firma
     EinstellungDefinition("FIRMA_NAME", "firma", "Firmenname", standard="Simons Skiservice",
@@ -108,9 +115,12 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           beschreibung="Ergibt z.B. 25/26TV3"),
     EinstellungDefinition("KUERZEL_SKISERVICE", "anwendung", "Kürzel Skiservice Nummer", standard="S",
                           beschreibung="Ergibt z.B. 25/26S12"),
-    EinstellungDefinition("VERLEIH_STARTSTATUS", "anwendung", "Status nach dem Anlegen eines Verleihs", typ="auswahl",
-                          standard="vorbereitung", optionen=["vorbereitung", "unterwegs"],
-                          beschreibung="In Vorbereitung: Material wird noch hergerichtet, beim Abholen auf Unterwegs setzen."),
+    EinstellungDefinition("VERLEIH_STARTSTATUS_SAISON", "anwendung", "Status nach dem Anlegen eines Saisonverleihs",
+                          typ="auswahl", standard="vorbereitung", optionen=VERLEIH_STARTSTATUS_OPTIONEN,
+                          beschreibung=VERLEIH_STARTSTATUS_TEXT),
+    EinstellungDefinition("VERLEIH_STARTSTATUS_TAG", "anwendung", "Status nach dem Anlegen eines Tagesverleihs",
+                          typ="auswahl", standard="vorbereitung", optionen=VERLEIH_STARTSTATUS_OPTIONEN,
+                          beschreibung=VERLEIH_STARTSTATUS_TEXT),
     EinstellungDefinition("KUERZEL_QUITTUNG", "anwendung", "Kürzel Quittungsnummer", standard="Q",
                           beschreibung="Ergibt z.B. 25/26Q12"),
 ]

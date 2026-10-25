@@ -48,6 +48,9 @@ class SaisonVerleihMaterial(Base):
     stocklaenge: Mapped[int | None] = mapped_column(Integer)
     Preis: Mapped[float] = mapped_column(Double)
     SkiFahrerName: Mapped[str | None] = mapped_column(String(150), default=None)
+    # Bindung des Leihski geprüft (Werkstatt), wird beim Tausch des Ski oder neuen Bindungsdaten zurückgesetzt
+    BindungGeprueft: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    BindungGeprueft_Am: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Bindungsdaten des Fahrers (optional)
     bindungsdaten: Mapped[Optional["Bindungsdaten"]] = relationship("Bindungsdaten", back_populates="material", uselist=False)
 
@@ -64,7 +67,8 @@ class SaisonVerleih(Base):
     Bezahlt_Am: Mapped[date | None] = mapped_column(Date)
     Zurueck: Mapped[int | None] = mapped_column(Integer)
     Zurueck_Am: Mapped[date | None] = mapped_column(Date)
-    # Ablauf: vorbereitung -> unterwegs (abgeholt) -> zurueck. "Zurueck" wird passend mitgeführt
+    # Ablauf: vorbereitung -> vorbereitet (alle Bindungen geprüft) -> unterwegs (abgeholt) -> zurueck.
+    # "Zurueck" wird passend mitgeführt
     Status: Mapped[str] = mapped_column(String(15), nullable=False, default="unterwegs", server_default="unterwegs")
     Abgeholt_Am: Mapped[date | None] = mapped_column(Date, nullable=True)
     Bemerkung: Mapped[str | None] = mapped_column(String(500))

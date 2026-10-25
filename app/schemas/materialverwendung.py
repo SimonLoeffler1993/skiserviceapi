@@ -14,7 +14,7 @@ class VerleihVerwendung(BaseModel):
     Kunde: str
     Fahrer: Optional[str] = None
     Zurueck: bool
-    # vorbereitung, unterwegs oder zurueck
+    # vorbereitung, vorbereitet, unterwegs oder zurueck
     Status: str = "unterwegs"
 
 

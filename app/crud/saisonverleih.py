@@ -13,6 +13,7 @@ from app.crud import saison as crud_saison
 from app.utils.skiEttiket import SkiEttiket
 from app.services import einstellungen
 from app.crud.bindungsdaten import setze_bindungsdaten
+from app.schemas.bindungsdaten import BindungsdatenBase
 
 logger = logging.getLogger(__name__)
 
@@ -193,8 +194,9 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
                 return {"success": False, "data": None, "error": "Keine aktuelle Saison vorhanden."}
             Saison_ID = SkiSaison.ID
 
-        # Startstatus aus den Einstellungen: direkt unterwegs gilt als heute abgeholt
-        startstatus = einstellungen.hole("VERLEIH_STARTSTATUS") or "vorbereitung"
+        # Startstatus aus den Einstellungen, je Art getrennt: direkt unterwegs gilt als heute abgeholt
+        schluessel = "VERLEIH_STARTSTATUS_TAG" if saisonverleih.Art == "tag" else "VERLEIH_STARTSTATUS_SAISON"
+        startstatus = einstellungen.hole(schluessel) or "vorbereitung"
         db_saisonverleih = SaisonVerleih(
             Kunde_ID=saisonverleih.Kunde_ID,
             Status=startstatus,
@@ -282,17 +284,17 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
 
 def setze_status(db: Session, saisonverleih_id: int, status: str):
     """
-    Setzt den Status (vorbereitung, unterwegs, zurueck), auch rückwärts zum Korrigieren.
+    Setzt den Status (vorbereitung, vorbereitet, unterwegs, zurueck), auch rückwärts zum Korrigieren.
     Abgeholt_Am, Zurueck und Zurueck_Am werden passend mitgeführt.
     """
-    if status not in ("vorbereitung", "unterwegs", "zurueck"):
+    if status not in ("vorbereitung", "vorbereitet", "unterwegs", "zurueck"):
         raise ValueError(f"Unbekannter Status: {status}")
     saisonverleih = get_saisonverleih(db, saisonverleih_id)
     if not saisonverleih:
         return None
     heute = datetime.date.today()
     saisonverleih.Status = status
-    if status == "vorbereitung":
+    if status in ("vorbereitung", "vorbereitet"):
         saisonverleih.Abgeholt_Am = None
     elif saisonverleih.Abgeholt_Am is None:
         saisonverleih.Abgeholt_Am = heute
@@ -389,6 +391,8 @@ def fuege_material_hinzu(db: Session, saisonverleih_id: int, material: SaisonVer
     neues_material = SaisonVerleihMaterial(**werte)
     saisonverleih.Material.append(neues_material)
     setze_bindungsdaten(db, neues_material, saisonverleih.Kunde_ID, material.bindungsdaten, material.vorlage_id)
+    # Neuer, ungeprüfter Ski: Verleih ist nicht mehr vorbereitet
+    _status_nach_pruefung(saisonverleih)
     db.commit()
     db.refresh(saisonverleih)
     return saisonverleih
@@ -420,10 +424,63 @@ def aendere_material(db: Session, saisonverleih_id: int, material_id: int, daten
     if fehler:
         raise VerleihGesperrt(fehler)
 
+    ski_vorher = material.skinr
+    bindung_vorher = _bindung_werte(material)
     for feld, wert in werte.items():
         setattr(material, feld, wert)
     if "bindungsdaten" in daten.model_fields_set:
         setze_bindungsdaten(db, material, saisonverleih.Kunde_ID, daten.bindungsdaten, daten.vorlage_id)
+    # Anderer Ski oder geänderte Bindungsdaten: Bindung muss neu geprüft werden
+    if material.skinr != ski_vorher or _bindung_werte(material) != bindung_vorher:
+        material.BindungGeprueft = False
+        material.BindungGeprueft_Am = None
+    _status_nach_pruefung(saisonverleih)
+    db.commit()
+    db.refresh(saisonverleih)
+    return saisonverleih
+
+
+def _bindung_werte(material: SaisonVerleihMaterial) -> Optional[dict]:
+    """Bindungsdaten als vergleichbare Werte, None ohne Daten."""
+    if material.bindungsdaten is None:
+        return None
+    werte = {}
+    for feld in BindungsdatenBase.model_fields:
+        wert = getattr(material.bindungsdaten, feld)
+        werte[feld] = float(wert) if isinstance(wert, (int, float)) and not isinstance(wert, bool) else wert
+    return werte
+
+
+def _status_nach_pruefung(saisonverleih: SaisonVerleih):
+    """
+    In Vorbereitung -> Vorbereitet, sobald alle Materialzeilen mit Ski geprüft sind.
+    Vorbereitet -> In Vorbereitung, wenn eine Prüfung fehlt (z.B. Ski getauscht).
+    Spätere Status (unterwegs, zurueck) bleiben unverändert.
+    """
+    mit_ski = [m for m in saisonverleih.Material if m.skinr]
+    alle_geprueft = bool(mit_ski) and all(m.BindungGeprueft for m in mit_ski)
+    if saisonverleih.Status == "vorbereitung" and alle_geprueft:
+        saisonverleih.Status = "vorbereitet"
+    elif saisonverleih.Status == "vorbereitet" and not alle_geprueft:
+        saisonverleih.Status = "vorbereitung"
+
+
+def pruefe_bindungen(db: Session, saisonverleih_id: int, material_ids: Optional[list[int]] = None):
+    """
+    Markiert die Bindung der Materialzeilen mit Ski als geprüft, ohne Angabe alle.
+    Auch nach dem Bezahlen erlaubt. Sind danach alle geprüft, wird der Verleih "vorbereitet".
+    """
+    saisonverleih = get_saisonverleih(db, saisonverleih_id)
+    if saisonverleih is None:
+        return None
+    heute = datetime.date.today()
+    for material in saisonverleih.Material:
+        if not material.skinr or material.BindungGeprueft:
+            continue
+        if material_ids is None or material.ID in material_ids:
+            material.BindungGeprueft = True
+            material.BindungGeprueft_Am = heute
+    _status_nach_pruefung(saisonverleih)
     db.commit()
     db.refresh(saisonverleih)
     return saisonverleih
@@ -440,6 +497,7 @@ def entferne_material(db: Session, saisonverleih_id: int, material_id: int):
     if len(saisonverleih.Material) == 1:
         raise VerleihGesperrt("Das letzte Material kann nicht entfernt werden. Bitte stattdessen den Verleih löschen.")
     saisonverleih.Material.remove(material)
+    _status_nach_pruefung(saisonverleih)
     db.commit()
     db.refresh(saisonverleih)
     return saisonverleih

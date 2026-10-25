@@ -53,6 +53,8 @@ class SaisonVerleihMaterialUpdate(BaseModel):
 
 class SaisonVerleihMaterialRead(SaisonVerleihMaterialBase):
     ID: int
+    BindungGeprueft: bool = False
+    BindungGeprueft_Am: date | None = None
     Ski: EigenSkiRead | None = None
     Schuh: EigenSchuhRead | None = None
     Stock: SkiStockOut | None = None
@@ -110,11 +112,16 @@ class SaisonVerleihUpdate(BaseModel):
     Ende_Am: date | None = None
 
 # -> Read mit verschachtelten Objekten
-VerleihStatus = Literal["vorbereitung", "unterwegs", "zurueck"]
+VerleihStatus = Literal["vorbereitung", "vorbereitet", "unterwegs", "zurueck"]
 
 
 class VerleihStatusAenderung(BaseModel):
     Status: VerleihStatus
+
+
+class BindungGeprueftAnfrage(BaseModel):
+    # Ohne Angabe alle Materialzeilen mit Ski
+    material_ids: Optional[List[int]] = None
 
 
 class SaisonVerleihRead(SaisonVerleihBase):

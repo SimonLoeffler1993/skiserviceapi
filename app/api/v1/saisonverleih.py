@@ -5,7 +5,7 @@ from datetime import date
 
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
-from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate, VerleihStatusAenderung
+from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate, VerleihStatusAenderung, BindungGeprueftAnfrage
 from app.utils import skipdf
 
 router = APIRouter(
@@ -119,7 +119,7 @@ async def saisonverleih_zurueckgeben(saisonverleih_id: int, db: Session = Depend
 @router.patch("/{saisonverleih_id}/status", response_model=SaisonVerleihRead)
 def setze_verleih_status(saisonverleih_id: int, daten: VerleihStatusAenderung, db: Session = Depends(get_db)):
     """
-    Setzt den Status: vorbereitung -> unterwegs (abgeholt) -> zurueck. Auch rückwärts zum Korrigieren.
+    Setzt den Status: vorbereitung -> vorbereitet -> unterwegs (abgeholt) -> zurueck. Auch rückwärts zum Korrigieren.
     """
     verleih = crud_saisonverleih.setze_status(db, saisonverleih_id, daten.Status)
     if verleih is None:
@@ -176,6 +176,15 @@ def aendere_material(saisonverleih_id: int, material_id: int, daten: SaisonVerle
         return _verleih_oder_404(crud_saisonverleih.aendere_material(db, saisonverleih_id, material_id, daten))
     except crud_saisonverleih.VerleihGesperrt as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/{saisonverleih_id}/bindung-geprueft", response_model=SaisonVerleihRead)
+def bindung_geprueft(saisonverleih_id: int, anfrage: BindungGeprueftAnfrage, db: Session = Depends(get_db)):
+    """
+    Markiert die Bindungen der Materialzeilen mit Ski als geprüft (ohne material_ids alle).
+    Sind danach alle geprüft, wechselt ein Verleih in Vorbereitung auf "vorbereitet".
+    """
+    return _verleih_oder_404(crud_saisonverleih.pruefe_bindungen(db, saisonverleih_id, anfrage.material_ids))
 
 
 @router.delete("/{saisonverleih_id}/material/{material_id}", response_model=SaisonVerleihRead)
