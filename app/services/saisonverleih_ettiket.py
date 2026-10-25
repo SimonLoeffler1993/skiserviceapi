@@ -23,27 +23,46 @@ def _rueckgabe(verleih: SaisonVerleih) -> str | None:
     return ende.strftime("%d.%m.%y") if ende else None
 
 
+def ausruestung_nummern(verleih: SaisonVerleih) -> dict[int, int]:
+    """
+    Nummer je Materialzeile ohne Fahrer ("Ausrüstung #1, #2, ..."), in Erfassungsreihenfolge.
+    Zeilen mit Fahrer werden nicht gezählt und fehlen im Ergebnis.
+    """
+    nummern = {}
+    for material in sorted(verleih.Material, key=lambda m: m.ID):
+        if not (material.SkiFahrerName or "").strip():
+            nummern[material.ID] = len(nummern) + 1
+    return nummern
+
+
 def etiketten_liste(verleih: SaisonVerleih) -> list[dict]:
     """
     Ein Etikett je Leihski und je Leihschuh, damit das Material in der Werkstatt eindeutig zugeordnet werden kann.
-    Materialzeilen ohne Ski und Schuh (nur Preis oder Stock) bekommen ein Etikett "AUSRÜSTUNG" bzw. "STOCK".
+    Materialzeilen ohne Ski und Schuh (nur Preis oder Stock) bekommen ein Etikett "AUSRÜSTUNG #n" bzw. "STOCK".
+    Ohne Fahrer wird die Zeile mit "#n" gekennzeichnet (siehe ausruestung_nummern).
     Schlüssel z.B. "12-ski", "12-schuh" oder "12-material" (Material-ID und Teil).
     """
     kunde = kunden_name(verleih.Kunde.Vorname, verleih.Kunde.Nachname) if verleih.Kunde else ""
     rueckgabe = _rueckgabe(verleih)
     info = f"{verleih.Name} · bis {rueckgabe}" if rueckgabe else verleih.Name
+    nummern = ausruestung_nummern(verleih)
     liste = []
     for material in verleih.Material:
         # QR-Code führt zur Materialzeile, die in der Ansicht hervorgehoben wird
         url = f"{appHost()}/saisonverleih/anzeigen/{verleih.ID}?material={material.ID}"
         fahrer = (material.SkiFahrerName or "").strip() or None
         name = fahrer or kunde or verleih.Name
+        nr = nummern.get(material.ID)
+        bezeichnung = fahrer or f"Ausrüstung #{nr}"
+        # Ohne Fahrer die Nummer anhängen, damit gleiche Etiketten unterscheidbar sind, z.B. "SKI V101 · #1"
+        zusatz = f" · #{nr}" if nr else ""
         if material.skinr:
             liste.append({
                 "Schluessel": f"{material.ID}-ski",
                 "Name": name,
                 "Fahrer": fahrer,
-                "Teil": f"SKI {material.skinr}",
+                "Bezeichnung": bezeichnung,
+                "Teil": f"SKI {material.skinr}{zusatz}",
                 "Info": info,
                 "Url": url,
                 "Bindung": bindungsdaten_zeile(material.bindungsdaten),
@@ -56,7 +75,8 @@ def etiketten_liste(verleih: SaisonVerleih) -> list[dict]:
                 "Schluessel": f"{material.ID}-schuh",
                 "Name": name,
                 "Fahrer": fahrer,
-                "Teil": f"SCHUH {schuh.SchuhNr}" + (f" · {groesse}" if groesse else ""),
+                "Bezeichnung": bezeichnung,
+                "Teil": f"SCHUH {schuh.SchuhNr}" + (f" · {groesse}" if groesse else "") + zusatz,
                 "Info": info,
                 "Url": url,
                 "Bindung": f"Sohle {sohle}mm" if sohle else None,
@@ -66,7 +86,8 @@ def etiketten_liste(verleih: SaisonVerleih) -> list[dict]:
                 "Schluessel": f"{material.ID}-material",
                 "Name": name,
                 "Fahrer": fahrer,
-                "Teil": f"STOCK {material.Stock.Bezeichnung}" if material.Stock else "AUSRÜSTUNG",
+                "Bezeichnung": bezeichnung,
+                "Teil": f"STOCK {material.Stock.Bezeichnung}{zusatz}" if material.Stock else (f"AUSRÜSTUNG #{nr}" if nr else "AUSRÜSTUNG"),
                 "Info": info,
                 "Url": url,
                 "Bindung": bindungsdaten_zeile(material.bindungsdaten),

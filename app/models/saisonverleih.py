@@ -85,8 +85,10 @@ class SaisonVerleih(Base):
     Art: Mapped[str] = mapped_column(String(10), nullable=False, default="saison", server_default="saison")
     QuittungID: Mapped[int | None] = mapped_column(Integer)
 
+    # Feste Reihenfolge (Erfassung), darauf beruht z.B. die Zählung "Ausrüstung #1, #2"
     Material: Mapped[list[SaisonVerleihMaterial]] = relationship(
-        SaisonVerleihMaterial, back_populates="saisonverleih", cascade="all, delete-orphan"
+        SaisonVerleihMaterial, back_populates="saisonverleih", cascade="all, delete-orphan",
+        order_by=lambda: SaisonVerleihMaterial.ID,
     )
 
     @property

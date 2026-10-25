@@ -17,4 +17,6 @@ class VerleihEttiketEintrag(BaseModel):
     Name: str
     # SkiFahrerName, None wenn keiner angegeben ist
     Fahrer: str | None = None
+    # Fahrer bzw. "Ausrüstung #n" (Zählung der Zeilen ohne Fahrer im Verleih)
+    Bezeichnung: str
     Teil: str
