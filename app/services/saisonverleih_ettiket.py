@@ -26,7 +26,8 @@ def _rueckgabe(verleih: SaisonVerleih) -> str | None:
 def etiketten_liste(verleih: SaisonVerleih) -> list[dict]:
     """
     Ein Etikett je Leihski und je Leihschuh, damit das Material in der Werkstatt eindeutig zugeordnet werden kann.
-    Schlüssel z.B. "12-ski" oder "12-schuh" (Material-ID und Teil).
+    Materialzeilen ohne Ski und Schuh (nur Preis oder Stock) bekommen ein Etikett "AUSRÜSTUNG" bzw. "STOCK".
+    Schlüssel z.B. "12-ski", "12-schuh" oder "12-material" (Material-ID und Teil).
     """
     kunde = kunden_name(verleih.Kunde.Vorname, verleih.Kunde.Nachname) if verleih.Kunde else ""
     rueckgabe = _rueckgabe(verleih)
@@ -60,6 +61,16 @@ def etiketten_liste(verleih: SaisonVerleih) -> list[dict]:
                 "Url": url,
                 "Bindung": f"Sohle {sohle}mm" if sohle else None,
             })
+        if not material.skinr and not material.Schuh:
+            liste.append({
+                "Schluessel": f"{material.ID}-material",
+                "Name": name,
+                "Fahrer": fahrer,
+                "Teil": f"STOCK {material.Stock.Bezeichnung}" if material.Stock else "AUSRÜSTUNG",
+                "Info": info,
+                "Url": url,
+                "Bindung": bindungsdaten_zeile(material.bindungsdaten),
+            })
     return liste
 
 
@@ -73,7 +84,7 @@ def verleih_ettiketten_drucken(verleih: SaisonVerleih, schluessel: list[str] | N
             raise ValueError(f"Unbekannte Etiketten: {', '.join(unbekannt)}")
         liste = [eintrag for eintrag in liste if eintrag["Schluessel"] in schluessel]
     if not liste:
-        raise EttiketFehler("Keine Etiketten zum Drucken, der Verleih hat weder Ski noch Schuhe.")
+        raise EttiketFehler("Keine Etiketten zum Drucken, der Verleih hat kein Material.")
 
     drucker = SkiEttiket()
     for eintrag in liste:
