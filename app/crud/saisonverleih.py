@@ -133,6 +133,29 @@ def belegung_text(belegung: dict) -> str:
     return f"{belegung['Material']} ist bereits verliehen: {belegung['Name']} ({zeitraum}, {belegung['Kunde']})"
 
 
+def belegung_fehler(
+        db: Session,
+        art: str,
+        start: Optional[datetime.date],
+        ende: Optional[datetime.date],
+        skinr: Optional[str],
+        schuhnr: Optional[int],
+        ausser_id: Optional[int] = None,
+    ) -> Optional[str]:
+    """
+    Meldung, wenn Ski oder Schuh schon verliehen sind, sonst None.
+    Tagesverleih: im Zeitraum Start-Ende. Saisonverleih: heute in einem nicht zurückgegebenen Verleih.
+    """
+    if art == "tag":
+        von, bis = start, ende
+    else:
+        von = bis = datetime.date.today()
+    if von is None or bis is None:
+        return None
+    belegungen = finde_belegungen(db, von, bis, skinr=skinr, schuhnr=schuhnr, ausser_id=ausser_id)
+    return belegung_text(belegungen[0]) if belegungen else None
+
+
 def material_nicht_verfuegbar(db: Session, skinr: Optional[str], schuhnr: Optional[int], stockbez_ID: Optional[int]) -> Optional[str]:
     """Prüft, ob Ski, Schuh und Stock existieren und nicht ausgemustert sind. Gibt sonst eine Meldung zurück."""
     if skinr:
@@ -195,15 +218,16 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
             if fehler:
                 return {"success": False, "data": None, "error": fehler}
 
-        # Beim Tagesverleih prüfen, ob Ski oder Schuh im Zeitraum schon verliehen sind
-        if saisonverleih.Art == "tag":
-            for material in saisonverleih.Material:
-                belegungen = finde_belegungen(
-                    db, saisonverleih.Start_Am, saisonverleih.Ende_Am,
-                    skinr=material.skinr or None, schuhnr=material.schuhnr or None,
-                )
-                if belegungen:
-                    return {"success": False, "data": None, "error": belegung_text(belegungen[0])}
+        # Prüfen, ob Ski oder Schuh schon verliehen sind, außer bewusst übernommen
+        for material in saisonverleih.Material:
+            if material.trotz_belegung:
+                continue
+            fehler = belegung_fehler(
+                db, saisonverleih.Art, saisonverleih.Start_Am, saisonverleih.Ende_Am,
+                material.skinr or None, material.schuhnr or None,
+            )
+            if fehler:
+                return {"success": False, "data": None, "error": fehler}
 
         for material in saisonverleih.Material:
 
@@ -337,7 +361,7 @@ def aendere_saisonverleih(db: Session, saisonverleih_id: int, daten: SaisonVerle
 
 def _material_werte(material) -> dict:
     """Bereinigt leere Werte wie beim Anlegen. Bindungsdaten werden getrennt gespeichert."""
-    werte = material.model_dump(exclude_unset=True, exclude={"bindungsdaten", "vorlage_id"})
+    werte = material.model_dump(exclude_unset=True, exclude={"bindungsdaten", "vorlage_id", "trotz_belegung"})
     if "stockbez_ID" in werte:
         werte["stockbez_ID"] = werte["stockbez_ID"] if werte["stockbez_ID"] and werte["stockbez_ID"] > 0 else None
     for feld in ("skinr", "schuhnr"):
@@ -355,13 +379,13 @@ def fuege_material_hinzu(db: Session, saisonverleih_id: int, material: SaisonVer
     fehler = material_nicht_verfuegbar(db, werte.get("skinr"), werte.get("schuhnr"), werte.get("stockbez_ID"))
     if fehler:
         raise VerleihGesperrt(fehler)
-    if saisonverleih.Art == "tag":
-        belegungen = finde_belegungen(
-            db, saisonverleih.Start_Am, saisonverleih.Ende_Am,
-            skinr=werte.get("skinr"), schuhnr=werte.get("schuhnr"), ausser_id=saisonverleih.ID,
+    if not material.trotz_belegung:
+        fehler = belegung_fehler(
+            db, saisonverleih.Art, saisonverleih.Start_Am, saisonverleih.Ende_Am,
+            werte.get("skinr"), werte.get("schuhnr"), ausser_id=saisonverleih.ID,
         )
-        if belegungen:
-            raise VerleihGesperrt(belegung_text(belegungen[0]))
+        if fehler:
+            raise VerleihGesperrt(fehler)
     neues_material = SaisonVerleihMaterial(**werte)
     saisonverleih.Material.append(neues_material)
     setze_bindungsdaten(db, neues_material, saisonverleih.Kunde_ID, material.bindungsdaten, material.vorlage_id)
@@ -379,9 +403,22 @@ def aendere_material(db: Session, saisonverleih_id: int, material_id: int, daten
         return None
 
     werte = _material_werte(daten)
-    # Nur Fahrername und Bindungsdaten dürfen nach dem Bezahlen noch geändert werden
-    if set(werte.keys()) - {"SkiFahrerName"}:
+    # Nach dem Bezahlen ist nur der Preis gesperrt, Material darf getauscht werden
+    if "Preis" in werte and werte["Preis"] != material.Preis:
         _pruefe_nicht_bezahlt(saisonverleih)
+
+    # Nur getauschte Teile prüfen, das bisherige Material bleibt gültig
+    neue_skinr = werte.get("skinr") if "skinr" in werte and werte["skinr"] != material.skinr else None
+    neue_schuhnr = werte.get("schuhnr") if "schuhnr" in werte and werte["schuhnr"] != material.schuhnr else None
+    neuer_stock = werte.get("stockbez_ID") if "stockbez_ID" in werte and werte["stockbez_ID"] != material.stockbez_ID else None
+    fehler = material_nicht_verfuegbar(db, neue_skinr, neue_schuhnr, neuer_stock)
+    if not fehler and not daten.trotz_belegung:
+        fehler = belegung_fehler(
+            db, saisonverleih.Art, saisonverleih.Start_Am, saisonverleih.Ende_Am,
+            neue_skinr, neue_schuhnr, ausser_id=saisonverleih.ID,
+        )
+    if fehler:
+        raise VerleihGesperrt(fehler)
 
     for feld, wert in werte.items():
         setattr(material, feld, wert)

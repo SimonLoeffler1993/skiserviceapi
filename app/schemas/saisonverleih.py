@@ -23,6 +23,8 @@ class SaisonVerleihMaterialBase(BaseModel):
     bindungsdaten: Optional[BindungsdatenBase] = None
     # Aus "Letzte Daten abfragen" übernommener Datensatz, wird beim Speichern archiviert
     vorlage_id: Optional[int] = None
+    # Ski bzw. Schuh bewusst übernehmen, obwohl sie schon verliehen sind (wird nicht gespeichert)
+    trotz_belegung: bool = False
 
     model_config = {
         "from_attributes": True
@@ -45,6 +47,8 @@ class SaisonVerleihMaterialUpdate(BaseModel):
     stocklaenge: Optional[int] = None
     Preis: Optional[float] = None
     SkiFahrerName: Optional[str] = None
+    # Ski bzw. Schuh bewusst übernehmen, obwohl sie schon verliehen sind
+    trotz_belegung: bool = False
 
 
 class SaisonVerleihMaterialRead(SaisonVerleihMaterialBase):
