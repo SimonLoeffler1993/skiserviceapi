@@ -64,6 +64,9 @@ class SaisonVerleih(Base):
     Bezahlt_Am: Mapped[date | None] = mapped_column(Date)
     Zurueck: Mapped[int | None] = mapped_column(Integer)
     Zurueck_Am: Mapped[date | None] = mapped_column(Date)
+    # Ablauf: vorbereitung -> unterwegs (abgeholt) -> zurueck. "Zurueck" wird passend mitgeführt
+    Status: Mapped[str] = mapped_column(String(15), nullable=False, default="unterwegs", server_default="unterwegs")
+    Abgeholt_Am: Mapped[date | None] = mapped_column(Date, nullable=True)
     Bemerkung: Mapped[str | None] = mapped_column(String(500))
 
     Saison_ID: Mapped[int | None] = mapped_column(ForeignKey("saisons.ID"))

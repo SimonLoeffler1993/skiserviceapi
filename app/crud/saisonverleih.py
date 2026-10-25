@@ -170,8 +170,13 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
                 return {"success": False, "data": None, "error": "Keine aktuelle Saison vorhanden."}
             Saison_ID = SkiSaison.ID
 
+        # Startstatus aus den Einstellungen: direkt unterwegs gilt als heute abgeholt
+        startstatus = einstellungen.hole("VERLEIH_STARTSTATUS") or "vorbereitung"
         db_saisonverleih = SaisonVerleih(
             Kunde_ID=saisonverleih.Kunde_ID,
+            Status=startstatus,
+            Zurueck=False,
+            Abgeholt_Am=datetime.date.today() if startstatus == "unterwegs" else None,
             Bezahlt = False,
             Ueberweisung=0,
             Bemerkung=saisonverleih.Bemerkung,
@@ -251,15 +256,30 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
         "data":db_saisonverleih
         }
 
-def set_Saisonverleih_Zurueck(db: Session, saisonverleih_id: int, zurueck: bool = True):
+def setze_status(db: Session, saisonverleih_id: int, status: str):
+    """
+    Setzt den Status (vorbereitung, unterwegs, zurueck), auch rückwärts zum Korrigieren.
+    Abgeholt_Am, Zurueck und Zurueck_Am werden passend mitgeführt.
+    """
+    if status not in ("vorbereitung", "unterwegs", "zurueck"):
+        raise ValueError(f"Unbekannter Status: {status}")
     saisonverleih = get_saisonverleih(db, saisonverleih_id)
     if not saisonverleih:
-        return False
-    saisonverleih.Zurueck_Am = datetime.date.today() if zurueck else None
-    saisonverleih.Zurueck = zurueck
+        return None
+    heute = datetime.date.today()
+    saisonverleih.Status = status
+    if status == "vorbereitung":
+        saisonverleih.Abgeholt_Am = None
+    elif saisonverleih.Abgeholt_Am is None:
+        saisonverleih.Abgeholt_Am = heute
+    saisonverleih.Zurueck = status == "zurueck"
+    saisonverleih.Zurueck_Am = (saisonverleih.Zurueck_Am or heute) if status == "zurueck" else None
     db.commit()
     db.refresh(saisonverleih)
-    return True
+    return saisonverleih
+
+def set_Saisonverleih_Zurueck(db: Session, saisonverleih_id: int, zurueck: bool = True):
+    return setze_status(db, saisonverleih_id, "zurueck" if zurueck else "unterwegs") is not None
 
 def set_Saisonverleih_Quittung(db: Session, saisonverleih_id: int, quittung_id: int):
     saisonverleih = get_saisonverleih(db, saisonverleih_id)

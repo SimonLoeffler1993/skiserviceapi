@@ -108,6 +108,9 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           beschreibung="Ergibt z.B. 25/26TV3"),
     EinstellungDefinition("KUERZEL_SKISERVICE", "anwendung", "Kürzel Skiservice Nummer", standard="S",
                           beschreibung="Ergibt z.B. 25/26S12"),
+    EinstellungDefinition("VERLEIH_STARTSTATUS", "anwendung", "Status nach dem Anlegen eines Verleihs", typ="auswahl",
+                          standard="vorbereitung", optionen=["vorbereitung", "unterwegs"],
+                          beschreibung="In Vorbereitung: Material wird noch hergerichtet, beim Abholen auf Unterwegs setzen."),
     EinstellungDefinition("KUERZEL_QUITTUNG", "anwendung", "Kürzel Quittungsnummer", standard="Q",
                           beschreibung="Ergibt z.B. 25/26Q12"),
 ]

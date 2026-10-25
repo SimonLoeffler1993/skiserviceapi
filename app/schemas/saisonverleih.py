@@ -106,8 +106,17 @@ class SaisonVerleihUpdate(BaseModel):
     Ende_Am: date | None = None
 
 # -> Read mit verschachtelten Objekten
+VerleihStatus = Literal["vorbereitung", "unterwegs", "zurueck"]
+
+
+class VerleihStatusAenderung(BaseModel):
+    Status: VerleihStatus
+
+
 class SaisonVerleihRead(SaisonVerleihBase):
     ID: int
+    Status: VerleihStatus = "unterwegs"
+    Abgeholt_Am: date | None = None
     Name: str 
     Tage: int | None = None
     Bezeichnung: str = "Saisonverleih"

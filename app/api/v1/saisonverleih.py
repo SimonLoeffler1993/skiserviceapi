@@ -5,7 +5,7 @@ from datetime import date
 
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
-from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate
+from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate, VerleihStatusAenderung
 from app.utils import skipdf
 
 router = APIRouter(
@@ -115,6 +115,16 @@ async def saisonverleih_zurueckgeben(saisonverleih_id: int, db: Session = Depend
     if not result:
         raise HTTPException(status_code=404, detail="Saisonverleih not found")
     return {"message": f"Saisonverleih {saisonverleih_id} wurde als zurückgegeben markiert", "success": True}
+
+@router.patch("/{saisonverleih_id}/status", response_model=SaisonVerleihRead)
+def setze_verleih_status(saisonverleih_id: int, daten: VerleihStatusAenderung, db: Session = Depends(get_db)):
+    """
+    Setzt den Status: vorbereitung -> unterwegs (abgeholt) -> zurueck. Auch rückwärts zum Korrigieren.
+    """
+    verleih = crud_saisonverleih.setze_status(db, saisonverleih_id, daten.Status)
+    if verleih is None:
+        raise HTTPException(status_code=404, detail="Saisonverleih not found")
+    return verleih
 
 # --- Bearbeiten / Löschen ---
 
