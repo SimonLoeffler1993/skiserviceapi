@@ -105,6 +105,8 @@ def finde_belegungen(
         query = query.filter(SaisonVerleih.ID != ausser_id)
 
     belegungen = []
+    # Pro Verleih und Teil nur ein Eintrag, auch wenn das Teil (trotz Belegung) mehrfach drinsteckt
+    gesehen: set[tuple[int, str]] = set()
     for verleih in query.all():
         for material in verleih.Material:
             treffer = []
@@ -113,6 +115,9 @@ def finde_belegungen(
             if schuhnr and material.schuhnr == schuhnr:
                 treffer.append("Schuh")
             for art in treffer:
+                if (verleih.ID, art) in gesehen:
+                    continue
+                gesehen.add((verleih.ID, art))
                 kunde = verleih.Kunde
                 belegungen.append({
                     "ID": verleih.ID,
