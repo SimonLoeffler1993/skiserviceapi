@@ -31,10 +31,10 @@ def etiketten_liste(verleih: SaisonVerleih) -> list[dict]:
     kunde = kunden_name(verleih.Kunde.Vorname, verleih.Kunde.Nachname) if verleih.Kunde else ""
     rueckgabe = _rueckgabe(verleih)
     info = f"{verleih.Name} · bis {rueckgabe}" if rueckgabe else verleih.Name
-    url = f"{appHost()}/saisonverleih/anzeigen/{verleih.ID}"
-
     liste = []
     for material in verleih.Material:
+        # QR-Code führt zur Materialzeile, die in der Ansicht hervorgehoben wird
+        url = f"{appHost()}/saisonverleih/anzeigen/{verleih.ID}?material={material.ID}"
         fahrer = (material.SkiFahrerName or "").strip() or None
         name = fahrer or kunde or verleih.Name
         if material.skinr:

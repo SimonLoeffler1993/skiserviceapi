@@ -23,6 +23,8 @@ class SaisonVerleihMaterialBase(BaseModel):
     bindungsdaten: Optional[BindungsdatenBase] = None
     # Aus "Letzte Daten abfragen" übernommener Datensatz, wird beim Speichern archiviert
     vorlage_id: Optional[int] = None
+    # Ski bzw. Schuh bewusst übernehmen, obwohl sie schon verliehen sind (wird nicht gespeichert)
+    trotz_belegung: bool = False
 
     model_config = {
         "from_attributes": True
@@ -45,10 +47,14 @@ class SaisonVerleihMaterialUpdate(BaseModel):
     stocklaenge: Optional[int] = None
     Preis: Optional[float] = None
     SkiFahrerName: Optional[str] = None
+    # Ski bzw. Schuh bewusst übernehmen, obwohl sie schon verliehen sind
+    trotz_belegung: bool = False
 
 
 class SaisonVerleihMaterialRead(SaisonVerleihMaterialBase):
     ID: int
+    BindungGeprueft: bool = False
+    BindungGeprueft_Am: date | None = None
     Ski: EigenSkiRead | None = None
     Schuh: EigenSchuhRead | None = None
     Stock: SkiStockOut | None = None
@@ -106,8 +112,22 @@ class SaisonVerleihUpdate(BaseModel):
     Ende_Am: date | None = None
 
 # -> Read mit verschachtelten Objekten
+VerleihStatus = Literal["vorbereitung", "vorbereitet", "unterwegs", "zurueck"]
+
+
+class VerleihStatusAenderung(BaseModel):
+    Status: VerleihStatus
+
+
+class BindungGeprueftAnfrage(BaseModel):
+    # Ohne Angabe alle Materialzeilen mit Ski
+    material_ids: Optional[List[int]] = None
+
+
 class SaisonVerleihRead(SaisonVerleihBase):
     ID: int
+    Status: VerleihStatus = "unterwegs"
+    Abgeholt_Am: date | None = None
     Name: str 
     Tage: int | None = None
     Bezeichnung: str = "Saisonverleih"

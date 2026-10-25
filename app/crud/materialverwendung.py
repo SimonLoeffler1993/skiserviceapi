@@ -48,6 +48,7 @@ def verwendung(db: Session, bedingung) -> list[dict]:
                 "Kunde": " ".join(t for t in ((kunde.Vorname if kunde else None), (kunde.Nachname if kunde else None)) if t) or "Unbekannt",
                 "Fahrer": [],
                 "Zurueck": bool(verleih.Zurueck),
+                "Status": verleih.Status,
             }
         fahrer = (material.SkiFahrerName or "").strip()
         if fahrer and fahrer not in eintrag["Fahrer"]:

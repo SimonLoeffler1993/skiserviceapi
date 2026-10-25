@@ -14,6 +14,8 @@ class VerleihVerwendung(BaseModel):
     Kunde: str
     Fahrer: Optional[str] = None
     Zurueck: bool
+    # vorbereitung, vorbereitet, unterwegs oder zurueck
+    Status: str = "unterwegs"
 
 
 class StammdatenVerwendung(BaseModel):
