@@ -165,6 +165,9 @@ def aendereAuftrag(db: Session, auftrag_id: int, daten: AuftragUpdateSchema):
                 ski.bindungsdaten.Kunde_ID = auftrag.kunden_id
     if "abhol_date" in aenderungen:
         auftrag.abhol_date = aenderungen["abhol_date"] or None
+    # Gleiche Werte wie setzeBenachrichtigt, jederzeit änderbar (auch nach dem Bezahlen)
+    if aenderungen.get("benachrichtigt") is not None:
+        auftrag.benachrichtigt = "Ja" if aenderungen["benachrichtigt"] else "Nein"
     db.commit()
     db.refresh(auftrag)
     return auftrag

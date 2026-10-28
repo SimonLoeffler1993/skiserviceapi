@@ -151,7 +151,8 @@ def _auftrag_oder_404(auftrag):
 @router.patch("/auftrag/{skiservice_auftrag_id}", response_model=AuftragSchema)
 def aendere_auftrag(skiservice_auftrag_id: int, daten: AuftragUpdateSchema, db: Session = Depends(get_db)):
     """
-    Ändert Kunde oder Abholdatum eines Auftrags.
+    Ändert Kunde, Abholdatum oder den Benachrichtigt-Status eines Auftrags
+    (z.B. wenn der Kunde angerufen statt per Mail informiert wurde).
     """
     return _auftrag_oder_404(crud_skiservice.aendereAuftrag(db, skiservice_auftrag_id, daten))
 
