@@ -53,11 +53,23 @@ def _summe(gruppen: list[QuittungGruppeArtikel]) -> float:
     return round(sum(a.preis * a.anzahl for g in gruppen for a in g.artikels), 2)
 
 
-def _bemerkung(gruppen: list[QuittungGruppeArtikel], kunde: QuittungKundeSchema | None) -> str:
-    teile = [g.bezeichnung for g in gruppen]
-    if kunde:
-        teile.insert(0, f"Kunde: {kunde.name}")
-    return " · ".join(teile)
+def _zahlungsarten(bar: bool, karte: bool, ueberweisung: bool) -> str:
+    arten = [name for name, aktiv in (("Bar", bar), ("Karte", karte), ("Überweisung", ueberweisung)) if aktiv]
+    return ", ".join(arten)
+
+
+def _einzelkunde(kunde: QuittungKundeSchema | None) -> str | None:
+    """Name des Kunden, None bei Sammelkunde (unterschiedliche Kunden) oder ohne Kunde."""
+    if kunde is None or kunde.sammel:
+        return None
+    return kunde.name or None
+
+
+def _bemerkung(quittung: Quittung, kunde: QuittungKundeSchema | None) -> str:
+    """Nur Kundenname und Zahlungsart, z.B. "Lena Berger · Zahlungsart: Karte"."""
+    zahlung = _zahlungsarten(bool(quittung.Bar), bool(quittung.Karte), bool(quittung.Ueberweisung))
+    teile = [_einzelkunde(kunde), zahlung and f"Zahlungsart: {zahlung}"]
+    return " · ".join(t for t in teile if t)
 
 
 # --- Modus pdf: eigene Quittung als Beleg mit PDF ---
@@ -75,8 +87,10 @@ def _beleg_daten(quittung: Quittung, gruppen: list[QuittungGruppeArtikel], kunde
         "totalGrossAmount": brutto,
         "totalTaxAmount": steuer,
         "taxType": "gross",
+        # Sammelkunde in Lexware, aber mit dem Namen des Kunden, sofern die Quittung nur einen hat
         "useCollectiveContact": True,
-        "remark": f"Quittung {quittung_nummer(quittung)} · {_bemerkung(gruppen, kunde)}"[:1000],
+        **({"contactName": name} if (name := _einzelkunde(kunde)) else {}),
+        "remark": _bemerkung(quittung, kunde)[:1000],
         "voucherItems": [{
             "amount": brutto,
             "taxAmount": steuer,
@@ -151,11 +165,6 @@ def _adresse(kunde: QuittungKundeSchema | None) -> dict:
         if kunde.ort:
             adresse["city"] = kunde.ort
     return adresse
-
-
-def _zahlungsarten(bar: bool, karte: bool, ueberweisung: bool) -> str:
-    arten = [name for name, aktiv in (("Bar", bar), ("Karte", karte), ("Überweisung", ueberweisung)) if aktiv]
-    return ", ".join(arten)
 
 
 def rechnung_anlegen(db: Session, auftrag_ids: list[int], verleih_ids: list[int], kunden: dict[int, SkiKunde],
