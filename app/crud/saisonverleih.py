@@ -308,6 +308,21 @@ def setze_status(db: Session, saisonverleih_id: int, status: str):
     db.refresh(saisonverleih)
     return saisonverleih
 
+def setze_benachrichtigt(db: Session, saisonverleih_id: int, wert: str):
+    """
+    Setzt die Benachrichtigung (nein, abholung, rueckgabe), mit Datum. "nein" nimmt sie zurück.
+    """
+    if wert not in ("nein", "abholung", "rueckgabe"):
+        raise ValueError(f"Unbekannte Benachrichtigung: {wert}")
+    saisonverleih = get_saisonverleih(db, saisonverleih_id)
+    if not saisonverleih:
+        return None
+    saisonverleih.Benachrichtigt = wert
+    saisonverleih.Benachrichtigt_Am = None if wert == "nein" else datetime.date.today()
+    db.commit()
+    db.refresh(saisonverleih)
+    return saisonverleih
+
 def set_Saisonverleih_Zurueck(db: Session, saisonverleih_id: int, zurueck: bool = True):
     return setze_status(db, saisonverleih_id, "zurueck" if zurueck else "unterwegs") is not None
 

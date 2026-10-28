@@ -6,6 +6,7 @@ import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+from app.schemas.saisonverleih import SaisonVerleihRead
 from app.schemas.skiservice import AuftragSchema, SkiSchema
 from app.services import einstellungen
 
@@ -85,4 +86,51 @@ def sendeFertigMail(auftrag: AuftragSchema):
         return True
     except Exception:
         logger.exception("Fehler beim Senden der E-Mail")
+        return False
+
+
+def verleihMailHtml(verleih: SaisonVerleihRead, art: str) -> str:
+    """HTML der Abhol- bzw. Rückgabe-Mail eines Verleihs, mit dem Material."""
+    material = []
+    for nr, m in enumerate(verleih.Material, start=1):
+        teile = []
+        if m.Ski:
+            teile.append(f"Ski {m.Ski.Modell.Hersteller.Name} {m.Ski.Modell.Modell}, {m.Ski.Laenge} cm")
+        if m.Schuh:
+            teile.append(f"Schuh {m.Schuh.Modell.Hersteller.Name} {m.Schuh.Modell.Modell}, Gr. {f'{m.Schuh.Groese:g}'.replace('.', ',')}")
+        if m.Stock:
+            teile.append("Stöcke")
+        # Zeilen nur mit Preis (ohne Material) weglassen
+        if teile:
+            material.append({"name": (m.SkiFahrerName or "").strip() or f"Ausrüstung #{nr}", "teile": teile})
+
+    return templates.get_template(f"verleih_{art}_mail.html").render(
+        verleih=verleih,
+        kunde=verleih.Kunde,
+        material=material,
+        ende_am=verleih.Ende_Am.strftime("%d.%m.%Y") if verleih.Art == "tag" and verleih.Ende_Am else None,
+        firma_name=einstellungen.hole("FIRMA_NAME"),
+        firma_telefon=einstellungen.hole("FIRMA_TELEFON"),
+    )
+
+def sendeVerleihMail(verleih: SaisonVerleihRead, art: str) -> bool:
+    """
+    Versendet die Abhol- ("abholung") bzw. Rückgabe-Mail ("rueckgabe") eines Verleihs.
+    False, wenn keine E-Mail hinterlegt ist oder der Versand fehlschlägt.
+    """
+    if not verleih.Kunde or not verleih.Kunde.Email:
+        logger.info("Keine E-Mail Adresse beim Kunden hinterlegt, keine Verleih-Mail versendet.")
+        return False
+
+    msg = MIMEMultipart()
+    msg['From'] = einstellungen.hole("EMAIL_FROM")
+    msg['To'] = verleih.Kunde.Email
+    msg['Subject'] = einstellungen.hole("MAIL_BETREFF_VERLEIH_ABHOLUNG" if art == "abholung" else "MAIL_BETREFF_VERLEIH_RUECKGABE")
+
+    msg.attach(MIMEText(verleihMailHtml(verleih, art), "html"))
+    try:
+        sendeMail(msg)
+        return True
+    except Exception:
+        logger.exception("Fehler beim Senden der Verleih-Mail")
         return False

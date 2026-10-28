@@ -119,6 +119,20 @@ class VerleihStatusAenderung(BaseModel):
     Status: VerleihStatus
 
 
+# nein, abholung (Ski abholbereit) oder rueckgabe (Erinnerung an die Rückgabe)
+VerleihBenachrichtigung = Literal["nein", "abholung", "rueckgabe"]
+
+
+class VerleihBenachrichtigtAenderung(BaseModel):
+    # Von Hand setzen, ohne Mail (z.B. Kunde angerufen)
+    Benachrichtigt: VerleihBenachrichtigung
+
+
+class VerleihBenachrichtigenAnfrage(BaseModel):
+    # Welche Mail versendet wird
+    art: Literal["abholung", "rueckgabe"]
+
+
 class BindungGeprueftAnfrage(BaseModel):
     # Ohne Angabe alle Materialzeilen mit Ski
     material_ids: Optional[List[int]] = None
@@ -128,6 +142,8 @@ class SaisonVerleihRead(SaisonVerleihBase):
     ID: int
     Status: VerleihStatus = "unterwegs"
     Abgeholt_Am: date | None = None
+    Benachrichtigt: VerleihBenachrichtigung = "nein"
+    Benachrichtigt_Am: date | None = None
     Name: str 
     Tage: int | None = None
     Bezeichnung: str = "Saisonverleih"

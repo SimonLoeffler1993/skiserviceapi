@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+</head>
+
+<body>
+    <p style="margin: 0 0 8px; font-size: 14px; color: #444;">Hallo {{ [kunde.Vorname, kunde.Nachname] | select | join(" ") }},</p>
+    <p style="margin: 0 0 20px; font-size: 16px; font-weight: bold; color: #111;">Bitte denk an die Rückgabe deiner Leihausrüstung</p>
+    <p style="margin: 0 0 24px; font-size: 14px; color: #444; line-height: 1.6;">
+        {% if ende_am %}
+        Dein Verleih läuft bis zum <strong>{{ ende_am }}</strong>. Bitte bring die Ausrüstung bis dahin zu uns zurück.
+        {% else %}
+        Die Saison neigt sich dem Ende zu. Bitte bring deine Leihausrüstung in den nächsten Tagen zu uns zurück.
+        {% endif %}
+    </p>
+
+    {% include "verleih_material_mail.html" %}
+
+    <p style="margin: 0 0 8px; font-size: 14px; color: #444;">Vielen Dank und bis bald!</p>
+    <p style="margin: 0; font-size: 14px; color: #444;">{{ firma_name }}{% if firma_telefon %} · Tel. {{ firma_telefon }}{% endif %}</p>
+</body>
+
+</html>
