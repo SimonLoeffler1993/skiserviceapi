@@ -13,7 +13,9 @@ from app.crud import skiservice as crud_skiservice
 from app.schemas.quittung import QuittungListeEintrag, QuittungNurExtern, QuittungRead, QuittungOutSchema
 from app.utils.lexware import LexwareAPI
 from app.services import einstellungen
-from app.services. quittung import QuittungsService, quittung_dateiname, quittungen_liste
+from app.services. quittung import QuittungsService, quittung_pdf, quittungen_liste
+from app.schemas.kasse import QuittungMailAnfrage, QuittungMailErgebnis
+from app.utils.mail import sendeQuittungMail
 from app.crud import saison as crud_saison
 from app.services.lexware_sync import SyncKonflikt, quittung_pdf_hochladen
 from app.utils.lexware import LexwareFehler
@@ -154,30 +156,48 @@ def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
     if quittung is None:
         raise HTTPException(status_code=404, detail="Quittung nicht gefunden")
 
-    # Externe Quittung: das Original liegt in Lexware
-    if quittung.NurExtern and quittung.LexID:
-        try:
-            pdf, dateiname = LexwareAPI().hole_rechnung_pdf(quittung.LexID)
-        except LexwareFehler as e:
-            raise HTTPException(status_code=502, detail=f"PDF konnte nicht aus Lexware geladen werden: {e}")
-        dateiname = dateiname or quittung_dateiname(quittung)
-        return Response(
-            content=pdf,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'inline; filename="{dateiname}"'},
-        )
+    pdf, dateiname = _quittung_pdf_oder_fehler(db, quittung)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{dateiname}"'},
+    )
 
+
+def _quittung_pdf_oder_fehler(db: Session, quittung) -> tuple[bytes, str]:
     try:
-        quittungsdata = QuittungsService(db).get_quittung(quittung_id)
-        pdf = QuittungsService(db).renderPDF(quittungsdata)
-
-        return Response(
-                content=pdf,
-                media_type="application/pdf",
-                headers={"Content-Disposition": f'inline; filename="{quittung_dateiname(quittung)}"'},
-            )
+        return quittung_pdf(db, quittung)
+    except LexwareFehler as e:
+        # Externe Quittung: das Original liegt in Lexware
+        raise HTTPException(status_code=502, detail=f"PDF konnte nicht aus Lexware geladen werden: {e}")
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
+
+
+@router.post("/quittung/{quittung_id}/mail", response_model=QuittungMailErgebnis)
+def sende_quittung_mail(quittung_id: int, anfrage: QuittungMailAnfrage, db: Session = Depends(get_db)):
+    """
+    Versendet die Quittung als PDF an eine oder mehrere Adressen, an jede eine eigene Mail.
+    """
+    quittung = crud_quittung.get_quittung(db, quittung_id)
+    if quittung is None:
+        raise HTTPException(status_code=404, detail="Quittung nicht gefunden")
+
+    pdf, dateiname = _quittung_pdf_oder_fehler(db, quittung)
+    ergebnis = QuittungMailErgebnis(gesendet=[], fehlgeschlagen=[])
+    # Doppelte Adressen nur einmal senden
+    emails: dict[str, str] = {}
+    for e in anfrage.emails:
+        emails.setdefault(e.lower(), e)
+    for email in emails.values():
+        if sendeQuittungMail(email, quittung.Nummer, pdf, dateiname):
+            ergebnis.gesendet.append(email)
+        else:
+            ergebnis.fehlgeschlagen.append(email)
+
+    if not ergebnis.gesendet:
+        raise HTTPException(status_code=502, detail="Die E-Mail konnte nicht versendet werden.")
+    return ergebnis
     
 @router.get("/quittung/{quittung_id}/json", response_model=QuittungOutSchema)
 async def get_quittung_json(quittung_id: int, db: Session = Depends(get_db)):

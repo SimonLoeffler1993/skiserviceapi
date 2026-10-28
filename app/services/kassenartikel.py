@@ -17,6 +17,15 @@ from app.services.lexware_sync import lexware_modus, rechnung_anlegen
 
 logger = logging.getLogger(__name__)
 
+def _kunden_emails(kunden: list[SkiKunde | None]) -> list[str]:
+    """Verschiedene E-Mail Adressen der Kunden in der Reihenfolge der Artikel."""
+    emails: dict[str, str] = {}
+    for kunde in kunden:
+        email = (kunde.Email or "").strip() if kunde else ""
+        if email:
+            emails.setdefault(email.lower(), email)
+    return list(emails.values())
+
 def get_kundenname(kunde: SkiKunde | None) -> str:
     if kunde is not None:
         return f"{kunde.Vorname or ''} {kunde.Nachname or ''}".strip() or "Unbekannt"
@@ -247,5 +256,7 @@ class KasseService:
         return KasseHatBezahltSchema(
             quittung_id=quittung.ID,
             bezahldatum=str(quittung.Bezahlt_Am),
-            success=True
+            success=True,
+            quittung_nummer=quittung.Nummer,
+            emails=_kunden_emails([a.kunde for a in auftraege] + [v.Kunde for v in verleihe]),
         )

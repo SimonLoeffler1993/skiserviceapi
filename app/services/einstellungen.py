@@ -99,6 +99,8 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           standard="Deine Leihski sind abholbereit!"),
     EinstellungDefinition("MAIL_BETREFF_VERLEIH_RUECKGABE", "mail", "Betreff Rückgabe-Mail Verleih",
                           standard="Bitte denk an die Rückgabe deiner Leihski"),
+    EinstellungDefinition("MAIL_BETREFF_QUITTUNG", "mail", "Betreff Quittungs-Mail", standard="Deine Quittung",
+                          beschreibung="Die Quittungsnummer wird angehängt."),
     EinstellungDefinition("MAIL_FERTIG_INHALT", "mail", "Inhalt Fertig-Mail", typ="auswahl", standard="preise",
                           optionen=["fertig", "preise"],
                           beschreibung="Nur die Fertig-Meldung oder zusätzlich die Auflistung der Leistungen mit Preisen."),

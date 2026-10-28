@@ -9,6 +9,7 @@ from weasyprint import HTML
 
 from app.models.quittung import Quittung
 from app.services import einstellungen
+from app.utils.lexware import LexwareAPI
 from app.utils.girocode import girocode_png_data_uri, iban_formatiert
 from app.schemas.quittung import QuittungArtikelSchema, QuittungBezug, QuittungKundeSchema, QuittungListeEintrag, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
 from app.models.kunde import SkiKunde
@@ -296,3 +297,14 @@ class QuittungsService:
             raise HTTPException(status_code=404, detail="PDF konnte nicht erstellt werden")
 
         return pdf
+
+
+def quittung_pdf(db: Session, quittung: Quittung) -> tuple[bytes, str]:
+    """
+    PDF und Dateiname einer Quittung. Externe Quittung: das Original kommt aus Lexware (kann LexwareFehler werfen).
+    """
+    if quittung.NurExtern and quittung.LexID:
+        pdf, dateiname = LexwareAPI().hole_rechnung_pdf(quittung.LexID)
+        return pdf, dateiname or quittung_dateiname(quittung)
+    service = QuittungsService(db)
+    return service.renderPDF(service.get_quittung(quittung.ID)), quittung_dateiname(quittung)

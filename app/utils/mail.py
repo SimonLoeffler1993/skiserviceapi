@@ -3,6 +3,7 @@ from fastapi.templating import Jinja2Templates
 import logging
 import smtplib
 import ssl
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -133,4 +134,30 @@ def sendeVerleihMail(verleih: SaisonVerleihRead, art: str) -> bool:
         return True
     except Exception:
         logger.exception("Fehler beim Senden der Verleih-Mail")
+        return False
+
+def sendeQuittungMail(email: str, nummer: str, pdf: bytes, dateiname: str) -> bool:
+    """
+    Versendet die Quittung als PDF-Anhang an eine Adresse.
+    False, wenn der Versand fehlschlägt.
+    """
+    msg = MIMEMultipart()
+    msg['From'] = einstellungen.hole("EMAIL_FROM")
+    msg['To'] = email
+    msg['Subject'] = f'{einstellungen.hole("MAIL_BETREFF_QUITTUNG")} {nummer}'
+
+    html = templates.get_template("quittung_mail.html").render(
+        nummer=nummer,
+        firma_name=einstellungen.hole("FIRMA_NAME"),
+        firma_telefon=einstellungen.hole("FIRMA_TELEFON"),
+    )
+    msg.attach(MIMEText(html, "html"))
+    anhang = MIMEApplication(pdf, _subtype="pdf")
+    anhang.add_header("Content-Disposition", "attachment", filename=dateiname)
+    msg.attach(anhang)
+    try:
+        sendeMail(msg)
+        return True
+    except Exception:
+        logger.exception("Fehler beim Senden der Quittungs-Mail an %s", email)
         return False
