@@ -13,7 +13,7 @@ from app.utils.lexware import LexwareAPI
 from app.utils.girocode import girocode_png_data_uri, iban_formatiert
 from app.schemas.quittung import QuittungArtikelSchema, QuittungBezug, QuittungKundeSchema, QuittungListeEintrag, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
 from app.models.kunde import SkiKunde
-from app.models.saisonverleih import SaisonVerleih
+from app.models.saisonverleih import SaisonVerleih, SaisonVerleihMaterial
 from app.models.skiservice import Auftrag
 from app.crud import skiservice as crud_skiservice
 from app.crud import saisonverleih as crud_saisonverleih
@@ -99,10 +99,14 @@ def auftrag_gruppe(auftrag: Auftrag) -> QuittungGruppeArtikel:
 
     return artikelgruppe
 
+def material_bezeichnung(material: SaisonVerleihMaterial) -> str:
+    """Bezeichnung für Quittung und Kasse, z.B. "Saisonverleih: Erwachsene Ski-Set"."""
+    verleih = material.saisonverleih.Bezeichnung if material.saisonverleih else "Saisonverleih"
+    return f"{verleih}: {material.PreisBezeichnung}" if material.PreisBezeichnung else verleih
+
 def verleih_gruppe(verleih: SaisonVerleih) -> QuittungGruppeArtikel:
-    """Artikelgruppe eines geladenen Verleihs: Material mit gleichem Preis wird zusammengezählt."""
-    # TODO #26 Verleih bezeichnung mit auf der Quittung
-    verleih_counter: Counter[float] = Counter()
+    """Artikelgruppe eines geladenen Verleihs: Material mit gleicher Bezeichnung und gleichem Preis wird zusammengezählt."""
+    verleih_counter: Counter[tuple[str, float]] = Counter()
 
     # artikel Init
     kunde = verleih.Kunde
@@ -110,13 +114,13 @@ def verleih_gruppe(verleih: SaisonVerleih) -> QuittungGruppeArtikel:
     bez = f"Verleih - {verleih.Name} - {name}"
     artikelgruppe = QuittungGruppeArtikel(type=QuittungsTyp.Verleih, toID=verleih.ID, bezeichnung=bez)
 
-    for ski in verleih.Material:
-        verleih_counter[ski.Preis] += 1
+    for material in verleih.Material:
+        verleih_counter[(material_bezeichnung(material), material.Preis)] += 1
 
-    for verleih_Preis, anzahl in verleih_counter.items():
+    for (bezeichnung, verleih_Preis), anzahl in verleih_counter.items():
         artikelgruppe.artikels.append(QuittungArtikelSchema(
             type=QuittungsTyp.Verleih,
-            bezeichnung=verleih.Bezeichnung,
+            bezeichnung=bezeichnung,
             preis=verleih_Preis,
             anzahl=anzahl,
             toID=verleih.ID

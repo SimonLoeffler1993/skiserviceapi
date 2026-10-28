@@ -18,6 +18,8 @@ class SaisonVerleihMaterialBase(BaseModel):
     stockbez_ID: Optional[int] = None
     stocklaenge: Optional[int] = None
     Preis: float
+    # Gewählter Preis aus der Preisliste, leer bei individuellem Preis
+    Preis_ID: Optional[int] = None
     SkiFahrerName: Optional[str] = None # Name der Person, die das Material fährt (kann vom Kunden abweichen)
     # Optional, leer bzw. null entfernt die Bindungsdaten
     bindungsdaten: Optional[BindungsdatenBase] = None
@@ -46,6 +48,7 @@ class SaisonVerleihMaterialUpdate(BaseModel):
     stockbez_ID: Optional[int] = None
     stocklaenge: Optional[int] = None
     Preis: Optional[float] = None
+    Preis_ID: Optional[int] = None
     SkiFahrerName: Optional[str] = None
     # Ski bzw. Schuh bewusst übernehmen, obwohl sie schon verliehen sind
     trotz_belegung: bool = False
@@ -53,6 +56,8 @@ class SaisonVerleihMaterialUpdate(BaseModel):
 
 class SaisonVerleihMaterialRead(SaisonVerleihMaterialBase):
     ID: int
+    # Bezeichnung des gebuchten Preises zum Zeitpunkt der Buchung
+    PreisBezeichnung: Optional[str] = None
     BindungGeprueft: bool = False
     BindungGeprueft_Am: date | None = None
     Ski: EigenSkiRead | None = None

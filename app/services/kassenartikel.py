@@ -14,6 +14,7 @@ from app.models.quittung import Quittung, QuittungArtikel
 from app.crud import saison as crud_saison
 from app.crud import quittung as crud_quittung
 from app.services.lexware_sync import lexware_modus, rechnung_anlegen
+from app.services.quittung import material_bezeichnung
 
 logger = logging.getLogger(__name__)
 
@@ -106,10 +107,9 @@ class KasseService:
         positionen = []
   
         positionen.append(
-            # TODO: bezeichnung das Material als String
             KasseEinzelArtikelSchema(
                 id=material.ID,
-                bezeichnung=material.saisonverleih.Bezeichnung if material.saisonverleih else "Saisonverleih",
+                bezeichnung=material_bezeichnung(material),
                 preis=float(material.Preis),
             )
         )
