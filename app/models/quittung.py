@@ -31,6 +31,11 @@ class Quittung(Base):
         name = (self.Name or "").strip()
         return name if name.lower() not in ("", "quittung", "externer beleg") else str(self.ID)
 
+    @property
+    def ManuellZugewiesen(self) -> bool:
+        """Lexware-Beleg von Hand zugewiesen (ohne Kasse, ohne Artikel): darf geändert oder aufgehoben werden."""
+        return bool(self.NurExtern) and not self.artikels
+
 # mit CACADE werden alle QuittungArtikel gelöscht, wenn die Quittung gelöscht wird.
 class QuittungArtikel(Base):
     __tablename__ = "quittung_artikel"

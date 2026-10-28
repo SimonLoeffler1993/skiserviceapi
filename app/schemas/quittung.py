@@ -54,6 +54,8 @@ class QuittungRead(QuittungBase):
     ID: int
     Nummer: str | None = None
     NurExtern: bool | None = None
+    # Lexware-Beleg von Hand zugewiesen, kann geändert oder aufgehoben werden
+    ManuellZugewiesen: bool = False
     # Aktuelle Lexware Übertragung ("pdf" / "rechnung"), None wenn aus
     LexwareModus: str | None = Field(default_factory=_lexware_modus)
 
@@ -66,6 +68,8 @@ class QuittungNurExtern(BaseModel):
     SaisonverleihID: Optional[int] = None
     AuftragID: Optional[int] = None
     LexOfficeID: str
+    # Bestehende, von Hand zugewiesene Quittung durch diesen Beleg ersetzen
+    ersetzen: bool = False
 
     @model_validator(mode="after")
     def pruefe_ziel(self):

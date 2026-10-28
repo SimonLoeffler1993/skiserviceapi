@@ -119,14 +119,14 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
             quittungResponse = {
                 ** quittung.__dict__,
                 "Nummer": quittung.Nummer,
+                "ManuellZugewiesen": quittung.ManuellZugewiesen,
                 "BezahlInfo": bezInfo
             }
             return quittungResponse
 
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail=str(e))
         except httpx.HTTPError:
-            # Lexware nicht erreichbar: Quittung ohne Bezahlinfo zurückgeben
+            # Lexware nicht erreichbar oder Beleg dort unbekannt (z.B. falsch zugewiesen):
+            # Quittung trotzdem ohne Bezahlinfo zurückgeben, damit die Zuweisung korrigiert werden kann
             logger.exception("Bezahlstatus von Lexware konnte nicht abgerufen werden")
     return quittung
 
@@ -193,20 +193,17 @@ async def get_quittung_json(quittung_id: int, db: Session = Depends(get_db)):
 def create_quittung_nur_extern(quittung_data: QuittungNurExtern, db: Session = Depends(get_db)):
     """
     Weist einem Saisonverleih oder einem Skiservice-Auftrag einen externen Lexware-Beleg als Quittung zu.
+    Mit ersetzen wird ein bereits von Hand zugewiesener Beleg geändert (Kassen-Quittungen nicht).
     """
-    # Ziel prüfen, bevor die Quittung angelegt wird
-    if quittung_data.SaisonverleihID is not None:
-        ziel = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id=quittung_data.SaisonverleihID)
-        if ziel is None:
-            raise HTTPException(status_code=404, detail="Saisonverleih nicht gefunden")
-        if ziel.QuittungID is not None:
-            raise HTTPException(status_code=409, detail="Dem Saisonverleih ist bereits eine Quittung zugewiesen")
-    else:
-        ziel = crud_skiservice.getSkiserviceAuftrag(db, quittung_data.AuftragID, mitski=False)
-        if ziel is None:
-            raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
-        if ziel.quittung_id is not None:
-            raise HTTPException(status_code=409, detail="Dem Auftrag ist bereits eine Quittung zugewiesen")
+    ziel, bisher_id = _quittung_ziel(db, quittung_data.SaisonverleihID, quittung_data.AuftragID)
+    if bisher_id is not None:
+        if not quittung_data.ersetzen:
+            raise HTTPException(status_code=409, detail="Es ist bereits eine Quittung zugewiesen")
+        # Falsch gewählten Beleg korrigieren: gleiche Quittung, neuer Lexware-Beleg
+        bisher = _manuelle_quittung(db, bisher_id)
+        bisher.LexID = quittung_data.LexOfficeID
+        db.commit()
+        return {"erfolgreich": True, "quittung_id": bisher.ID}
 
     try:
         neuExQuittung = crud_quittung.create_NurExtern_quittung(db, lexoffice_id=quittung_data.LexOfficeID)
@@ -221,6 +218,58 @@ def create_quittung_nur_extern(quittung_data: QuittungNurExtern, db: Session = D
     db.commit()
 
     return {"erfolgreich": True, "quittung_id": neuExQuittung.ID}
+
+
+def _quittung_ziel(db: Session, saisonverleih_id: Optional[int], auftrag_id: Optional[int]):
+    """Saisonverleih oder Auftrag laden (404), dazu die ID der bisher zugewiesenen Quittung."""
+    if (saisonverleih_id is None) == (auftrag_id is None):
+        raise HTTPException(status_code=422, detail="Bitte genau eines angeben: SaisonverleihID oder AuftragID.")
+    if saisonverleih_id is not None:
+        ziel = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id=saisonverleih_id)
+        if ziel is None:
+            raise HTTPException(status_code=404, detail="Saisonverleih nicht gefunden")
+        return ziel, ziel.QuittungID
+    ziel = crud_skiservice.getSkiserviceAuftrag(db, auftrag_id, mitski=False)
+    if ziel is None:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    return ziel, ziel.quittung_id
+
+
+def _manuelle_quittung(db: Session, quittung_id: int):
+    """Nur von Hand zugewiesene Lexware-Belege dürfen geändert oder aufgehoben werden, keine Kassen-Quittungen."""
+    quittung = crud_quittung.get_quittung(db, quittung_id)
+    if quittung is None:
+        raise HTTPException(status_code=404, detail="Quittung nicht gefunden")
+    if not quittung.ManuellZugewiesen:
+        raise HTTPException(status_code=409, detail="An der Kasse bezahlte Quittungen können nicht geändert werden")
+    return quittung
+
+
+@router.delete("/quittung/zuweisung")
+def hebe_zuweisung_auf(
+        SaisonverleihID: Optional[int] = Query(default=None),
+        AuftragID: Optional[int] = Query(default=None),
+        db: Session = Depends(get_db),
+    ):
+    """
+    Hebt die Zuweisung eines von Hand zugewiesenen Lexware-Belegs auf, z.B. nach einem Vertipper.
+    Der Beleg in Lexware bleibt unverändert, die Quittung in der App wird gelöscht.
+    """
+    ziel, quittung_id = _quittung_ziel(db, SaisonverleihID, AuftragID)
+    if quittung_id is None:
+        raise HTTPException(status_code=404, detail="Es ist keine Quittung zugewiesen")
+    quittung = _manuelle_quittung(db, quittung_id)
+
+    if SaisonverleihID is not None:
+        ziel.QuittungID = None
+    else:
+        ziel.quittung_id = None
+    db.flush()
+    # Nur löschen, wenn nichts anderes mehr auf die Quittung zeigt
+    if not crud_quittung.quittung_verwendet(db, quittung.ID):
+        db.delete(quittung)
+    db.commit()
+    return {"erfolgreich": True}
 
 @router.get("/test")
 async def test():

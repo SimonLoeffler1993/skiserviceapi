@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.models.quittung import Quittung
+from app.models.saisonverleih import SaisonVerleih
+from app.models.skiservice import Auftrag
 from app.crud import saison as crud_saison
 
 
@@ -45,3 +47,10 @@ def create_NurExtern_quittung(db: Session, lexoffice_id: str, name: str = "EXTER
         db.flush()
 
     return db_quittung
+
+
+def quittung_verwendet(db: Session, quittung_id: int) -> bool:
+    """Zeigt noch ein Saisonverleih oder Skiservice-Auftrag auf die Quittung?"""
+    verleih = db.query(SaisonVerleih.ID).filter(SaisonVerleih.QuittungID == quittung_id).first()
+    auftrag = db.query(Auftrag.id).filter(Auftrag.quittung_id == quittung_id).first()
+    return verleih is not None or auftrag is not None
