@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy.orm import Session, joinedload
@@ -7,6 +8,17 @@ from app.models.bindungsdaten import Bindungsdaten
 from app.models.skiservice import Ski
 from app.models.saisonverleih import SaisonVerleihMaterial
 from app.schemas.bindungsdaten import BindungsdatenBase
+
+
+def bindung_werte(eintrag: Bindungsdaten) -> dict:
+    """Bindungswerte eines Datensatzes, vergleichbar (Zahlen als float)."""
+    werte = {}
+    for feld in BindungsdatenBase.model_fields:
+        if feld == "bestaetigt":
+            continue
+        wert = getattr(eintrag, feld)
+        werte[feld] = float(wert) if isinstance(wert, (int, float, Decimal)) and not isinstance(wert, bool) else wert
+    return werte
 
 
 def setze_bindungsdaten(db: Session, objekt, kunde_id: int, daten: Optional[BindungsdatenBase], vorlage_id: Optional[int] = None):
@@ -24,8 +36,15 @@ def setze_bindungsdaten(db: Session, objekt, kunde_id: int, daten: Optional[Bind
 
     if objekt.bindungsdaten is None:
         objekt.bindungsdaten = Bindungsdaten(Kunde_ID=kunde_id, Erfasst_Am=date.today())
-    for feld, wert in daten.model_dump().items():
-        setattr(objekt.bindungsdaten, feld, wert.strip() or None if isinstance(wert, str) else wert)
+    eintrag = objekt.bindungsdaten
+    vorher = bindung_werte(eintrag)
+    for feld, wert in daten.werte().items():
+        setattr(eintrag, feld, wert.strip() or None if isinstance(wert, str) else wert)
+    # Bestätigung durch den Kunden: neu bestätigt -> heute, geänderte Werte ohne Bestätigung -> unbestätigt
+    if daten.bestaetigt:
+        eintrag.Bestaetigt_Am = date.today()
+    elif bindung_werte(eintrag) != vorher:
+        eintrag.Bestaetigt_Am = None
 
     if vorlage_id is not None:
         vorlage = db.get(Bindungsdaten, vorlage_id)

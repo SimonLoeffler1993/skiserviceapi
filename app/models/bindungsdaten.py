@@ -26,10 +26,12 @@ class Bindungsdaten(Base):
     Gewicht: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
     # Größe in cm (1,80 m = 180)
     Groesse: Mapped[int | None] = mapped_column(Integer)
-    # Fahrkönnen Typ 1 (vorsichtig) bis 3 (sportlich)
-    Fahrkoennen: Mapped[int | None] = mapped_column(Integer)
+    # Fahrertyp 1- (sehr vorsichtig) bis 3+ (sehr sportlich), siehe FAHRERTYPEN
+    Fahrkoennen: Mapped[str | None] = mapped_column(String(2))
     Alter: Mapped[int | None] = mapped_column(Integer)
     Erfasst_Am: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    # Kunde hat die Angaben geprüft und bestätigt, wird bei geänderten Werten ohne neue Bestätigung geleert
+    Bestaetigt_Am: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Archivierte Einträge werden bei "Letzte Daten abfragen" ausgeblendet
     Archiviert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 

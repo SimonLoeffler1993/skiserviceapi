@@ -12,8 +12,7 @@ from app.schemas.saisonverleih import SaisonVerleihCreate, SaisonVerleihPreisBas
 from app.crud import saison as crud_saison
 from app.utils.skiEttiket import SkiEttiket
 from app.services import einstellungen
-from app.crud.bindungsdaten import setze_bindungsdaten
-from app.schemas.bindungsdaten import BindungsdatenBase
+from app.crud.bindungsdaten import bindung_werte, setze_bindungsdaten
 
 logger = logging.getLogger(__name__)
 
@@ -449,11 +448,7 @@ def _bindung_werte(material: SaisonVerleihMaterial) -> Optional[dict]:
     """Bindungsdaten als vergleichbare Werte, None ohne Daten."""
     if material.bindungsdaten is None:
         return None
-    werte = {}
-    for feld in BindungsdatenBase.model_fields:
-        wert = getattr(material.bindungsdaten, feld)
-        werte[feld] = float(wert) if isinstance(wert, (int, float)) and not isinstance(wert, bool) else wert
-    return werte
+    return bindung_werte(material.bindungsdaten)
 
 
 def _status_nach_pruefung(saisonverleih: SaisonVerleih):
