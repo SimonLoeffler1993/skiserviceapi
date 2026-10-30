@@ -5,6 +5,7 @@ from app.db.session import SessionLocal
 from app.db.deps import get_db
 from app.schemas.kunde import SkiKundeOut, SkiKundeSpeichern
 from app.crud import kunde as crud_kunde
+from app.services import einstellungen
 
 router = APIRouter(
     prefix="/kunden",
@@ -34,6 +35,16 @@ def search_kunde(
     if not vorname and not nachname:
         raise HTTPException(status_code=400, detail="Mindestens ein Name muss angegeben werden")
     return crud_kunde.search_kunde(db, vorname, nachname)
+
+# Muss vor /{kunde_id} stehen, sonst wird "letzte" als ID gelesen
+@router.get("/letzte", response_model=list[SkiKundeOut])
+def letzte_kunden(db: Session = Depends(get_db)):
+    """
+    Zuletzt angelegte Kunden, die Anzahl kommt aus der Einstellung KUNDEN_LETZTE_ANZAHL.
+    """
+    wert = einstellungen.hole("KUNDEN_LETZTE_ANZAHL")
+    anzahl = min(max(5 if wert is None else int(wert), 1), 50)
+    return crud_kunde.letzte_kunden(db, anzahl)
 
 @router.get("/{kunde_id}", response_model= SkiKundeOut)
 async def get_kunde(kunde_id: int, db: Session = Depends(get_db)):

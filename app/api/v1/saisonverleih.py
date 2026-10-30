@@ -5,8 +5,9 @@ from datetime import date
 
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
-from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate, VerleihStatusAenderung, BindungGeprueftAnfrage
+from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate, VerleihStatusAenderung, BindungGeprueftAnfrage, VerleihBenachrichtigtAenderung, VerleihBenachrichtigenAnfrage
 from app.utils import skipdf
+from app.utils.mail import sendeVerleihMail
 
 router = APIRouter(
     prefix="/saisonverleih",
@@ -121,7 +122,34 @@ def setze_verleih_status(saisonverleih_id: int, daten: VerleihStatusAenderung, d
     """
     Setzt den Status: vorbereitung -> vorbereitet -> unterwegs (abgeholt) -> zurueck. Auch rückwärts zum Korrigieren.
     """
+    status_vorher = _status(db, saisonverleih_id)
     verleih = crud_saisonverleih.setze_status(db, saisonverleih_id, daten.Status)
+    if verleih is None:
+        raise HTTPException(status_code=404, detail="Saisonverleih not found")
+    return _abhol_mail_nach_wechsel(db, verleih, status_vorher)
+
+
+@router.post("/{saisonverleih_id}/benachrichtigen", response_model=SaisonVerleihRead)
+def benachrichtige_kunde(saisonverleih_id: int, anfrage: VerleihBenachrichtigenAnfrage, db: Session = Depends(get_db)):
+    """
+    Versendet die Abhol- bzw. Rückgabe-Mail (auch erneut) und setzt danach die Benachrichtigung.
+    """
+    verleih = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
+    if verleih is None:
+        raise HTTPException(status_code=404, detail="Saisonverleih not found")
+    if not verleih.Kunde or not verleih.Kunde.Email:
+        raise HTTPException(status_code=400, detail="Beim Kunden ist keine E-Mail Adresse hinterlegt.")
+    if not sendeVerleihMail(SaisonVerleihRead.model_validate(verleih), anfrage.art):
+        raise HTTPException(status_code=502, detail="Die E-Mail konnte nicht versendet werden.")
+    return crud_saisonverleih.setze_benachrichtigt(db, saisonverleih_id, anfrage.art)
+
+
+@router.patch("/{saisonverleih_id}/benachrichtigt", response_model=SaisonVerleihRead)
+def setze_benachrichtigt(saisonverleih_id: int, daten: VerleihBenachrichtigtAenderung, db: Session = Depends(get_db)):
+    """
+    Setzt die Benachrichtigung von Hand ohne Mail, z.B. nach einem Anruf. Jederzeit änderbar.
+    """
+    verleih = crud_saisonverleih.setze_benachrichtigt(db, saisonverleih_id, daten.Benachrichtigt)
     if verleih is None:
         raise HTTPException(status_code=404, detail="Saisonverleih not found")
     return verleih
@@ -132,6 +160,24 @@ def _verleih_oder_404(saisonverleih):
     if saisonverleih is None:
         raise HTTPException(status_code=404, detail="Verleih oder Material nicht gefunden")
     return saisonverleih
+
+
+def _status(db: Session, saisonverleih_id: int) -> Optional[str]:
+    """Status vor einer Änderung, um den Wechsel auf "vorbereitet" zu erkennen."""
+    verleih = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
+    return verleih.Status if verleih else None
+
+
+def _abhol_mail_nach_wechsel(db: Session, verleih, status_vorher: Optional[str]):
+    """
+    Wechselt der Verleih von "vorbereitung" auf "vorbereitet", bekommt der Kunde die Abhol-Mail,
+    sofern er noch nicht benachrichtigt wurde und eine E-Mail hinterlegt ist.
+    """
+    if verleih is None or status_vorher != "vorbereitung" or verleih.Status != "vorbereitet" or verleih.Benachrichtigt != "nein":
+        return verleih
+    if not sendeVerleihMail(SaisonVerleihRead.model_validate(verleih), "abholung"):
+        return verleih
+    return crud_saisonverleih.setze_benachrichtigt(db, verleih.ID, "abholung")
 
 
 @router.patch("/{saisonverleih_id}", response_model=SaisonVerleihRead)
@@ -165,7 +211,9 @@ def loesche_saisonverleih(saisonverleih_id: int, db: Session = Depends(get_db)):
 @router.post("/{saisonverleih_id}/material", response_model=SaisonVerleihRead)
 def fuege_material_hinzu(saisonverleih_id: int, material: SaisonVerleihMaterialBase, db: Session = Depends(get_db)):
     try:
-        return _verleih_oder_404(crud_saisonverleih.fuege_material_hinzu(db, saisonverleih_id, material))
+        status_vorher = _status(db, saisonverleih_id)
+        verleih = _verleih_oder_404(crud_saisonverleih.fuege_material_hinzu(db, saisonverleih_id, material))
+        return _abhol_mail_nach_wechsel(db, verleih, status_vorher)
     except crud_saisonverleih.VerleihGesperrt as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -173,7 +221,9 @@ def fuege_material_hinzu(saisonverleih_id: int, material: SaisonVerleihMaterialB
 @router.patch("/{saisonverleih_id}/material/{material_id}", response_model=SaisonVerleihRead)
 def aendere_material(saisonverleih_id: int, material_id: int, daten: SaisonVerleihMaterialUpdate, db: Session = Depends(get_db)):
     try:
-        return _verleih_oder_404(crud_saisonverleih.aendere_material(db, saisonverleih_id, material_id, daten))
+        status_vorher = _status(db, saisonverleih_id)
+        verleih = _verleih_oder_404(crud_saisonverleih.aendere_material(db, saisonverleih_id, material_id, daten))
+        return _abhol_mail_nach_wechsel(db, verleih, status_vorher)
     except crud_saisonverleih.VerleihGesperrt as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -182,14 +232,18 @@ def aendere_material(saisonverleih_id: int, material_id: int, daten: SaisonVerle
 def bindung_geprueft(saisonverleih_id: int, anfrage: BindungGeprueftAnfrage, db: Session = Depends(get_db)):
     """
     Markiert die Bindungen der Materialzeilen mit Ski als geprüft (ohne material_ids alle).
-    Sind danach alle geprüft, wechselt ein Verleih in Vorbereitung auf "vorbereitet".
+    Sind danach alle geprüft, wechselt ein Verleih in Vorbereitung auf "vorbereitet" und der Kunde bekommt die Abhol-Mail.
     """
-    return _verleih_oder_404(crud_saisonverleih.pruefe_bindungen(db, saisonverleih_id, anfrage.material_ids))
+    status_vorher = _status(db, saisonverleih_id)
+    verleih = _verleih_oder_404(crud_saisonverleih.pruefe_bindungen(db, saisonverleih_id, anfrage.material_ids))
+    return _abhol_mail_nach_wechsel(db, verleih, status_vorher)
 
 
 @router.delete("/{saisonverleih_id}/material/{material_id}", response_model=SaisonVerleihRead)
 def entferne_material(saisonverleih_id: int, material_id: int, db: Session = Depends(get_db)):
     try:
-        return _verleih_oder_404(crud_saisonverleih.entferne_material(db, saisonverleih_id, material_id))
+        status_vorher = _status(db, saisonverleih_id)
+        verleih = _verleih_oder_404(crud_saisonverleih.entferne_material(db, saisonverleih_id, material_id))
+        return _abhol_mail_nach_wechsel(db, verleih, status_vorher)
     except crud_saisonverleih.VerleihGesperrt as e:
         raise HTTPException(status_code=409, detail=str(e))

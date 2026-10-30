@@ -1,0 +1,17 @@
+{# Material eines Verleihs, wird in die Abhol- und Rückgabe-Mail eingebunden #}
+<table width="100%" cellpadding="0" cellspacing="0"
+    style="border-collapse: collapse; border: 1px solid #ddd; margin-bottom: 24px;">
+    <tr style="background: #f5f5f5;">
+        <td style="padding: 8px 12px; font-size: 12px; color: #666; border-bottom: 1px solid #ddd;">
+            Verleih {{ verleih.Name }}
+        </td>
+    </tr>
+    {% for m in material %}
+    <tr>
+        <td style="padding: 10px 12px; font-size: 14px; border-bottom: 1px solid #eee;">
+            <strong>{{ m.name }}</strong>
+            {% for teil in m.teile %}<br><span style="color: #555;">{{ teil }}</span>{% endfor %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>

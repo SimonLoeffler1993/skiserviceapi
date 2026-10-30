@@ -16,6 +16,16 @@ def get_kunde(db: Session, kunde_id: int):
 #     if not kunden:
 #         kunden = db.query(SkiKunde).filter(SkiKunde.Vorname.like(nachname + '%')).filter(SkiKunde.Nachname.like(vorname + '%')).all()
 #     return kunden
+def letzte_kunden(db: Session, anzahl: int) -> list[SkiKunde]:
+    """Zuletzt angelegte Kunden (höchste ID zuerst), z.B. gerade am Kundenterminal erfasst."""
+    stmt = (
+        select(SkiKunde)
+        .options(selectinload(SkiKunde.Ort))
+        .order_by(SkiKunde.ID.desc())
+        .limit(anzahl)
+    )
+    return list(db.scalars(stmt).all())
+
 def search_kunde(db: Session, vorname: str, nachname: str) -> list[SkiKunde]:
     def suche(v: str, n: str) -> list[SkiKunde]:
         bedingungen = []

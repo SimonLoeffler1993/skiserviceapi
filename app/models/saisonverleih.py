@@ -47,6 +47,10 @@ class SaisonVerleihMaterial(Base):
 
     stocklaenge: Mapped[int | None] = mapped_column(Integer)
     Preis: Mapped[float] = mapped_column(Double)
+    # Gebuchter Preis aus der Preisliste, leer bei individuellem Preis.
+    # Die Bezeichnung wird kopiert, damit die Quittung auch nach Umbenennen des Preises stimmt
+    Preis_ID: Mapped[int | None] = mapped_column(Integer, ForeignKey("saisonverleihpreise.ID", ondelete="SET NULL"), nullable=True)
+    PreisBezeichnung: Mapped[str | None] = mapped_column(String(50), nullable=True)
     SkiFahrerName: Mapped[str | None] = mapped_column(String(150), default=None)
     # Bindung des Leihski geprüft (Werkstatt), wird beim Tausch des Ski oder neuen Bindungsdaten zurückgesetzt
     BindungGeprueft: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
@@ -71,6 +75,9 @@ class SaisonVerleih(Base):
     # "Zurueck" wird passend mitgeführt
     Status: Mapped[str] = mapped_column(String(15), nullable=False, default="unterwegs", server_default="unterwegs")
     Abgeholt_Am: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Benachrichtigung des Kunden: nein, abholung (Ski abholbereit) oder rueckgabe (Erinnerung)
+    Benachrichtigt: Mapped[str] = mapped_column(String(10), nullable=False, default="nein", server_default="nein")
+    Benachrichtigt_Am: Mapped[date | None] = mapped_column(Date, nullable=True)
     Bemerkung: Mapped[str | None] = mapped_column(String(500))
 
     Saison_ID: Mapped[int | None] = mapped_column(ForeignKey("saisons.ID"))

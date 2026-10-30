@@ -12,8 +12,7 @@ from app.schemas.saisonverleih import SaisonVerleihCreate, SaisonVerleihPreisBas
 from app.crud import saison as crud_saison
 from app.utils.skiEttiket import SkiEttiket
 from app.services import einstellungen
-from app.crud.bindungsdaten import setze_bindungsdaten
-from app.schemas.bindungsdaten import BindungsdatenBase
+from app.crud.bindungsdaten import bindung_werte, setze_bindungsdaten
 
 logger = logging.getLogger(__name__)
 
@@ -247,12 +246,15 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
             skinr = material.skinr or None
             schuhnr = material.schuhnr or None
 
+            preis_id, preis_bezeichnung = _preis_buchung(db, material.Preis_ID)
             neues_material = SaisonVerleihMaterial(
                 skinr=skinr,
                 schuhnr=schuhnr,
                 stockbez_ID=stockbez_ID,
                 stocklaenge=material.stocklaenge,
                 Preis=material.Preis,
+                Preis_ID=preis_id,
+                PreisBezeichnung=preis_bezeichnung,
                 SkiFahrerName=material.SkiFahrerName
             )
             db_saisonverleih.Material.append(neues_material)
@@ -305,6 +307,21 @@ def setze_status(db: Session, saisonverleih_id: int, status: str):
         saisonverleih.Abgeholt_Am = heute
     saisonverleih.Zurueck = status == "zurueck"
     saisonverleih.Zurueck_Am = (saisonverleih.Zurueck_Am or heute) if status == "zurueck" else None
+    db.commit()
+    db.refresh(saisonverleih)
+    return saisonverleih
+
+def setze_benachrichtigt(db: Session, saisonverleih_id: int, wert: str):
+    """
+    Setzt die Benachrichtigung (nein, abholung, rueckgabe), mit Datum. "nein" nimmt sie zurück.
+    """
+    if wert not in ("nein", "abholung", "rueckgabe"):
+        raise ValueError(f"Unbekannte Benachrichtigung: {wert}")
+    saisonverleih = get_saisonverleih(db, saisonverleih_id)
+    if not saisonverleih:
+        return None
+    saisonverleih.Benachrichtigt = wert
+    saisonverleih.Benachrichtigt_Am = None if wert == "nein" else datetime.date.today()
     db.commit()
     db.refresh(saisonverleih)
     return saisonverleih
@@ -366,6 +383,12 @@ def aendere_saisonverleih(db: Session, saisonverleih_id: int, daten: SaisonVerle
     return saisonverleih
 
 
+def _preis_buchung(db: Session, preis_id: Optional[int]) -> tuple[Optional[int], Optional[str]]:
+    """ID und Bezeichnung des gebuchten Preises, (None, None) bei individuellem oder unbekanntem Preis."""
+    preis = db.get(SkiSaisonverleihPreise, preis_id) if preis_id else None
+    return (preis.ID, preis.Bezeichnung) if preis else (None, None)
+
+
 def _material_werte(material) -> dict:
     """Bereinigt leere Werte wie beim Anlegen. Bindungsdaten werden getrennt gespeichert."""
     werte = material.model_dump(exclude_unset=True, exclude={"bindungsdaten", "vorlage_id", "trotz_belegung"})
@@ -383,6 +406,7 @@ def fuege_material_hinzu(db: Session, saisonverleih_id: int, material: SaisonVer
         return None
     _pruefe_nicht_bezahlt(saisonverleih)
     werte = _material_werte(material)
+    werte["Preis_ID"], werte["PreisBezeichnung"] = _preis_buchung(db, werte.get("Preis_ID"))
     fehler = material_nicht_verfuegbar(db, werte.get("skinr"), werte.get("schuhnr"), werte.get("stockbez_ID"))
     if fehler:
         raise VerleihGesperrt(fehler)
@@ -412,8 +436,11 @@ def aendere_material(db: Session, saisonverleih_id: int, material_id: int, daten
         return None
 
     werte = _material_werte(daten)
+    # Neuer Betrag ohne Preis_ID ist ein individueller Preis, unveränderter Betrag behält die Buchung
+    if "Preis_ID" in werte or ("Preis" in werte and werte["Preis"] != material.Preis):
+        werte["Preis_ID"], werte["PreisBezeichnung"] = _preis_buchung(db, werte.get("Preis_ID"))
     # Nach dem Bezahlen ist nur der Preis gesperrt, Material darf getauscht werden
-    if "Preis" in werte and werte["Preis"] != material.Preis:
+    if ("Preis" in werte and werte["Preis"] != material.Preis) or ("Preis_ID" in werte and werte["Preis_ID"] != material.Preis_ID):
         _pruefe_nicht_bezahlt(saisonverleih)
 
     # Nur getauschte Teile prüfen, das bisherige Material bleibt gültig
@@ -449,11 +476,7 @@ def _bindung_werte(material: SaisonVerleihMaterial) -> Optional[dict]:
     """Bindungsdaten als vergleichbare Werte, None ohne Daten."""
     if material.bindungsdaten is None:
         return None
-    werte = {}
-    for feld in BindungsdatenBase.model_fields:
-        wert = getattr(material.bindungsdaten, feld)
-        werte[feld] = float(wert) if isinstance(wert, (int, float)) and not isinstance(wert, bool) else wert
-    return werte
+    return bindung_werte(material.bindungsdaten)
 
 
 def _status_nach_pruefung(saisonverleih: SaisonVerleih):

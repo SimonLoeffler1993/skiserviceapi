@@ -67,6 +67,14 @@
             text-align: right;
         }
 
+        /* Bindungseinstellung: Werte nicht umbrechen, Bestätigung darf umbrechen */
+        table.bindung td, table.bindung th {
+            white-space: nowrap;
+        }
+        table.bindung td:last-child, table.bindung th:last-child {
+            white-space: normal;
+        }
+
         /* Print-specific CSS */
         @media print {
             th, .total-row td {
@@ -151,6 +159,39 @@
             </tfoot>
         </table>
     </div>
+
+    {% set mit_bindung = saisonverleih.Material | selectattr("bindungsdaten") | list %}
+    {% if mit_bindung %}
+    <div class="section">
+        <h2>Bindungseinstellung</h2>
+        <table class="bindung">
+            <thead>
+                <tr>
+                    <th>Fahrer</th>
+                    <th>Sohle</th>
+                    <th>Gewicht</th>
+                    <th>Größe</th>
+                    <th>Typ</th>
+                    <th>Alter</th>
+                    <th>Vom Kunden bestätigt</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in saisonverleih.Material %}{% if item.bindungsdaten %}{% set b = item.bindungsdaten %}
+                <tr class="{% if loop.index0 % 2 == 0 %}row-even{% endif %}">
+                    <td>{{ b.Fahrer or item.SkiFahrerName or ("Ausrüstung #" ~ loop.index) }}</td>
+                    <td>{% if b.Sohle %}{{ b.Sohle }} mm{% endif %}</td>
+                    <td>{% if b.Gewicht %}{{ ("%g" % b.Gewicht) | replace(".", ",") }} kg{% endif %}</td>
+                    <td>{% if b.Groesse %}{{ ("%.2f" % (b.Groesse / 100)) | replace(".", ",") }} m{% endif %}</td>
+                    <td>{% if b.Fahrkoennen %}{{ b.Fahrkoennen }}{% endif %}</td>
+                    <td>{% if b.Alter %}{{ b.Alter }}{% endif %}</td>
+                    <td>{% if b.Bestaetigt_Am %}am {{ b.Bestaetigt_Am.strftime("%d.%m.%Y") }}{% else %}nicht bestätigt{% endif %}</td>
+                </tr>
+            {% endif %}{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 
     {% if saisonverleih.Art == "tag" and saisonverleih.Ende_Am %}
     <p class="footer">Rückgabe am {{ saisonverleih.Ende_Am.strftime("%d.%m.%Y") }}!</p>

@@ -95,6 +95,12 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("SMTP_PASSWORD", "mail", "Passwort", typ="passwort"),
     EinstellungDefinition("EMAIL_FROM", "mail", "Absender Adresse"),
     EinstellungDefinition("MAIL_BETREFF_FERTIG", "mail", "Betreff Fertig-Mail", standard="Dein Skiservice ist fertig!"),
+    EinstellungDefinition("MAIL_BETREFF_VERLEIH_ABHOLUNG", "mail", "Betreff Abhol-Mail Verleih",
+                          standard="Deine Leihski sind abholbereit!"),
+    EinstellungDefinition("MAIL_BETREFF_VERLEIH_RUECKGABE", "mail", "Betreff Rückgabe-Mail Verleih",
+                          standard="Bitte denk an die Rückgabe deiner Leihski"),
+    EinstellungDefinition("MAIL_BETREFF_QUITTUNG", "mail", "Betreff Quittungs-Mail", standard="Deine Quittung",
+                          beschreibung="Die Quittungsnummer wird angehängt."),
     EinstellungDefinition("MAIL_FERTIG_INHALT", "mail", "Inhalt Fertig-Mail", typ="auswahl", standard="preise",
                           optionen=["fertig", "preise"],
                           beschreibung="Nur die Fertig-Meldung oder zusätzlich die Auflistung der Leistungen mit Preisen."),
@@ -126,6 +132,8 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           beschreibung=VERLEIH_STARTSTATUS_TEXT),
     EinstellungDefinition("KUERZEL_QUITTUNG", "anwendung", "Kürzel Quittungsnummer", standard="Q",
                           beschreibung="Ergibt z.B. 25/26Q12"),
+    EinstellungDefinition("KUNDEN_LETZTE_ANZAHL", "anwendung", "Anzahl letzte Kunden", typ="zahl", standard=5,
+                          beschreibung="So viele zuletzt angelegte Kunden werden beim Anlegen von Skiservice und Verleih zur Auswahl angeboten."),
 ]
 
 DEFINITION_NACH_SCHLUESSEL = {d.schluessel: d for d in DEFINITIONEN}

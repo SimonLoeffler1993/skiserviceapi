@@ -101,6 +101,8 @@ class AuftragUpdateSchema(BaseModel):
     kunden_id: Optional[int] = None
     # TT.MM.JJJJ, leerer Text entfernt das Datum
     abhol_date: Optional[str] = None
+    # Kunde von Hand benachrichtigt (z.B. angerufen), false nimmt das wieder zurück
+    benachrichtigt: Optional[bool] = None
 
 
 class SkiUpdateSchema(BaseModel):

@@ -7,7 +7,8 @@ venvPath=".venv"
 # projectDir="app"
 
 # Uvicorn-Startbefehl (hier: main.py enthält die FastAPI-Instanz "app")
-uvicornCommand="uvicorn app.main:app --reload"
+# Offene Terminal-Verbindungen (SSE) beim Neuladen nach 5 s schließen, sonst hängt --reload
+uvicornCommand="uvicorn app.main:app --reload --timeout-graceful-shutdown 5"
 
 # Aktiviere die virtuelle Umgebung
 source $venvPath/bin/activate

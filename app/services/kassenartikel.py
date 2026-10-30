@@ -11,11 +11,26 @@ from app.models.saisonverleih import SaisonVerleih, SaisonVerleihMaterial
 from app.schemas.kasse import KasseBezahlenSchema, KasseHatBezahltSchema, KassenArtikelSchema, KasseEinzelArtikelSchema
 from app.models.kunde import SkiKunde
 from app.models.quittung import Quittung, QuittungArtikel
+from app.models.handware import Handware
 from app.crud import saison as crud_saison
 from app.crud import quittung as crud_quittung
 from app.services.lexware_sync import lexware_modus, rechnung_anlegen
+from app.services.quittung import material_bezeichnung, handware_gruppe
 
 logger = logging.getLogger(__name__)
+
+def _kunden_emails(kunden: list[SkiKunde | None]) -> list[str]:
+    """Verschiedene E-Mail Adressen der Kunden in der Reihenfolge der Artikel."""
+    emails: dict[str, str] = {}
+    for kunde in kunden:
+        email = (kunde.Email or "").strip() if kunde else ""
+        if email:
+            emails.setdefault(email.lower(), email)
+    return list(emails.values())
+
+def _ohne_quittung(spalte):
+    """Noch keine Quittung zugeordnet, alte Daten haben teils 0 statt NULL."""
+    return or_(spalte.is_(None), spalte == 0)
 
 def get_kundenname(kunde: SkiKunde | None) -> str:
     if kunde is not None:
@@ -30,7 +45,7 @@ class KasseService:
     def get_offene_auftraege(self) -> list[KassenArtikelSchema]:
         auftraege = (
             self.db.query(Auftrag)
-            .filter(Auftrag.bezahlt == "nein")
+            .filter(Auftrag.bezahlt == "nein", _ohne_quittung(Auftrag.quittung_id))
             .all()
         )
         return [self._auftrag_zu_kassenartikel(a) for a in auftraege]
@@ -68,10 +83,24 @@ class KasseService:
             )
         return positionen
 
+    def get_handware(self) -> list[KassenArtikelSchema]:
+        return [
+            KassenArtikelSchema(
+                id=h.ID,
+                kundenname=h.Kategorie or "",
+                artikelname=h.Name,
+                gesamtpreis=h.Preis,
+                artikel=[KasseEinzelArtikelSchema(id=h.ID, bezeichnung=h.Name, preis=h.Preis)],
+                handware=True,
+                bestand=h.Anzahl,
+            )
+            for h in self.db.query(Handware).order_by(Handware.Kategorie, Handware.Name).all()
+        ]
+
     def get_offene_verleih(self) -> list[KassenArtikelSchema]:
         verleih = (
             self.db.query(SaisonVerleih)
-            .filter(or_(SaisonVerleih.Bezahlt.is_(None), SaisonVerleih.Bezahlt == False))
+            .filter(or_(SaisonVerleih.Bezahlt.is_(None), SaisonVerleih.Bezahlt == False), _ohne_quittung(SaisonVerleih.QuittungID))
             .all()
         )
         return [self._verleih_zu_kassenartikel(a) for a in verleih]
@@ -97,10 +126,9 @@ class KasseService:
         positionen = []
   
         positionen.append(
-            # TODO: bezeichnung das Material als String
             KasseEinzelArtikelSchema(
                 id=material.ID,
-                bezeichnung=material.saisonverleih.Bezeichnung if material.saisonverleih else "Saisonverleih",
+                bezeichnung=material_bezeichnung(material),
                 preis=float(material.Preis),
             )
         )
@@ -142,6 +170,8 @@ class KasseService:
             # Erst alles sperren und prüfen, damit Lexware nur bei gültigen Artikeln angefragt wird
             auftraege: list[Auftrag] = []
             verleihe: list[SaisonVerleih] = []
+            # Handware mit verkaufter Menge, gleicher Artikel mehrfach wird zusammengezählt
+            handware: dict[int, tuple[Handware, int]] = {}
             for artikel in zuBezahlen.artikels:
                 if artikel.service:
                     auftrag = (
@@ -154,6 +184,8 @@ class KasseService:
                         raise ValueError(f"Auftrag {artikel.id} nicht gefunden.")
                     if auftrag.bezahlt == "ja":
                         raise ValueError(f"Auftrag {auftrag.name} ist bereits bezahlt.")
+                    if auftrag.quittung_id:
+                        raise ValueError(f"Auftrag {auftrag.name} hat bereits eine Quittung.")
                     auftraege.append(auftrag)
 
                 elif artikel.verleih:
@@ -167,13 +199,46 @@ class KasseService:
                         raise ValueError(f"Verleih {artikel.id} nicht gefunden.")
                     if verleih.Bezahlt:
                         raise ValueError(f"Verleih {verleih.Name} ist bereits bezahlt.")
+                    if verleih.QuittungID:
+                        raise ValueError(f"Verleih {verleih.Name} hat bereits eine Quittung.")
                     verleihe.append(verleih)
+
+                elif artikel.handware:
+                    if artikel.id in handware:
+                        h, menge = handware[artikel.id]
+                        handware[artikel.id] = (h, menge + artikel.menge)
+                        continue
+                    h = (
+                        self.db.query(Handware)
+                        .filter(Handware.ID == artikel.id)
+                        .with_for_update()
+                        .first()
+                    )
+                    if h is None:
+                        raise ValueError(f"Artikel {artikel.artikelname} nicht gefunden.")
+                    handware[artikel.id] = (h, artikel.menge)
+
+            # Positionen mit Preis aus der DB, nicht vom Client
+            handware_artikel = [
+                QuittungArtikel(
+                    Artikel_ID=h.ID,
+                    Artikel_Kategorie="Handware",
+                    Auftrag_ID=None,
+                    Verleih_ID=None,
+                    Bezeichnung=h.Name,
+                    Preis=h.Preis,
+                    Menge=menge,
+                )
+                for h, menge in handware.values()
+            ]
 
             if lexware_modus() == "rechnung":
                 kunden = {k.ID: k for k in [a.kunde for a in auftraege] + [v.Kunde for v in verleihe] if k is not None}
+                gruppe = handware_gruppe(handware_artikel)
                 lex_id, nummer = rechnung_anlegen(
                     self.db, [a.id for a in auftraege], [v.ID for v in verleihe], kunden,
                     bar=zuBezahlen.bar, karte=zuBezahlen.karte, ueberweisung=zuBezahlen.ueberweisung,
+                    zusatz_gruppen=[gruppe] if gruppe else [],
                 )
                 quittung = crud_quittung.create_NurExtern_quittung(self.db, lex_id, name=nummer, commit=False)
                 quittung.Bezahlt_Am = date.today()
@@ -234,6 +299,14 @@ class KasseService:
                     Verleih_ID=verleih.ID
                 ))
 
+            for position in handware_artikel:
+                position.Quittung_ID = quittung.ID
+                self.db.add(position)
+            # Anzahl nur zur Orientierung: abziehen, auch ins Minus
+            for h, menge in handware.values():
+                if h.Anzahl is not None:
+                    h.Anzahl -= menge
+
             self.db.commit()
         except Exception:
             self.db.rollback()
@@ -247,5 +320,7 @@ class KasseService:
         return KasseHatBezahltSchema(
             quittung_id=quittung.ID,
             bezahldatum=str(quittung.Bezahlt_Am),
-            success=True
+            success=True,
+            quittung_nummer=quittung.Nummer,
+            emails=_kunden_emails([a.kunde for a in auftraege] + [v.Kunde for v in verleihe]),
         )

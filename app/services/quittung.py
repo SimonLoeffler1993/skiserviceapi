@@ -7,12 +7,13 @@ from datetime import date
 from decimal import Decimal
 from weasyprint import HTML
 
-from app.models.quittung import Quittung
+from app.models.quittung import Quittung, QuittungArtikel
 from app.services import einstellungen
+from app.utils.lexware import LexwareAPI
 from app.utils.girocode import girocode_png_data_uri, iban_formatiert
 from app.schemas.quittung import QuittungArtikelSchema, QuittungBezug, QuittungKundeSchema, QuittungListeEintrag, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
 from app.models.kunde import SkiKunde
-from app.models.saisonverleih import SaisonVerleih
+from app.models.saisonverleih import SaisonVerleih, SaisonVerleihMaterial
 from app.models.skiservice import Auftrag
 from app.crud import skiservice as crud_skiservice
 from app.crud import saisonverleih as crud_saisonverleih
@@ -98,10 +99,14 @@ def auftrag_gruppe(auftrag: Auftrag) -> QuittungGruppeArtikel:
 
     return artikelgruppe
 
+def material_bezeichnung(material: SaisonVerleihMaterial) -> str:
+    """Bezeichnung für Quittung und Kasse, z.B. "Saisonverleih: Erwachsene Ski-Set"."""
+    verleih = material.saisonverleih.Bezeichnung if material.saisonverleih else "Saisonverleih"
+    return f"{verleih}: {material.PreisBezeichnung}" if material.PreisBezeichnung else verleih
+
 def verleih_gruppe(verleih: SaisonVerleih) -> QuittungGruppeArtikel:
-    """Artikelgruppe eines geladenen Verleihs: Material mit gleichem Preis wird zusammengezählt."""
-    # TODO #26 Verleih bezeichnung mit auf der Quittung
-    verleih_counter: Counter[float] = Counter()
+    """Artikelgruppe eines geladenen Verleihs: Material mit gleicher Bezeichnung und gleichem Preis wird zusammengezählt."""
+    verleih_counter: Counter[tuple[str, float]] = Counter()
 
     # artikel Init
     kunde = verleih.Kunde
@@ -109,19 +114,40 @@ def verleih_gruppe(verleih: SaisonVerleih) -> QuittungGruppeArtikel:
     bez = f"Verleih - {verleih.Name} - {name}"
     artikelgruppe = QuittungGruppeArtikel(type=QuittungsTyp.Verleih, toID=verleih.ID, bezeichnung=bez)
 
-    for ski in verleih.Material:
-        verleih_counter[ski.Preis] += 1
+    for material in verleih.Material:
+        verleih_counter[(material_bezeichnung(material), material.Preis)] += 1
 
-    for verleih_Preis, anzahl in verleih_counter.items():
+    for (bezeichnung, verleih_Preis), anzahl in verleih_counter.items():
         artikelgruppe.artikels.append(QuittungArtikelSchema(
             type=QuittungsTyp.Verleih,
-            bezeichnung=verleih.Bezeichnung,
+            bezeichnung=bezeichnung,
             preis=verleih_Preis,
             anzahl=anzahl,
             toID=verleih.ID
         ))
 
     return artikelgruppe
+
+def handware_gruppe(artikel: list[QuittungArtikel]) -> QuittungGruppeArtikel | None:
+    """Verkaufte Handware einer Quittung als eine Gruppe, aus der Kopie von Name, Preis und Menge."""
+    positionen = [a for a in artikel if a.Artikel_Kategorie == "Handware"]
+    if not positionen:
+        return None
+    return QuittungGruppeArtikel(
+        type=QuittungsTyp.Handware,
+        toID=0,
+        bezeichnung="Verkauf",
+        artikels=[
+            QuittungArtikelSchema(
+                type=QuittungsTyp.Handware,
+                bezeichnung=a.Bezeichnung or "Artikel",
+                preis=a.Preis or 0,
+                anzahl=a.Menge or 1,
+                toID=a.Artikel_ID,
+            )
+            for a in positionen
+        ],
+    )
 
 def _AuftragzuArtikel(auftrag_id: int, db: Session) -> QuittungGruppeArtikel:
     auftrag = crud_skiservice.getSkiserviceAuftrag(db, auftrag_id)
@@ -154,6 +180,7 @@ def quittungen_liste(db: Session, saison_id: int) -> list[QuittungListeEintrag]:
     quittungen = (
         db.query(Quittung)
         .filter(Quittung.Saison_ID == saison_id)
+        .options(selectinload(Quittung.artikels))
         .order_by(Quittung.ID.desc())
         .all()
     )
@@ -187,6 +214,8 @@ def quittungen_liste(db: Session, saison_id: int) -> list[QuittungListeEintrag]:
         q_auftraege = nach_quittung_a.get(q.ID, [])
         q_verleihe = nach_quittung_v.get(q.ID, [])
         gruppen = [auftrag_gruppe(a) for a in q_auftraege] + [verleih_gruppe(v) for v in q_verleihe]
+        if (gruppe := handware_gruppe(q.artikels)):
+            gruppen.append(gruppe)
         kunden = {k.ID: k for k in [a.kunde for a in q_auftraege] + [v.Kunde for v in q_verleihe] if k is not None}
         kunde = _quittung_kunde(kunden)
         liste.append(QuittungListeEintrag(
@@ -254,6 +283,9 @@ class QuittungsService:
                 if verleih and verleih.Kunde:
                     kunden[verleih.Kunde.ID] = verleih.Kunde
 
+        if (gruppe := handware_gruppe(quittung.artikels)):
+            quittungOut.artikelgruppen.append(gruppe)
+
         quittungOut.kunde = _quittung_kunde(kunden)
         
         return quittungOut
@@ -296,3 +328,14 @@ class QuittungsService:
             raise HTTPException(status_code=404, detail="PDF konnte nicht erstellt werden")
 
         return pdf
+
+
+def quittung_pdf(db: Session, quittung: Quittung) -> tuple[bytes, str]:
+    """
+    PDF und Dateiname einer Quittung. Externe Quittung: das Original kommt aus Lexware (kann LexwareFehler werfen).
+    """
+    if quittung.NurExtern and quittung.LexID:
+        pdf, dateiname = LexwareAPI().hole_rechnung_pdf(quittung.LexID)
+        return pdf, dateiname or quittung_dateiname(quittung)
+    service = QuittungsService(db)
+    return service.renderPDF(service.get_quittung(quittung.ID)), quittung_dateiname(quittung)

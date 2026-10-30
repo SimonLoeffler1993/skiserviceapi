@@ -18,6 +18,8 @@ class SaisonVerleihMaterialBase(BaseModel):
     stockbez_ID: Optional[int] = None
     stocklaenge: Optional[int] = None
     Preis: float
+    # Gewählter Preis aus der Preisliste, leer bei individuellem Preis
+    Preis_ID: Optional[int] = None
     SkiFahrerName: Optional[str] = None # Name der Person, die das Material fährt (kann vom Kunden abweichen)
     # Optional, leer bzw. null entfernt die Bindungsdaten
     bindungsdaten: Optional[BindungsdatenBase] = None
@@ -46,6 +48,7 @@ class SaisonVerleihMaterialUpdate(BaseModel):
     stockbez_ID: Optional[int] = None
     stocklaenge: Optional[int] = None
     Preis: Optional[float] = None
+    Preis_ID: Optional[int] = None
     SkiFahrerName: Optional[str] = None
     # Ski bzw. Schuh bewusst übernehmen, obwohl sie schon verliehen sind
     trotz_belegung: bool = False
@@ -53,6 +56,8 @@ class SaisonVerleihMaterialUpdate(BaseModel):
 
 class SaisonVerleihMaterialRead(SaisonVerleihMaterialBase):
     ID: int
+    # Bezeichnung des gebuchten Preises zum Zeitpunkt der Buchung
+    PreisBezeichnung: Optional[str] = None
     BindungGeprueft: bool = False
     BindungGeprueft_Am: date | None = None
     Ski: EigenSkiRead | None = None
@@ -119,6 +124,20 @@ class VerleihStatusAenderung(BaseModel):
     Status: VerleihStatus
 
 
+# nein, abholung (Ski abholbereit) oder rueckgabe (Erinnerung an die Rückgabe)
+VerleihBenachrichtigung = Literal["nein", "abholung", "rueckgabe"]
+
+
+class VerleihBenachrichtigtAenderung(BaseModel):
+    # Von Hand setzen, ohne Mail (z.B. Kunde angerufen)
+    Benachrichtigt: VerleihBenachrichtigung
+
+
+class VerleihBenachrichtigenAnfrage(BaseModel):
+    # Welche Mail versendet wird
+    art: Literal["abholung", "rueckgabe"]
+
+
 class BindungGeprueftAnfrage(BaseModel):
     # Ohne Angabe alle Materialzeilen mit Ski
     material_ids: Optional[List[int]] = None
@@ -128,6 +147,8 @@ class SaisonVerleihRead(SaisonVerleihBase):
     ID: int
     Status: VerleihStatus = "unterwegs"
     Abgeholt_Am: date | None = None
+    Benachrichtigt: VerleihBenachrichtigung = "nein"
+    Benachrichtigt_Am: date | None = None
     Name: str 
     Tage: int | None = None
     Bezeichnung: str = "Saisonverleih"
