@@ -23,8 +23,7 @@ async def artikels(artikelkategorie: KasseArtikelKategorie = KasseArtikelKategor
         return KasseService(db).get_offene_auftraege()
     elif artikelkategorie == KasseArtikelKategorie.verleih:
         return KasseService(db).get_offene_verleih()
-    # Handware ist noch nicht umgesetzt
-    return []
+    return KasseService(db).get_handware()
 
 @router.post("/bezahlen", response_model=KasseHatBezahltSchema)
 def bezahlen(artikels: KasseBezahlenSchema, hintergrund: BackgroundTasks, db: Session = Depends(get_db)):

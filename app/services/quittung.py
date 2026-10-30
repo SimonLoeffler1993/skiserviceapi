@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal
 from weasyprint import HTML
 
-from app.models.quittung import Quittung
+from app.models.quittung import Quittung, QuittungArtikel
 from app.services import einstellungen
 from app.utils.lexware import LexwareAPI
 from app.utils.girocode import girocode_png_data_uri, iban_formatiert
@@ -128,6 +128,27 @@ def verleih_gruppe(verleih: SaisonVerleih) -> QuittungGruppeArtikel:
 
     return artikelgruppe
 
+def handware_gruppe(artikel: list[QuittungArtikel]) -> QuittungGruppeArtikel | None:
+    """Verkaufte Handware einer Quittung als eine Gruppe, aus der Kopie von Name, Preis und Menge."""
+    positionen = [a for a in artikel if a.Artikel_Kategorie == "Handware"]
+    if not positionen:
+        return None
+    return QuittungGruppeArtikel(
+        type=QuittungsTyp.Handware,
+        toID=0,
+        bezeichnung="Verkauf",
+        artikels=[
+            QuittungArtikelSchema(
+                type=QuittungsTyp.Handware,
+                bezeichnung=a.Bezeichnung or "Artikel",
+                preis=a.Preis or 0,
+                anzahl=a.Menge or 1,
+                toID=a.Artikel_ID,
+            )
+            for a in positionen
+        ],
+    )
+
 def _AuftragzuArtikel(auftrag_id: int, db: Session) -> QuittungGruppeArtikel:
     auftrag = crud_skiservice.getSkiserviceAuftrag(db, auftrag_id)
     if not auftrag:
@@ -159,6 +180,7 @@ def quittungen_liste(db: Session, saison_id: int) -> list[QuittungListeEintrag]:
     quittungen = (
         db.query(Quittung)
         .filter(Quittung.Saison_ID == saison_id)
+        .options(selectinload(Quittung.artikels))
         .order_by(Quittung.ID.desc())
         .all()
     )
@@ -192,6 +214,8 @@ def quittungen_liste(db: Session, saison_id: int) -> list[QuittungListeEintrag]:
         q_auftraege = nach_quittung_a.get(q.ID, [])
         q_verleihe = nach_quittung_v.get(q.ID, [])
         gruppen = [auftrag_gruppe(a) for a in q_auftraege] + [verleih_gruppe(v) for v in q_verleihe]
+        if (gruppe := handware_gruppe(q.artikels)):
+            gruppen.append(gruppe)
         kunden = {k.ID: k for k in [a.kunde for a in q_auftraege] + [v.Kunde for v in q_verleihe] if k is not None}
         kunde = _quittung_kunde(kunden)
         liste.append(QuittungListeEintrag(
@@ -258,6 +282,9 @@ class QuittungsService:
                 verleih = self.db.get(SaisonVerleih, artikel.Verleih_ID)
                 if verleih and verleih.Kunde:
                     kunden[verleih.Kunde.ID] = verleih.Kunde
+
+        if (gruppe := handware_gruppe(quittung.artikels)):
+            quittungOut.artikelgruppen.append(gruppe)
 
         quittungOut.kunde = _quittung_kunde(kunden)
         

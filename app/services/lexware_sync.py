@@ -168,12 +168,14 @@ def _adresse(kunde: QuittungKundeSchema | None) -> dict:
 
 
 def rechnung_anlegen(db: Session, auftrag_ids: list[int], verleih_ids: list[int], kunden: dict[int, SkiKunde],
-                     bar: bool = False, karte: bool = False, ueberweisung: bool = False) -> tuple[str, str]:
+                     bar: bool = False, karte: bool = False, ueberweisung: bool = False,
+                     zusatz_gruppen: list[QuittungGruppeArtikel] | None = None) -> tuple[str, str]:
     """
     Legt für die Aufträge und Verleihe eine finalisierte Rechnung in Lexware an.
     Gibt die Lexware ID und die Rechnungsnummer zurück.
     """
-    gruppen = [_AuftragzuArtikel(i, db) for i in auftrag_ids] + [_VerleihzuArtikel(i, db) for i in verleih_ids]
+    # Zusatzgruppen: z.B. verkaufte Handware, die noch nicht in der DB steht
+    gruppen = [_AuftragzuArtikel(i, db) for i in auftrag_ids] + [_VerleihzuArtikel(i, db) for i in verleih_ids] + (zusatz_gruppen or [])
     satz, kleinunternehmer = _steuer()
     jetzt = _jetzt_lexware()
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, Date, String, Boolean
+from sqlalchemy import Column, ForeignKey, Integer, Date, String, Boolean, Double
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import date
 
@@ -45,5 +45,9 @@ class QuittungArtikel(Base):
     Artikel_Kategorie: Mapped[str] = mapped_column(String(50))
     Auftrag_ID: Mapped[int] = mapped_column(Integer, nullable=True)
     Verleih_ID: Mapped[int] = mapped_column(Integer, nullable=True)
+    # Handware: Kopie zum Verkaufszeitpunkt, damit die Quittung auch nach Ändern/Löschen des Artikels stimmt
+    Bezeichnung: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    Preis: Mapped[float | None] = mapped_column(Double, nullable=True)
+    Menge: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Relation zu der Quittung, in der dieser Artikel enthalten ist
     quittung: Mapped["Quittung"] = relationship("Quittung", back_populates="artikels")

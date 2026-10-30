@@ -21,6 +21,11 @@ class KassenArtikelSchema(BaseModel):
     artikel: list[KasseEinzelArtikelSchema]
     service: bool = False
     verleih: bool = False
+    handware: bool = False
+    # Verkaufte Menge, nur bei Handware relevant
+    menge: int = Field(1, ge=1)
+    # Anzahl des Handwarenartikels, nur zur Anzeige
+    bestand: Optional[int] = None
 
 class KasseHatBezahltSchema(BaseModel):
     quittung_id: int
