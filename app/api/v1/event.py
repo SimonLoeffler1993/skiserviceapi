@@ -22,6 +22,9 @@ router = APIRouter(
 # Initialize the terminal manager
 terminal_manager = KundenTerminalManager()
 
+# Abstand der Heartbeats an die Terminals
+HEARTBEAT_SEKUNDEN = 15
+
 @router.get("/test")
 async def test(request: Request):
     async def event_stream():
@@ -74,12 +77,23 @@ async def connect_terminal(request: Request, terminal: str):
             while True:
                 if await request.is_disconnected():
                     break
-                message = await queue.get()
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SEKUNDEN)
+                except asyncio.TimeoutError:
+                    # Heartbeat: eine abgerissene Verbindung fällt beim Schreiben auf,
+                    # das Terminal erkennt daran, dass die Verbindung noch lebt
+                    yield "event: ping\ndata: \n\n"
+                    continue
                 yield f"data: {message}\n\n"
         finally:
-            await terminal_manager.disconnect(terminal)
+            await terminal_manager.disconnect(terminal, queue)
 
-    return StreamingResponse(event_stream(terminal), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(terminal),
+        media_type="text/event-stream",
+        # Kein Puffern durch Proxy (z.B. nginx), sonst kommt der Heartbeat nicht an
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
                 

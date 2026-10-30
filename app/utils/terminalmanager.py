@@ -16,8 +16,11 @@ class KundenTerminalManager():
         self.verbindungen[terminal] = q
         return q
     
-    async def disconnect(self, terminal: str):
-        self.verbindungen.pop(terminal, None)
+    async def disconnect(self, terminal: str, queue: asyncio.Queue):
+        # Nur die eigene Verbindung entfernen: hat sich das Terminal inzwischen neu verbunden,
+        # gehört der Eintrag schon der neuen Verbindung
+        if self.verbindungen.get(terminal) is queue:
+            del self.verbindungen[terminal]
         
     async def send_message(self, terminal: str, message: str):
         if terminal not in self.verbindungen:
