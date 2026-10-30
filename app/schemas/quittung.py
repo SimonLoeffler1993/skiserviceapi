@@ -58,10 +58,18 @@ class QuittungRead(QuittungBase):
     ManuellZugewiesen: bool = False
     # Aktuelle Lexware Übertragung ("pdf" / "rechnung"), None wenn aus
     LexwareModus: str | None = Field(default_factory=_lexware_modus)
+    # Bezahlt-Status wurde gerade aus Lexware in die Datenbank übernommen
+    StatusAktualisiert: bool = False
 
     model_config = {
         "from_attributes": True
     }
+
+class BezahltSetzen(BaseModel):
+    """Bezahlt-Status eines Auftrags oder Verleihs von Hand setzen."""
+    bezahlt: bool
+    # Quittung und alle Positionen darauf ebenfalls ändern
+    mit_quittung: bool = False
 
 class QuittungNurExtern(BaseModel):
     # Genau eines von beiden: Saisonverleih oder Skiservice-Auftrag

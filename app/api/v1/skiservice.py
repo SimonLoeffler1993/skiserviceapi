@@ -15,6 +15,8 @@ from app.utils.skiscannerguimanager import scanner_gui_manager as scanner_manage
 from app.utils.mail import sendeFertigMail, skizusammenfassen
 
 from app.services import skiserviceauftrag
+from app.services.bezahlstatus import auftrag_bezahlt_setzen
+from app.schemas.quittung import BezahltSetzen
 
 router = APIRouter(
     prefix="/skiservice",
@@ -156,6 +158,16 @@ def aendere_auftrag(skiservice_auftrag_id: int, daten: AuftragUpdateSchema, db: 
     """
     return _auftrag_oder_404(crud_skiservice.aendereAuftrag(db, skiservice_auftrag_id, daten))
 
+
+@router.patch("/auftrag/{skiservice_auftrag_id}/bezahlt", response_model=AuftragSchema)
+def setze_auftrag_bezahlt(skiservice_auftrag_id: int, daten: BezahltSetzen, db: Session = Depends(get_db)):
+    """
+    Setzt den Auftrag von Hand auf bezahlt oder nicht bezahlt.
+    Mit mit_quittung werden die Quittung und alle Positionen darauf ebenfalls geändert.
+    """
+    if auftrag_bezahlt_setzen(db, skiservice_auftrag_id, daten.bezahlt, daten.mit_quittung) is None:
+        raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+    return crud_skiservice.getSkiserviceAuftrag(db, skiservice_auftrag_id)
 
 @router.post("/auftrag/{skiservice_auftrag_id}/benachrichtigen", response_model=AuftragSchema)
 def benachrichtige_kunde(skiservice_auftrag_id: int, db: Session = Depends(get_db)):

@@ -8,6 +8,8 @@ from app.crud import saisonverleih as crud_saisonverleih
 from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate, VerleihStatusAenderung, BindungGeprueftAnfrage, VerleihBenachrichtigtAenderung, VerleihBenachrichtigenAnfrage
 from app.utils import skipdf
 from app.utils.mail import sendeVerleihMail
+from app.services.bezahlstatus import verleih_bezahlt_setzen
+from app.schemas.quittung import BezahltSetzen
 
 router = APIRouter(
     prefix="/saisonverleih",
@@ -128,6 +130,16 @@ def setze_verleih_status(saisonverleih_id: int, daten: VerleihStatusAenderung, d
         raise HTTPException(status_code=404, detail="Saisonverleih not found")
     return _abhol_mail_nach_wechsel(db, verleih, status_vorher)
 
+
+@router.patch("/{saisonverleih_id}/bezahlt", response_model=SaisonVerleihRead)
+def setze_verleih_bezahlt(saisonverleih_id: int, daten: BezahltSetzen, db: Session = Depends(get_db)):
+    """
+    Setzt den Verleih von Hand auf bezahlt oder nicht bezahlt.
+    Mit mit_quittung werden die Quittung und alle Positionen darauf ebenfalls geändert.
+    """
+    if verleih_bezahlt_setzen(db, saisonverleih_id, daten.bezahlt, daten.mit_quittung) is None:
+        raise HTTPException(status_code=404, detail="Saisonverleih not found")
+    return crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
 
 @router.post("/{saisonverleih_id}/benachrichtigen", response_model=SaisonVerleihRead)
 def benachrichtige_kunde(saisonverleih_id: int, anfrage: VerleihBenachrichtigenAnfrage, db: Session = Depends(get_db)):
