@@ -27,6 +27,10 @@ def _kunden_emails(kunden: list[SkiKunde | None]) -> list[str]:
             emails.setdefault(email.lower(), email)
     return list(emails.values())
 
+def _ohne_quittung(spalte):
+    """Noch keine Quittung zugeordnet, alte Daten haben teils 0 statt NULL."""
+    return or_(spalte.is_(None), spalte == 0)
+
 def get_kundenname(kunde: SkiKunde | None) -> str:
     if kunde is not None:
         return f"{kunde.Vorname or ''} {kunde.Nachname or ''}".strip() or "Unbekannt"
@@ -40,7 +44,7 @@ class KasseService:
     def get_offene_auftraege(self) -> list[KassenArtikelSchema]:
         auftraege = (
             self.db.query(Auftrag)
-            .filter(Auftrag.bezahlt == "nein")
+            .filter(Auftrag.bezahlt == "nein", _ohne_quittung(Auftrag.quittung_id))
             .all()
         )
         return [self._auftrag_zu_kassenartikel(a) for a in auftraege]
@@ -81,7 +85,7 @@ class KasseService:
     def get_offene_verleih(self) -> list[KassenArtikelSchema]:
         verleih = (
             self.db.query(SaisonVerleih)
-            .filter(or_(SaisonVerleih.Bezahlt.is_(None), SaisonVerleih.Bezahlt == False))
+            .filter(or_(SaisonVerleih.Bezahlt.is_(None), SaisonVerleih.Bezahlt == False), _ohne_quittung(SaisonVerleih.QuittungID))
             .all()
         )
         return [self._verleih_zu_kassenartikel(a) for a in verleih]
@@ -163,6 +167,8 @@ class KasseService:
                         raise ValueError(f"Auftrag {artikel.id} nicht gefunden.")
                     if auftrag.bezahlt == "ja":
                         raise ValueError(f"Auftrag {auftrag.name} ist bereits bezahlt.")
+                    if auftrag.quittung_id:
+                        raise ValueError(f"Auftrag {auftrag.name} hat bereits eine Quittung.")
                     auftraege.append(auftrag)
 
                 elif artikel.verleih:
@@ -176,6 +182,8 @@ class KasseService:
                         raise ValueError(f"Verleih {artikel.id} nicht gefunden.")
                     if verleih.Bezahlt:
                         raise ValueError(f"Verleih {verleih.Name} ist bereits bezahlt.")
+                    if verleih.QuittungID:
+                        raise ValueError(f"Verleih {verleih.Name} hat bereits eine Quittung.")
                     verleihe.append(verleih)
 
             if lexware_modus() == "rechnung":
