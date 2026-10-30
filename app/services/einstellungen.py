@@ -132,6 +132,8 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           beschreibung=VERLEIH_STARTSTATUS_TEXT),
     EinstellungDefinition("KUERZEL_QUITTUNG", "anwendung", "Kürzel Quittungsnummer", standard="Q",
                           beschreibung="Ergibt z.B. 25/26Q12"),
+    EinstellungDefinition("KUNDEN_LETZTE_ANZAHL", "anwendung", "Anzahl letzte Kunden", typ="zahl", standard=5,
+                          beschreibung="So viele zuletzt angelegte Kunden werden beim Anlegen von Skiservice und Verleih zur Auswahl angeboten."),
 ]
 
 DEFINITION_NACH_SCHLUESSEL = {d.schluessel: d for d in DEFINITIONEN}
