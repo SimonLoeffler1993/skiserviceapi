@@ -11,6 +11,7 @@ from app.api.v1 import kasse
 from app.api.v1 import einstellungen
 from app.api.v1 import bindungsdaten
 from app.api.v1 import handware
+from app.api.v1 import health
 from app.db.base import Base
 from app.db.session import engine
 from app.services import einstellungen as einstellungen_service
@@ -65,6 +66,7 @@ app.include_router(kasse.router, prefix=appPrefix)
 app.include_router(einstellungen.router, prefix=appPrefix)
 app.include_router(bindungsdaten.router, prefix=appPrefix)
 app.include_router(handware.router, prefix=appPrefix)
+app.include_router(health.router, prefix=appPrefix)
 
 @app.get("/")
 def read_root():
