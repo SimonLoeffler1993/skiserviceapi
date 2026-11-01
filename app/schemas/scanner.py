@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 from enum import IntEnum
 from typing import Literal
@@ -31,3 +33,16 @@ class ScannerWebSocketMessage(BaseModel):
     ski_id: int | None = None
     service_id: int | None = None
     data: AuftragSchema | None = None
+
+class ScannerMeldung(BaseModel):
+    """Regelmäßige Meldung des Scanners (Health-Check), zeigt im Center, dass er verbunden ist."""
+    name: str
+    modus: TriggerStatus
+    firmware: str | None = None
+    ip: str | None = None
+    # USB-Barcodescanner am ESP32 angeschlossen
+    usb_scanner: bool = True
+
+class ScannerGeraet(ScannerMeldung):
+    zuletzt: datetime
+    verbunden: bool
