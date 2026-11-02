@@ -8,6 +8,9 @@ from app.crud import saisonverleih as crud_saisonverleih
 from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate, VerleihStatusAenderung, BindungGeprueftAnfrage, VerleihBenachrichtigtAenderung, VerleihBenachrichtigenAnfrage
 from app.utils import skipdf
 from app.utils.mail import sendeVerleihMail
+from app.services.bezahlstatus import verleih_bezahlt_setzen
+from app.services.verleih_benachrichtigung import abhol_mail_nach_wechsel as _abhol_mail_nach_wechsel, status_vor_aenderung as _status
+from app.schemas.quittung import BezahltSetzen
 
 router = APIRouter(
     prefix="/saisonverleih",
@@ -129,6 +132,16 @@ def setze_verleih_status(saisonverleih_id: int, daten: VerleihStatusAenderung, d
     return _abhol_mail_nach_wechsel(db, verleih, status_vorher)
 
 
+@router.patch("/{saisonverleih_id}/bezahlt", response_model=SaisonVerleihRead)
+def setze_verleih_bezahlt(saisonverleih_id: int, daten: BezahltSetzen, db: Session = Depends(get_db)):
+    """
+    Setzt den Verleih von Hand auf bezahlt oder nicht bezahlt.
+    Mit mit_quittung werden die Quittung und alle Positionen darauf ebenfalls geändert.
+    """
+    if verleih_bezahlt_setzen(db, saisonverleih_id, daten.bezahlt, daten.mit_quittung) is None:
+        raise HTTPException(status_code=404, detail="Saisonverleih not found")
+    return crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
+
 @router.post("/{saisonverleih_id}/benachrichtigen", response_model=SaisonVerleihRead)
 def benachrichtige_kunde(saisonverleih_id: int, anfrage: VerleihBenachrichtigenAnfrage, db: Session = Depends(get_db)):
     """
@@ -160,24 +173,6 @@ def _verleih_oder_404(saisonverleih):
     if saisonverleih is None:
         raise HTTPException(status_code=404, detail="Verleih oder Material nicht gefunden")
     return saisonverleih
-
-
-def _status(db: Session, saisonverleih_id: int) -> Optional[str]:
-    """Status vor einer Änderung, um den Wechsel auf "vorbereitet" zu erkennen."""
-    verleih = crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
-    return verleih.Status if verleih else None
-
-
-def _abhol_mail_nach_wechsel(db: Session, verleih, status_vorher: Optional[str]):
-    """
-    Wechselt der Verleih von "vorbereitung" auf "vorbereitet", bekommt der Kunde die Abhol-Mail,
-    sofern er noch nicht benachrichtigt wurde und eine E-Mail hinterlegt ist.
-    """
-    if verleih is None or status_vorher != "vorbereitung" or verleih.Status != "vorbereitet" or verleih.Benachrichtigt != "nein":
-        return verleih
-    if not sendeVerleihMail(SaisonVerleihRead.model_validate(verleih), "abholung"):
-        return verleih
-    return crud_saisonverleih.setze_benachrichtigt(db, verleih.ID, "abholung")
 
 
 @router.patch("/{saisonverleih_id}", response_model=SaisonVerleihRead)

@@ -1,13 +1,11 @@
-import datetime
-
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
-from urllib.parse import urlparse, parse_qs
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
-from app.schemas.skiservice import AuftragSchema
+from app.api.v1.health import health_antwort
+from app.schemas.scanner import ScanAntwort, ScannerGeraet, ScannerMeldung, ScannerRead
+from app.services.scanner import scan_auswerten
+from app.utils.scannerregister import scanner_register
 from app.utils.skiscannerguimanager import scanner_gui_manager as scanner_manager
-from app.crud import skiservice as crud_skiservice
 from app.db.deps import get_db
 
 router = APIRouter(
@@ -16,50 +14,34 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-def codeURL2SaisonID(codeURL: str):
-    parsed_url = urlparse(codeURL)
-    service_id = parsed_url.path.strip("/").split("/")[-1] or None
-    ski_id = parse_qs(parsed_url.query).get("ski", [None])[0] 
-
-    return service_id, ski_id
-
 @router.get("/test")
 async def test():
     return {"message": "Skiscanner API is working!"}
 
-@router.post("/scan")
+@router.post("/scan", response_model=ScanAntwort)
 async def scan(scanner_data: ScannerRead, db: Session = Depends(get_db)):
     """
-    Wertet die gesendeten Daten vom Skiscanner aus.
+    Wertet einen Scan vom Skiscanner aus, je nach Modus (trigger):
+    1 = Fertigstellen (nur Service-Etiketten), 2 = Bindung geprüft (Service- und Verleih-Etiketten).
     """
-    
-    if scanner_data.trigger == TriggerStatus.fertig:
-        service_id, ski_id = codeURL2SaisonID(scanner_data.code)
-        print(f"Scan abgeschlossen. ServiceID: {service_id}, Ski-ID: {ski_id}")
+    scanner_register.melden(ScannerMeldung(name=scanner_data.name, modus=scanner_data.trigger))
+    return await scan_auswerten(db, scanner_data)
 
-        # ServiceID in Integer umwandeln, falls möglich
-        intServiceID = int(service_id) if service_id and service_id.isdigit() else None
-        if intServiceID is None:
-            print(f"Ungültige ServiceID: {service_id}")
-            return {"message": "Ungültige ServiceID im CodeURL", "success": False}
-        
-        # Datenbankabfrage, um die Auftragsdaten zu erhalten
-        skiservicedata = crud_skiservice.getSkiserviceAuftrag(db, intServiceID)
 
-        # Nachricht an alle verbundenen WebSocket-Clients senden
-        await scanner_manager.sende_data_broadcast(
-            ScannerWebSocketMessage(
-                message="Scan abgeschlossen",
-                success=True,
-                scannername=scanner_data.name,
-                ski_id=int(ski_id) if ski_id and ski_id.isdigit() else None,
-                service_id=intServiceID,
-                data=AuftragSchema.model_validate(skiservicedata) if skiservicedata else None
-            )
-        )
+@router.post("/melden")
+def melden(meldung: ScannerMeldung, db: Session = Depends(get_db)):
+    """
+    Health-Check des Scanners (alle 30 s): trägt ihn als verbunden ein und prüft wie /health die Datenbank.
+    Bei nicht erreichbarer Datenbank 503.
+    """
+    scanner_register.melden(meldung)
+    return health_antwort(db)
 
-    return {"message": "Scanning abgeschlossen", "success": True}
 
+@router.get("/geraete", response_model=list[ScannerGeraet])
+def geraete():
+    """Alle Scanner, die sich in den letzten 24 h gemeldet haben, mit verbunden = Meldung in den letzten 75 s."""
+    return scanner_register.liste()
 
 
 @router.websocket("/data")

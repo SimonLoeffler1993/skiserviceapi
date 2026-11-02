@@ -1,6 +1,5 @@
 import httpx
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
@@ -19,6 +18,7 @@ from app.utils.mail import sendeQuittungMail
 from app.crud import saison as crud_saison
 from app.services.lexware_sync import SyncKonflikt, quittung_pdf_hochladen
 from app.utils.lexware import LexwareFehler
+from app.services.bezahlstatus import lexware_abgleichen, lexware_bezahlt, lexware_bezahlt_am
 
 router = APIRouter(
     prefix="/quittungen",
@@ -82,47 +82,23 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
     
             # TODO Datum für Lex Sync in DB Speichern
             bezahlinfo_data = lexware_api.get_bezahlstatus(quittung.LexID)
-            lexBez = False
-            if bezahlinfo_data["voucherStatus"] == "paid":
-                quittung.Bezahlt = True
-                # Parse ISO 8601 datetime and convert to date
-                if bezahlinfo_data["paidDate"]:
-                    paid_date = datetime.fromisoformat(bezahlinfo_data["paidDate"].replace('Z', '+00:00'))
-                    quittung.Bezahlt_Am = paid_date.date()
-                else:
-                    quittung.Bezahlt_Am = None
-                db.commit()
-                db.refresh(quittung)
-                lexBez = True
-            else:
-                quittung.Bezahlt = False
-                quittung.Bezahlt_Am = None
-                db.commit()
-                db.refresh(quittung)
-
-           
-
-            lexOffenerBetrag = -1
-            lexOffenerBetrag = bezahlinfo_data.get("openAmount")
-
-            lexBezahltAm = None
-            if bezahlinfo_data.get("paidDate"):
-                # Parse ISO 8601 datetime and convert to date for response
-                paid_date = datetime.fromisoformat(bezahlinfo_data["paidDate"].replace('Z', '+00:00'))
-                lexBezahltAm = paid_date.date()
+            # Nur "bezahlt" wird übernommen, "offen" setzt nichts zurück (Kassen-Quittungen sind dort offen,
+            # bis die Zahlung in Lexware zugeordnet ist)
+            aktualisiert = lexware_abgleichen(db, quittung, bezahlinfo_data)
 
             bezInfo = {
-                "Bezahlt": lexBez,
-                "Bezahlt_Am": lexBezahltAm,
-                "Offener_Betrag": lexOffenerBetrag
+                "Bezahlt": lexware_bezahlt(bezahlinfo_data),
+                "Bezahlt_Am": lexware_bezahlt_am(bezahlinfo_data),
+                "Offener_Betrag": bezahlinfo_data.get("openAmount"),
             }
 
-                # eigenes Response Model mit Bezahlinfo erstellen
+            # eigenes Response Model mit Bezahlinfo erstellen
             quittungResponse = {
                 ** quittung.__dict__,
                 "Nummer": quittung.Nummer,
                 "ManuellZugewiesen": quittung.ManuellZugewiesen,
-                "BezahlInfo": bezInfo
+                "BezahlInfo": bezInfo,
+                "StatusAktualisiert": aktualisiert,
             }
             return quittungResponse
 
