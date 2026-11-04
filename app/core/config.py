@@ -53,3 +53,6 @@ class CheckinDbSettings:
 
 
 checkinDbSettings = CheckinDbSettings()
+
+# Gemeinsames Volume: Die API schreibt den aktuellen Public Key hinein, die Check-in-App liest ihn nur
+checkinPublicKeyOrdner = (os.getenv("CHECKIN_PUBLIC_KEY_ORDNER") or "").strip()

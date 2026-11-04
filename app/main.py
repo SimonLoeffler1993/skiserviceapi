@@ -14,7 +14,8 @@ from app.api.v1 import handware
 from app.api.v1 import health
 from app.api.v1 import checkin
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import SessionLocal, engine
+from app.services import checkin_schluessel
 from app.services import einstellungen as einstellungen_service
 
 # TODO: #10 Logging einstellungen
@@ -33,6 +34,12 @@ async def lifespan(app: FastAPI):
         einstellungen_service.aus_umgebung_uebernehmen()
     except Exception:
         logging.getLogger(__name__).exception("Einstellungen konnten nicht aus der Umgebung übernommen werden")
+    try:
+        # Public Key für die Check-in-App bereitstellen, siehe CHECKIN_PUBLIC_KEY_ORDNER
+        with SessionLocal() as db:
+            checkin_schluessel.beim_start(db)
+    except Exception:
+        logging.getLogger(__name__).exception("Check-in-Schlüssel konnte nicht bereitgestellt werden")
     yield
 
 app = FastAPI(title="SkiApp API", version="0.0.1", lifespan=lifespan)

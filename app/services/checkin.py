@@ -22,7 +22,9 @@ from app.db.checkin import CheckIn, checkin_session, eingerichtet
 from app.models.ort import Ort
 from app.schemas.checkin import CheckinInhalt, CheckinKunde, CheckinRead, CheckinStatus
 from app.schemas.kunde import SkiKundeSpeichern
-from app.services.checkin_schluessel import privater_schluessel, schluessel_ids, utc
+from app.services.checkin_schluessel import (
+    privater_schluessel, public_key_automatisch, public_key_bereitgestellt, schluessel_ids, utc,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +110,9 @@ def liste(db: Session) -> list[CheckinRead]:
 
 
 def status(db: Session) -> CheckinStatus:
+    schluessel = {"public_key_automatisch": public_key_automatisch(), "public_key_bereitgestellt": public_key_bereitgestellt(db)}
     if not eingerichtet():
-        return CheckinStatus(eingerichtet=False, erreichbar=False)
+        return CheckinStatus(eingerichtet=False, erreichbar=False, **schluessel)
     sitzung = checkin_session()
     try:
         offen = sitzung.scalar(select(func.count()).select_from(CheckIn)) or 0
@@ -117,10 +120,10 @@ def status(db: Session) -> CheckinStatus:
         ohne = select(func.count()).select_from(CheckIn)
         if vorhanden:
             ohne = ohne.where(CheckIn.schluesselId.notin_(vorhanden))
-        return CheckinStatus(eingerichtet=True, erreichbar=True, offen=offen, ohne_schluessel=sitzung.scalar(ohne) or 0)
+        return CheckinStatus(eingerichtet=True, erreichbar=True, offen=offen, ohne_schluessel=sitzung.scalar(ohne) or 0, **schluessel)
     except SQLAlchemyError as fehler:
         _db_fehler(fehler)
-        return CheckinStatus(eingerichtet=True, erreichbar=False)
+        return CheckinStatus(eingerichtet=True, erreichbar=False, **schluessel)
     finally:
         sitzung.close()
 

@@ -39,6 +39,10 @@ class CheckinStatus(BaseModel):
     offen: int = 0
     # Datensätze, zu denen der API der private Schlüssel fehlt
     ohne_schluessel: int = 0
+    # Die Check-in-App bekommt den Public Key über das gemeinsame Volume
+    public_key_automatisch: bool = False
+    # Der neueste Public Key steht in der gemeinsamen Datei
+    public_key_bereitgestellt: bool = False
 
 
 class CheckinSchluesselRead(BaseModel):

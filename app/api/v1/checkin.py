@@ -43,7 +43,7 @@ def schluessel_liste(db: Session = Depends(get_db)):
 
 @router.post("/schluessel", response_model=CheckinSchluesselRead)
 def schluessel_erzeugen(db: Session = Depends(get_db)):
-    """Neues Schlüsselpaar. Der Public Key muss danach von Hand als CHECKIN_PUBLIC_KEY eingetragen werden."""
+    """Neues Schlüsselpaar. Mit gemeinsamem Ordner bekommt es die Check-in-App sofort, sonst von Hand als CHECKIN_PUBLIC_KEY eintragen."""
     return _schluessel_read(checkin_schluessel.erzeugen(db))
 
 
