@@ -43,14 +43,6 @@ services:
             - CHECKIN_DB_PASSWORD=${CHECKIN_API_PASSWORD}
             - CHECKIN_DB_NAME=checkin
             - CHECKIN_PUBLIC_KEY_ORDNER=/data/checkin-public-key
-            - HOST=${HOST:-}
-            - SMTP_SERVER=${SMTP_SERVER:-}
-            - SMTP_PORT=${SMTP_PORT:-}
-            - SMTP_USER=${SMTP_USER:-}
-            - SMTP_PASSWORD=${SMTP_PASSWORD:-}
-            - EMAIL_FROM=${EMAIL_FROM:-}
-            - LEXWARE_APIKEY=${LEXWARE_APIKEY:-}
-            - LABELPRINTERIDENT=${LABELPRINTERIDENT:-}
         volumes:
             - checkin_public_key:/data/checkin-public-key
         networks:
