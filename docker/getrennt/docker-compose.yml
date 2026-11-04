@@ -1,0 +1,252 @@
+# Beispiel: Laden und öffentliche Check-in-App sauber getrennt.
+#
+#   Internet --(HTTPS)--> checkin-proxy --> checkin --> checkin-db <-- skiserviceapi --> mariadb
+#                                                                           ^
+#                                                 Laden: Center, Kundenterminal
+#
+# Die Check-in-App erreicht nur ihre eigene Datenbank und sieht nur Chiffretext. API, Kundendaten und der
+# private Schlüssel (liegt in mariadb) sind für sie nicht erreichbar:
+# - checkin-db hängt an zwei getrennten Netzen. Säße die API im selben Netz wie die App, käme die App an die API,
+#   die keine Anmeldung hat.
+# - Die App hängt nur an internen Netzen. Mit einem normalen Netz käme sie über den Host an die veröffentlichten
+#   Ports der API sowie ins LAN und ins Internet. Deshalb hat nur der Proxy einen Zugang nach außen.
+#
+# Den Public Key schreibt die API in das Volume checkin_public_key, die App liest ihn nur. Beim ersten Start
+# erzeugt die API das Schlüsselpaar selbst, es muss nichts kopiert werden. Das gemeinsame Volume setzt denselben
+# Docker-Host voraus: Soll die App auf einen anderen Server, braucht es einen anderen Weg für Key und Datenbank.
+#
+# Start: cp .env.beispiel .env, Passwörter ändern, docker compose up -d
+
+x-logging: &default-logging
+    driver: json-file
+    options:
+        max-size: "10m"
+        max-file: "3"
+
+services:
+    # --- Laden ---
+    skiserviceapi:
+        image: ghcr.io/simonloeffler1993/skiserviceapi:latest
+        logging: *default-logging
+        container_name: skiserviceapi
+        ports:
+            - "${API_PORT:-8000}:8000"
+        environment:
+            - DB_HOST=mariadb
+            - DB_PORT=3306
+            - DB_USER=${DB_USER}
+            - DB_PASSWORD=${DB_PASSWORD}
+            - DB_NAME=${DB_NAME}
+            - CHECKIN_DB_HOST=checkin-db
+            - CHECKIN_DB_PORT=3306
+            - CHECKIN_DB_USER=checkin_api
+            - CHECKIN_DB_PASSWORD=${CHECKIN_API_PASSWORD}
+            - CHECKIN_DB_NAME=checkin
+            - CHECKIN_PUBLIC_KEY_ORDNER=/data/checkin-public-key
+            - HOST=${HOST:-}
+            - SMTP_SERVER=${SMTP_SERVER:-}
+            - SMTP_PORT=${SMTP_PORT:-}
+            - SMTP_USER=${SMTP_USER:-}
+            - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+            - EMAIL_FROM=${EMAIL_FROM:-}
+            - LEXWARE_APIKEY=${LEXWARE_APIKEY:-}
+            - LABELPRINTERIDENT=${LABELPRINTERIDENT:-}
+        volumes:
+            - checkin_public_key:/data/checkin-public-key
+        networks:
+            - intern
+            - checkin_abholung
+        depends_on:
+            mariadb:
+                condition: service_healthy
+            checkin-db:
+                condition: service_healthy
+        restart: unless-stopped
+
+    kundenterminal:
+        image: ghcr.io/simonloeffler1993/ski-kunden-dialog:latest
+        logging: *default-logging
+        container_name: kundenterminal
+        ports:
+            - "${KUNDENTERMINAL_PORT:-3000}:3000"
+        environment:
+            - BACKEND_URL=${BACKEND_URL}
+        networks:
+            - intern
+        depends_on:
+            - skiserviceapi
+        restart: unless-stopped
+
+    skiservicecenter:
+        image: ghcr.io/simonloeffler1993/skiservice-center:latest
+        logging: *default-logging
+        container_name: skiservicecenter
+        ports:
+            - "${CENTER_PORT:-3001}:3000"
+        environment:
+            - BACKEND_URL=${BACKEND_URL}
+        networks:
+            - intern
+        depends_on:
+            - skiserviceapi
+        restart: unless-stopped
+
+    # Kundendaten und privater Schlüssel. Backups dieser Datenbank enthalten beides
+    mariadb:
+        image: mariadb:11
+        container_name: mariadb
+        logging: *default-logging
+        environment:
+            - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+            - MARIADB_DATABASE=${DB_NAME}
+            - MARIADB_USER=${DB_USER}
+            - MARIADB_PASSWORD=${DB_PASSWORD}
+        volumes:
+            - mariadb_data:/var/lib/mysql
+        networks:
+            - intern
+        healthcheck:
+            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
+
+    # --- Check-in ---
+    # Einziger Weg von außen zur App. Caddy holt das HTTPS-Zertifikat für CHECKIN_DOMAIN selbst, dafür müssen
+    # die Domain auf diesen Host zeigen und die Ports 80 und 443 aus dem Internet erreichbar sein.
+    # Ohne HTTPS gibt es im Browser keine Verschlüsselung und das Formular sendet nichts.
+    # Ein eigener Proxy ist auch möglich, er muss aber im Netz checkin_proxy hängen, nicht die App im äußeren Netz.
+    checkin-proxy:
+        image: docker.io/library/caddy:2
+        logging: *default-logging
+        container_name: checkin-proxy
+        command: caddy reverse-proxy --from ${CHECKIN_DOMAIN} --to checkin:3000
+        ports:
+            - "${CHECKIN_HTTP_PORT:-80}:80"
+            - "${CHECKIN_HTTPS_PORT:-443}:443"
+        volumes:
+            - caddy_data:/data
+            - caddy_config:/config
+        networks:
+            - checkin_web
+            - checkin_proxy
+        read_only: true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+        security_opt:
+            - no-new-privileges:true
+        depends_on:
+            - checkin
+        restart: unless-stopped
+
+    # Öffentlich erreichbar, deshalb gehärtet und nur in internen Netzen
+    checkin:
+        image: ghcr.io/simonloeffler1993/check-in:latest
+        logging: *default-logging
+        container_name: checkin
+        environment:
+            - DATABASE_URL=mysql://checkin_app:${CHECKIN_APP_PASSWORD}@checkin-db:3306/checkin
+            - CHECKIN_PUBLIC_KEY_DATEI=/schluessel/checkin_public_key
+            # Caddy setzt X-Forwarded-For selbst, das IP-Limit sieht so die echte Adresse
+            - TRUST_PROXY=1
+            - CHECKIN_PRUEFDIALOG=${CHECKIN_PRUEFDIALOG:-true}
+            - CHECKIN_DATENSCHUTZ_URL=${CHECKIN_DATENSCHUTZ_URL:-}
+            - CHECKIN_IMPRESSUM_URL=${CHECKIN_IMPRESSUM_URL:-}
+        volumes:
+            - checkin_public_key:/schluessel:ro
+        networks:
+            - checkin_proxy
+            - checkin_app
+        read_only: true
+        tmpfs:
+            - /tmp
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        depends_on:
+            checkin-db:
+                condition: service_healthy
+        restart: unless-stopped
+
+    # Zwischendatenbank, enthält nur Chiffretext. Das Schema pflegt die API mit Alembic.
+    # Die Benutzer legt checkin-db-init.sh beim ersten Start an: Die App darf nur einfügen und lesen.
+    checkin-db:
+        image: mariadb:11
+        container_name: checkin-db
+        logging: *default-logging
+        environment:
+            - MARIADB_ROOT_PASSWORD=${CHECKIN_DB_ROOT_PASSWORD}
+            - MARIADB_DATABASE=checkin
+            - CHECKIN_APP_PASSWORD=${CHECKIN_APP_PASSWORD}
+            - CHECKIN_API_PASSWORD=${CHECKIN_API_PASSWORD}
+        volumes:
+            - checkin_db_data:/var/lib/mysql
+            # z: auf Hosts mit SELinux sonst nicht lesbar, die Benutzer würden ohne Fehlermeldung fehlen
+            - ./checkin-db-init.sh:/docker-entrypoint-initdb.d/10-benutzer.sh:ro,z
+        networks:
+            - checkin_app
+            - checkin_abholung
+        healthcheck:
+            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
+
+    # --- Optional: docker compose --profile werkzeuge up -d ---
+    # Nur für die Haupt-DB, nie für die Zwischendatenbank
+    databasus:
+        profiles: ["werkzeuge"]
+        image: databasus/databasus:latest
+        container_name: databasus
+        logging: *default-logging
+        ports:
+            - "4005:4005"
+        volumes:
+            - databasus_data:/databasus-data
+        networks:
+            - intern
+        restart: unless-stopped
+
+    phpmyadmin:
+        profiles: ["werkzeuge"]
+        image: phpmyadmin:latest
+        container_name: phpmyadmin
+        logging: *default-logging
+        ports:
+            - "${PMA_PORT:-8081}:80"
+        environment:
+            - PMA_HOST=mariadb
+            - PMA_PORT=3306
+        networks:
+            - intern
+        depends_on:
+            - mariadb
+        restart: unless-stopped
+
+networks:
+    # Laden
+    intern:
+    # API <-> Zwischendatenbank, ohne Zugang nach außen
+    checkin_abholung:
+        internal: true
+    # Check-in-App <-> Zwischendatenbank, ohne Zugang nach außen
+    checkin_app:
+        internal: true
+    # Proxy <-> Check-in-App, ohne Zugang nach außen
+    checkin_proxy:
+        internal: true
+    # Nur für den Proxy, der einzige Zugang von außen zum Check-in
+    checkin_web:
+
+volumes:
+    mariadb_data:
+    checkin_db_data:
+    checkin_public_key:
+    caddy_data:
+    caddy_config:
+    databasus_data:
