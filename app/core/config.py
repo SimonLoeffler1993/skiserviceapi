@@ -33,3 +33,23 @@ class DbSettings:
 
 
 dbSettings = DbSettings()
+
+
+# Zwischendatenbank der Check-in-App, optional: ohne Host gilt der Check-in als nicht eingerichtet
+class CheckinDbSettings:
+    host = (os.getenv("CHECKIN_DB_HOST") or "").strip()
+    port = env_int("CHECKIN_DB_PORT", 3306)
+    user = os.getenv("CHECKIN_DB_USER", "checkin")
+    password = os.getenv("CHECKIN_DB_PASSWORD", "")
+    database = os.getenv("CHECKIN_DB_NAME", "checkin")
+    url = URL.create(
+        "mysql+pymysql",
+        username=user,
+        password=password,
+        host=host or "localhost",
+        port=port,
+        database=database,
+    )
+
+
+checkinDbSettings = CheckinDbSettings()
