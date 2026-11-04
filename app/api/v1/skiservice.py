@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Literal, Optional
 
 from app.db.deps import get_db
 from app.crud import skiservice as crud_skiservice
@@ -30,12 +30,14 @@ async def skiauftragListe(
     limit: int = Query(default=15, le=100), 
     last_id: Optional[int] = Query(default=None, description="ID des letzten Eintrags der vorherigen Seite für die Pagination"),
     alle: bool = Query(default=False, description="Alle Einträge ohne Pagination zurückgeben"),
+    sortierung: Literal["neueste", "aelteste"] = Query(default="neueste", description="Zuletzt oder zuerst erfasste oben"),
+    suche: Optional[str] = Query(default=None, max_length=100, description="Teil von Vor- und/oder Nachname des Kunden"),
     db: Session = Depends(get_db)
 ):
     """
     Listet alle Skiservice auf
     """
-    return crud_skiservice.get_skiservice_liste(db,limit, last_id, saisonID, alle)
+    return crud_skiservice.get_skiservice_liste(db,limit, last_id, saisonID, alle, sortierung, suche)
 
 @router.get("/test")
 async def test():

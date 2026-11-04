@@ -10,6 +10,7 @@ from app.models.materialschuh import EigenSchuh
 from app.models.materialstock import Skistock
 from app.schemas.saisonverleih import SaisonVerleihCreate, SaisonVerleihPreisBase, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate
 from app.crud import saison as crud_saison
+from app.crud.kunde import kunde_name_bedingungen
 from app.utils.skiEttiket import SkiEttiket
 from app.services import einstellungen
 from app.crud.bindungsdaten import bindung_werte, setze_bindungsdaten
@@ -38,7 +39,7 @@ def create_saisonverleihpreis(db: Session, preis_data: SaisonVerleihPreisBase):
 def get_saisonverleih(db: Session, saisonverleih_id: int):
     return db.query(SaisonVerleih).filter(SaisonVerleih.ID == saisonverleih_id).first()
 
-def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] = False, art: Optional[str] = None):
+def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] = False, art: Optional[str] = None, sortierung: str = "aelteste", suche: Optional[str] = None):
     # Wenn keine Saison ID angegeben ist, nehme die aktuelle Saison
     if saisonID is None:
         SkiSaison = crud_saison.get_AktuelleSaison(db)
@@ -48,16 +49,19 @@ def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int]
     query = db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == saisonID)
     if art is not None:
         query = query.filter(SaisonVerleih.Art == art)
+    if suche and suche.strip():
+        query = query.join(SaisonVerleih.Kunde).filter(*kunde_name_bedingungen(suche))
 
     # Wenn "alle" True ist, gebe alle Einträge zurück, andernfalls wende Pagination an
     if alle:
         return query.order_by(SaisonVerleih.ID).all()
-    
-    # Pagination anwenden
-    if last_id is not None:
-        query = query.filter(SaisonVerleih.ID > last_id)
 
-    return query.order_by(SaisonVerleih.ID).limit(limit).all()
+    neueste = sortierung == "neueste"
+    # Pagination anwenden, der Cursor folgt der Sortierung
+    if last_id is not None:
+        query = query.filter(SaisonVerleih.ID < last_id if neueste else SaisonVerleih.ID > last_id)
+
+    return query.order_by(SaisonVerleih.ID.desc() if neueste else SaisonVerleih.ID).limit(limit).all()
 
 def finde_belegungen(
         db: Session,

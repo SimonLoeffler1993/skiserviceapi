@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from app.models.kunde import SkiKunde
@@ -25,6 +25,14 @@ def letzte_kunden(db: Session, anzahl: int) -> list[SkiKunde]:
         .limit(anzahl)
     )
     return list(db.scalars(stmt).all())
+
+def kunde_name_bedingungen(suche: str) -> list[ColumnElement[bool]]:
+    """Jedes Wort muss im Vor- oder Nachnamen vorkommen, die Reihenfolge der Wörter spielt keine Rolle."""
+    return [
+        or_(SkiKunde.Vorname.contains(wort, autoescape=True), SkiKunde.Nachname.contains(wort, autoescape=True))
+        for wort in suche.split()
+    ]
+
 
 def search_kunde(db: Session, vorname: str, nachname: str) -> list[SkiKunde]:
     def suche(v: str, n: str) -> list[SkiKunde]:
