@@ -462,8 +462,10 @@ def aendere_material(db: Session, saisonverleih_id: int, material_id: int, daten
         setattr(material, feld, wert)
     if "bindungsdaten" in daten.model_fields_set:
         setze_bindungsdaten(db, material, saisonverleih.Kunde_ID, daten.bindungsdaten, daten.vorlage_id)
-    # Anderer Ski oder geänderte Bindungsdaten: Bindung muss neu geprüft werden
-    if material.skinr != ski_vorher or _bindung_werte(material) != bindung_vorher:
+    # Getauschter oder entfernter Ski oder geänderte Bindungsdaten: Bindung muss neu geprüft werden.
+    # Ein erstmals eingetragener Ski nicht, das Material wird oft erst beim Einstellen erfasst
+    ski_getauscht = ski_vorher is not None and material.skinr != ski_vorher
+    if ski_getauscht or _bindung_werte(material) != bindung_vorher:
         material.BindungGeprueft = False
         material.BindungGeprueft_Am = None
     _status_nach_pruefung(saisonverleih)
@@ -479,14 +481,18 @@ def _bindung_werte(material: SaisonVerleihMaterial) -> Optional[dict]:
     return bindung_werte(material.bindungsdaten)
 
 
+def alle_bindungen_geprueft(saisonverleih: SaisonVerleih) -> bool:
+    """Bei jeder Materialzeile ist die Bindung geprüft, egal ob Ski, Schuh oder Stock erfasst sind."""
+    return bool(saisonverleih.Material) and all(m.BindungGeprueft for m in saisonverleih.Material)
+
+
 def _status_nach_pruefung(saisonverleih: SaisonVerleih):
     """
-    In Vorbereitung -> Vorbereitet, sobald alle Materialzeilen mit Ski geprüft sind.
+    In Vorbereitung -> Vorbereitet, sobald alle Materialzeilen geprüft sind.
     Vorbereitet -> In Vorbereitung, wenn eine Prüfung fehlt (z.B. Ski getauscht).
     Spätere Status (unterwegs, zurueck) bleiben unverändert.
     """
-    mit_ski = [m for m in saisonverleih.Material if m.skinr]
-    alle_geprueft = bool(mit_ski) and all(m.BindungGeprueft for m in mit_ski)
+    alle_geprueft = alle_bindungen_geprueft(saisonverleih)
     if saisonverleih.Status == "vorbereitung" and alle_geprueft:
         saisonverleih.Status = "vorbereitet"
     elif saisonverleih.Status == "vorbereitet" and not alle_geprueft:
@@ -495,7 +501,7 @@ def _status_nach_pruefung(saisonverleih: SaisonVerleih):
 
 def pruefe_bindungen(db: Session, saisonverleih_id: int, material_ids: Optional[list[int]] = None):
     """
-    Markiert die Bindung der Materialzeilen mit Ski als geprüft, ohne Angabe alle.
+    Markiert die Bindung der Materialzeilen als geprüft, ohne Angabe alle.
     Auch nach dem Bezahlen erlaubt. Sind danach alle geprüft, wird der Verleih "vorbereitet".
     """
     saisonverleih = get_saisonverleih(db, saisonverleih_id)
@@ -503,7 +509,7 @@ def pruefe_bindungen(db: Session, saisonverleih_id: int, material_ids: Optional[
         return None
     heute = datetime.date.today()
     for material in saisonverleih.Material:
-        if not material.skinr or material.BindungGeprueft:
+        if material.BindungGeprueft:
             continue
         if material_ids is None or material.ID in material_ids:
             material.BindungGeprueft = True

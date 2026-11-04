@@ -226,7 +226,7 @@ def aendere_material(saisonverleih_id: int, material_id: int, daten: SaisonVerle
 @router.post("/{saisonverleih_id}/bindung-geprueft", response_model=SaisonVerleihRead)
 def bindung_geprueft(saisonverleih_id: int, anfrage: BindungGeprueftAnfrage, db: Session = Depends(get_db)):
     """
-    Markiert die Bindungen der Materialzeilen mit Ski als geprüft (ohne material_ids alle).
+    Markiert die Bindungen der Materialzeilen als geprüft (ohne material_ids alle).
     Sind danach alle geprüft, wechselt ein Verleih in Vorbereitung auf "vorbereitet" und der Kunde bekommt die Abhol-Mail.
     """
     status_vorher = _status(db, saisonverleih_id)
