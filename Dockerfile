@@ -21,6 +21,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY ./app ./app
 COPY alembic.ini .
 COPY ./alembic ./alembic
+COPY alembic_checkin.ini .
+COPY ./alembic_checkin ./alembic_checkin
 
 # Entrypoint kopieren und ausführbar machen
 COPY entrypoint.sh .

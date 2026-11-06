@@ -13,3 +13,4 @@ httpx==0.28.1
 websockets==16.0
 alembic==1.19.2
 weasyprint==70.0
+cryptography==50.0.2

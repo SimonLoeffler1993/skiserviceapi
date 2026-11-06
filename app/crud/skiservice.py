@@ -7,6 +7,7 @@ from sqlalchemy.engine import CursorResult
 
 from app.models.skiservice import Auftrag, Ski, AuftragNummer
 from app.crud import saison as crud_saison
+from app.crud.kunde import kunde_name_bedingungen
 from app.schemas.skiservice import AuftragCreateSchema, AuftragUpdateSchema, SkiCreateSchema, SkiUpdateSchema
 from app.services import einstellungen
 from app.crud.bindungsdaten import setze_bindungsdaten
@@ -106,7 +107,7 @@ def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> bool:
     db.commit()
     return True
 
-def get_skiservice_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] =False):
+def get_skiservice_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] =False, sortierung: str = "neueste", suche: Optional[str] = None):
     # Falls keine Saison ID angegebn ist, wird die aktuelle Saison verwendet
     if saisonID is None:
         SkiSaison = crud_saison.get_AktuelleSaison(db)
@@ -114,16 +115,18 @@ def get_skiservice_liste(db: Session, limit: int = 15, last_id: Optional[int] = 
             saisonID = SkiSaison.ID
 
     query = db.query(Auftrag).filter(Auftrag.zu == saisonID)
+    if suche and suche.strip():
+        query = query.join(Auftrag.kunde).filter(*kunde_name_bedingungen(suche))
 
     if alle:
         return query.order_by(Auftrag.id).all()
-    
-    # Pagination anwenden
-    if last_id is not None:
-        # Da absteigend sortiert wird, muss kleiner als gefiltert werden
-        query = query.filter(Auftrag.id < last_id)
 
-    return query.order_by(desc(Auftrag.id)).limit(limit).all()
+    neueste = sortierung == "neueste"
+    # Pagination anwenden, der Cursor folgt der Sortierung
+    if last_id is not None:
+        query = query.filter(Auftrag.id < last_id if neueste else Auftrag.id > last_id)
+
+    return query.order_by(desc(Auftrag.id) if neueste else Auftrag.id).limit(limit).all()
 
 def get_auftragid_from_skiid(db: Session, ski_id: int) -> Optional[int]:
     ski = db.query(Ski).filter(Ski.id == ski_id).first()

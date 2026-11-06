@@ -10,6 +10,7 @@ from app.models.materialschuh import EigenSchuh
 from app.models.materialstock import Skistock
 from app.schemas.saisonverleih import SaisonVerleihCreate, SaisonVerleihPreisBase, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate
 from app.crud import saison as crud_saison
+from app.crud.kunde import kunde_name_bedingungen
 from app.utils.skiEttiket import SkiEttiket
 from app.services import einstellungen
 from app.crud.bindungsdaten import bindung_werte, setze_bindungsdaten
@@ -38,7 +39,7 @@ def create_saisonverleihpreis(db: Session, preis_data: SaisonVerleihPreisBase):
 def get_saisonverleih(db: Session, saisonverleih_id: int):
     return db.query(SaisonVerleih).filter(SaisonVerleih.ID == saisonverleih_id).first()
 
-def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] = False, art: Optional[str] = None):
+def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] = False, art: Optional[str] = None, sortierung: str = "aelteste", suche: Optional[str] = None):
     # Wenn keine Saison ID angegeben ist, nehme die aktuelle Saison
     if saisonID is None:
         SkiSaison = crud_saison.get_AktuelleSaison(db)
@@ -48,16 +49,19 @@ def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int]
     query = db.query(SaisonVerleih).filter(SaisonVerleih.Saison_ID == saisonID)
     if art is not None:
         query = query.filter(SaisonVerleih.Art == art)
+    if suche and suche.strip():
+        query = query.join(SaisonVerleih.Kunde).filter(*kunde_name_bedingungen(suche))
 
     # Wenn "alle" True ist, gebe alle Einträge zurück, andernfalls wende Pagination an
     if alle:
         return query.order_by(SaisonVerleih.ID).all()
-    
-    # Pagination anwenden
-    if last_id is not None:
-        query = query.filter(SaisonVerleih.ID > last_id)
 
-    return query.order_by(SaisonVerleih.ID).limit(limit).all()
+    neueste = sortierung == "neueste"
+    # Pagination anwenden, der Cursor folgt der Sortierung
+    if last_id is not None:
+        query = query.filter(SaisonVerleih.ID < last_id if neueste else SaisonVerleih.ID > last_id)
+
+    return query.order_by(SaisonVerleih.ID.desc() if neueste else SaisonVerleih.ID).limit(limit).all()
 
 def finde_belegungen(
         db: Session,
@@ -462,8 +466,10 @@ def aendere_material(db: Session, saisonverleih_id: int, material_id: int, daten
         setattr(material, feld, wert)
     if "bindungsdaten" in daten.model_fields_set:
         setze_bindungsdaten(db, material, saisonverleih.Kunde_ID, daten.bindungsdaten, daten.vorlage_id)
-    # Anderer Ski oder geänderte Bindungsdaten: Bindung muss neu geprüft werden
-    if material.skinr != ski_vorher or _bindung_werte(material) != bindung_vorher:
+    # Getauschter oder entfernter Ski oder geänderte Bindungsdaten: Bindung muss neu geprüft werden.
+    # Ein erstmals eingetragener Ski nicht, das Material wird oft erst beim Einstellen erfasst
+    ski_getauscht = ski_vorher is not None and material.skinr != ski_vorher
+    if ski_getauscht or _bindung_werte(material) != bindung_vorher:
         material.BindungGeprueft = False
         material.BindungGeprueft_Am = None
     _status_nach_pruefung(saisonverleih)
@@ -479,14 +485,18 @@ def _bindung_werte(material: SaisonVerleihMaterial) -> Optional[dict]:
     return bindung_werte(material.bindungsdaten)
 
 
+def alle_bindungen_geprueft(saisonverleih: SaisonVerleih) -> bool:
+    """Bei jeder Materialzeile ist die Bindung geprüft, egal ob Ski, Schuh oder Stock erfasst sind."""
+    return bool(saisonverleih.Material) and all(m.BindungGeprueft for m in saisonverleih.Material)
+
+
 def _status_nach_pruefung(saisonverleih: SaisonVerleih):
     """
-    In Vorbereitung -> Vorbereitet, sobald alle Materialzeilen mit Ski geprüft sind.
+    In Vorbereitung -> Vorbereitet, sobald alle Materialzeilen geprüft sind.
     Vorbereitet -> In Vorbereitung, wenn eine Prüfung fehlt (z.B. Ski getauscht).
     Spätere Status (unterwegs, zurueck) bleiben unverändert.
     """
-    mit_ski = [m for m in saisonverleih.Material if m.skinr]
-    alle_geprueft = bool(mit_ski) and all(m.BindungGeprueft for m in mit_ski)
+    alle_geprueft = alle_bindungen_geprueft(saisonverleih)
     if saisonverleih.Status == "vorbereitung" and alle_geprueft:
         saisonverleih.Status = "vorbereitet"
     elif saisonverleih.Status == "vorbereitet" and not alle_geprueft:
@@ -495,7 +505,7 @@ def _status_nach_pruefung(saisonverleih: SaisonVerleih):
 
 def pruefe_bindungen(db: Session, saisonverleih_id: int, material_ids: Optional[list[int]] = None):
     """
-    Markiert die Bindung der Materialzeilen mit Ski als geprüft, ohne Angabe alle.
+    Markiert die Bindung der Materialzeilen als geprüft, ohne Angabe alle.
     Auch nach dem Bezahlen erlaubt. Sind danach alle geprüft, wird der Verleih "vorbereitet".
     """
     saisonverleih = get_saisonverleih(db, saisonverleih_id)
@@ -503,7 +513,7 @@ def pruefe_bindungen(db: Session, saisonverleih_id: int, material_ids: Optional[
         return None
     heute = datetime.date.today()
     for material in saisonverleih.Material:
-        if not material.skinr or material.BindungGeprueft:
+        if material.BindungGeprueft:
             continue
         if material_ids is None or material.ID in material_ids:
             material.BindungGeprueft = True

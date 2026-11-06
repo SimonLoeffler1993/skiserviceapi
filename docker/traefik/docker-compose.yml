@@ -1,0 +1,320 @@
+# Beispiel 2: wie docker/getrennt, zusätzlich HTTPS im Laden über Traefik mit DNS-Challenge.
+#
+#   Laden --(HTTPS)--> traefik --> API, Center, Kundenterminal, Kasse --> mariadb
+#   Internet --(HTTPS)--> checkin-proxy --> checkin --> checkin-db <-- skiserviceapi
+#
+# Die DNS-Challenge beweist den Besitz der Domain über einen TXT-Eintrag. Die Dienste müssen dafür nicht aus dem
+# Internet erreichbar sein und bekommen trotzdem echte Zertifikate. Dazu nötig:
+# - eine eigene Domain mit API-Zugang beim DNS-Anbieter (dns.env)
+# - im Laden DNS-Einträge (Router, Pi-hole, ...), die API_DOMAIN usw. auf die IP dieses Hosts zeigen
+#
+# Getrennt bleibt wie in docker/getrennt: Die Check-in-App hängt nur an internen Netzen und erreicht nur ihre eigene
+# Datenbank. Traefik ist nur für den Laden, die öffentliche App läuft bewusst nicht darüber. Sonst säße ein Dienst
+# mit Zugang zum Docker-Socket und zu allen internen Containern direkt im Internet.
+#
+# Beide Proxys brauchen eigene Ports: Traefik belegt 80/443 im LAN und darf NICHT aus dem Internet erreichbar sein.
+# Im Router nur extern 80 -> CHECKIN_HTTP_PORT und extern 443 -> CHECKIN_HTTPS_PORT weiterleiten.
+#
+# Start: cp .env.beispiel .env, cp dns.env.beispiel dns.env, Werte eintragen, docker compose up -d
+
+x-logging: &default-logging
+    driver: json-file
+    options:
+        max-size: "10m"
+        max-file: "3"
+
+services:
+    # --- Laden ---
+    # Der Docker-Socket ist nur lesend eingebunden, gibt Traefik aber trotzdem weitreichende Einsicht:
+    # deshalb nur im Netz intern und ohne Dashboard. Nur Container mit traefik.enable=true werden veröffentlicht.
+    traefik:
+        image: docker.io/library/traefik:v3
+        logging: *default-logging
+        container_name: traefik
+        command:
+            - --providers.docker=true
+            - --providers.docker.exposedbydefault=false
+            - --providers.docker.network=skiservice_intern
+            - --entrypoints.web.address=:80
+            - --entrypoints.web.http.redirections.entrypoint.to=websecure
+            - --entrypoints.web.http.redirections.entrypoint.scheme=https
+            - --entrypoints.websecure.address=:443
+            - --certificatesresolvers.dns.acme.email=${ACME_EMAIL}
+            - --certificatesresolvers.dns.acme.storage=/acme/acme.json
+            - --certificatesresolvers.dns.acme.dnschallenge.provider=${DNS_PROVIDER}
+            # Öffentliche Resolver: Der DNS im Laden kennt die TXT-Einträge meist nicht
+            - --certificatesresolvers.dns.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+        # Zugangsdaten des DNS-Anbieters, sieht nur Traefik
+        env_file:
+            - dns.env
+        ports:
+            - "${INTERN_HTTP_PORT:-80}:80"
+            - "${INTERN_HTTPS_PORT:-443}:443"
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - traefik_acme:/acme
+        networks:
+            intern:
+                # Container erreichen die API unter ihrer HTTPS-Adresse direkt über Traefik
+                aliases:
+                    - ${API_DOMAIN}
+        security_opt:
+            - no-new-privileges:true
+        restart: unless-stopped
+
+    skiserviceapi:
+        image: ghcr.io/simonloeffler1993/skiserviceapi:latest
+        logging: *default-logging
+        container_name: skiserviceapi
+        # Nur für den Hardware-Scanner: Die Firmware spricht kein HTTPS. Alle anderen gehen über Traefik.
+        # Ohne Hardware-Scanner kann der Port weg.
+        ports:
+            - "${SCANNER_PORT:-8000}:8000"
+        labels:
+            - traefik.enable=true
+            - traefik.http.routers.api.rule=Host(`${API_DOMAIN}`)
+            - traefik.http.routers.api.entrypoints=websecure
+            - traefik.http.routers.api.tls.certresolver=dns
+            - traefik.http.services.api.loadbalancer.server.port=8000
+        environment:
+            - DB_HOST=mariadb
+            - DB_PORT=3306
+            - DB_USER=${DB_USER}
+            - DB_PASSWORD=${DB_PASSWORD}
+            - DB_NAME=${DB_NAME}
+            - CHECKIN_DB_HOST=checkin-db
+            - CHECKIN_DB_PORT=3306
+            - CHECKIN_DB_USER=checkin_api
+            - CHECKIN_DB_PASSWORD=${CHECKIN_API_PASSWORD}
+            - CHECKIN_DB_NAME=checkin
+            - CHECKIN_PUBLIC_KEY_ORDNER=/data/checkin-public-key
+        volumes:
+            - checkin_public_key:/data/checkin-public-key
+        networks:
+            - intern
+            - checkin_abholung
+        depends_on:
+            mariadb:
+                condition: service_healthy
+            checkin-db:
+                condition: service_healthy
+        restart: unless-stopped
+
+    kundenterminal:
+        image: ghcr.io/simonloeffler1993/ski-kunden-dialog:latest
+        logging: *default-logging
+        container_name: kundenterminal
+        labels:
+            - traefik.enable=true
+            - traefik.http.routers.kunden.rule=Host(`${KUNDEN_DOMAIN}`)
+            - traefik.http.routers.kunden.entrypoints=websecure
+            - traefik.http.routers.kunden.tls.certresolver=dns
+            - traefik.http.services.kunden.loadbalancer.server.port=3000
+        environment:
+            # Geht auch an den Browser, deshalb die HTTPS-Adresse
+            - BACKEND_URL=https://${API_DOMAIN}
+        networks:
+            - intern
+        depends_on:
+            - skiserviceapi
+        restart: unless-stopped
+
+    skiservicecenter:
+        image: ghcr.io/simonloeffler1993/skiservice-center:latest
+        logging: *default-logging
+        container_name: skiservicecenter
+        labels:
+            - traefik.enable=true
+            - traefik.http.routers.center.rule=Host(`${CENTER_DOMAIN}`)
+            - traefik.http.routers.center.entrypoints=websecure
+            - traefik.http.routers.center.tls.certresolver=dns
+            - traefik.http.services.center.loadbalancer.server.port=3000
+        environment:
+            # Geht auch an den Browser, deshalb die HTTPS-Adresse
+            - BACKEND_URL=https://${API_DOMAIN}
+        networks:
+            - intern
+        depends_on:
+            - skiserviceapi
+        restart: unless-stopped
+
+    kasse:
+        image: ghcr.io/simonloeffler1993/ski-pos-kasse:latest
+        logging: *default-logging
+        container_name: kasse
+        labels:
+            - traefik.enable=true
+            - traefik.http.routers.kasse.rule=Host(`${KASSE_DOMAIN}`)
+            - traefik.http.routers.kasse.entrypoints=websecure
+            - traefik.http.routers.kasse.tls.certresolver=dns
+            - traefik.http.services.kasse.loadbalancer.server.port=80
+        environment:
+            # Die Kasse ruft die API direkt aus dem Browser auf
+            - VITE_API_URL=https://${API_DOMAIN}
+        networks:
+            - intern
+        depends_on:
+            - skiserviceapi
+        restart: unless-stopped
+
+    # Kundendaten und privater Schlüssel. Backups dieser Datenbank enthalten beides
+    mariadb:
+        image: mariadb:11
+        container_name: mariadb
+        logging: *default-logging
+        environment:
+            - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+            - MARIADB_DATABASE=${DB_NAME}
+            - MARIADB_USER=${DB_USER}
+            - MARIADB_PASSWORD=${DB_PASSWORD}
+        volumes:
+            - mariadb_data:/var/lib/mysql
+        networks:
+            - intern
+        healthcheck:
+            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
+
+    # --- Check-in ---
+    # Einziger Weg von außen zur App. Caddy holt das HTTPS-Zertifikat für CHECKIN_DOMAIN selbst, dafür müssen
+    # die Domain auf diesen Anschluss zeigen und extern 80 und 443 im Router hierher weitergeleitet sein.
+    # Ohne HTTPS gibt es im Browser keine Verschlüsselung und das Formular sendet nichts.
+    # Ein eigener Proxy ist auch möglich, er muss aber im Netz checkin_proxy hängen, nicht die App im äußeren Netz.
+    checkin-proxy:
+        image: docker.io/library/caddy:2
+        logging: *default-logging
+        container_name: checkin-proxy
+        command: caddy reverse-proxy --from ${CHECKIN_DOMAIN} --to checkin:3000
+        ports:
+            - "${CHECKIN_HTTP_PORT:-8080}:80"
+            - "${CHECKIN_HTTPS_PORT:-8443}:443"
+        volumes:
+            - caddy_data:/data
+            - caddy_config:/config
+        networks:
+            - checkin_web
+            - checkin_proxy
+        read_only: true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+        security_opt:
+            - no-new-privileges:true
+        depends_on:
+            - checkin
+        restart: unless-stopped
+
+    # Öffentlich erreichbar, deshalb gehärtet und nur in internen Netzen
+    checkin:
+        image: ghcr.io/simonloeffler1993/check-in:latest
+        logging: *default-logging
+        container_name: checkin
+        environment:
+            - DATABASE_URL=mysql://checkin_app:${CHECKIN_APP_PASSWORD}@checkin-db:3306/checkin
+            - CHECKIN_PUBLIC_KEY_DATEI=/schluessel/checkin_public_key
+            # Caddy setzt X-Forwarded-For selbst, das IP-Limit sieht so die echte Adresse
+            - TRUST_PROXY=1
+            - CHECKIN_PRUEFDIALOG=${CHECKIN_PRUEFDIALOG:-true}
+            - CHECKIN_DATENSCHUTZ_URL=${CHECKIN_DATENSCHUTZ_URL:-}
+            - CHECKIN_IMPRESSUM_URL=${CHECKIN_IMPRESSUM_URL:-}
+        volumes:
+            - checkin_public_key:/schluessel:ro
+        networks:
+            - checkin_proxy
+            - checkin_app
+        read_only: true
+        tmpfs:
+            - /tmp
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        depends_on:
+            checkin-db:
+                condition: service_healthy
+        restart: unless-stopped
+
+    # Zwischendatenbank, enthält nur Chiffretext. Das Schema pflegt die API mit Alembic.
+    # Die Benutzer legt checkin-db-init.sh beim ersten Start an: Die App darf nur einfügen und lesen.
+    checkin-db:
+        image: mariadb:11
+        container_name: checkin-db
+        logging: *default-logging
+        environment:
+            - MARIADB_ROOT_PASSWORD=${CHECKIN_DB_ROOT_PASSWORD}
+            - MARIADB_DATABASE=checkin
+            - CHECKIN_APP_PASSWORD=${CHECKIN_APP_PASSWORD}
+            - CHECKIN_API_PASSWORD=${CHECKIN_API_PASSWORD}
+        volumes:
+            - checkin_db_data:/var/lib/mysql
+            # z: auf Hosts mit SELinux sonst nicht lesbar, die Benutzer würden ohne Fehlermeldung fehlen
+            - ./checkin-db-init.sh:/docker-entrypoint-initdb.d/10-benutzer.sh:ro,z
+        networks:
+            - checkin_app
+            - checkin_abholung
+        healthcheck:
+            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
+
+    # --- Optional: docker compose --profile werkzeuge up -d ---
+    # Nur für die Haupt-DB, nie für die Zwischendatenbank
+    databasus:
+        profiles: ["werkzeuge"]
+        image: databasus/databasus:latest
+        container_name: databasus
+        logging: *default-logging
+        ports:
+            - "4005:4005"
+        volumes:
+            - databasus_data:/databasus-data
+        networks:
+            - intern
+        restart: unless-stopped
+
+    phpmyadmin:
+        profiles: ["werkzeuge"]
+        image: phpmyadmin:latest
+        container_name: phpmyadmin
+        logging: *default-logging
+        ports:
+            - "${PMA_PORT:-8081}:80"
+        environment:
+            - PMA_HOST=mariadb
+            - PMA_PORT=3306
+        networks:
+            - intern
+        depends_on:
+            - mariadb
+        restart: unless-stopped
+
+networks:
+    # Laden, fester Name für traefik --providers.docker.network
+    intern:
+        name: skiservice_intern
+    # API <-> Zwischendatenbank, ohne Zugang nach außen
+    checkin_abholung:
+        internal: true
+    # Check-in-App <-> Zwischendatenbank, ohne Zugang nach außen
+    checkin_app:
+        internal: true
+    # Proxy <-> Check-in-App, ohne Zugang nach außen
+    checkin_proxy:
+        internal: true
+    # Nur für den Proxy, der einzige Zugang von außen zum Check-in
+    checkin_web:
+
+volumes:
+    mariadb_data:
+    checkin_db_data:
+    checkin_public_key:
+    caddy_data:
+    caddy_config:
+    traefik_acme:
+    databasus_data:

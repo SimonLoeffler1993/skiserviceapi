@@ -103,14 +103,12 @@ def _bindung_verleih(db: Session, etikett: Etikett) -> ScanAntwort:
     material = next((m for m in verleih.Material if m.ID == etikett.position_id), None) if verleih else None
     if material is None:
         return _antwort(False, f"Material {etikett.position_id} nicht im Verleih {etikett.id} gefunden", "verleih")
-    if not material.skinr:
-        return _antwort(False, "Keine Bindung an diesem Material", "verleih")
     if material.BindungGeprueft:
         return _antwort(True, "Bindung war bereits geprüft", "verleih")
     status_vorher = status_vor_aenderung(db, verleih.ID)
     verleih = crud_saisonverleih.pruefe_bindungen(db, verleih.ID, [material.ID])
     abhol_mail_nach_wechsel(db, verleih, status_vorher)
-    return _antwort(True, f"Bindung von Ski {material.skinr} im Verleih {verleih.Name} geprüft", "verleih")
+    return _antwort(True, f"Bindung von Material {material.ID} im Verleih {verleih.Name} geprüft", "verleih")
 
 
 async def scan_auswerten(db: Session, scan: ScannerRead) -> ScanAntwort:
