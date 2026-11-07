@@ -42,6 +42,9 @@ services:
             - CHECKIN_DB_USER=checkin_api
             - CHECKIN_DB_PASSWORD=${CHECKIN_API_PASSWORD}
             - CHECKIN_DB_NAME=checkin
+            # Damit legt die API bei jedem Start die Benutzer der Zwischendatenbank an und hält Passwörter und Rechte aktuell
+            - CHECKIN_DB_ROOT_PASSWORD=${CHECKIN_DB_ROOT_PASSWORD}
+            - CHECKIN_APP_PASSWORD=${CHECKIN_APP_PASSWORD}
             - CHECKIN_PUBLIC_KEY_ORDNER=/data/checkin-public-key
         volumes:
             - checkin_public_key:/data/checkin-public-key
@@ -165,7 +168,7 @@ services:
         restart: unless-stopped
 
     # Zwischendatenbank, enthält nur Chiffretext. Das Schema pflegt die API mit Alembic.
-    # Die Benutzer legt checkin-db-init.sh beim ersten Start an: Die App darf nur einfügen und lesen.
+    # Die Benutzer legt die API beim Start an (app/checkin_benutzer.py): Die App darf nur einfügen und lesen.
     checkin-db:
         image: mariadb:11
         container_name: checkin-db
@@ -173,12 +176,8 @@ services:
         environment:
             - MARIADB_ROOT_PASSWORD=${CHECKIN_DB_ROOT_PASSWORD}
             - MARIADB_DATABASE=checkin
-            - CHECKIN_APP_PASSWORD=${CHECKIN_APP_PASSWORD}
-            - CHECKIN_API_PASSWORD=${CHECKIN_API_PASSWORD}
         volumes:
             - checkin_db_data:/var/lib/mysql
-            # z: auf Hosts mit SELinux sonst nicht lesbar, die Benutzer würden ohne Fehlermeldung fehlen
-            - ./checkin-db-init.sh:/docker-entrypoint-initdb.d/10-benutzer.sh:ro,z
         networks:
             - checkin_app
             - checkin_abholung

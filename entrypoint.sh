@@ -9,6 +9,9 @@ alembic upgrade head
 
 # Zwischendatenbank der Check-in-App, ein Fehler dort darf die API nicht aufhalten
 if [ -n "$CHECKIN_DB_HOST" ]; then
+    echo "Check-in-Benutzer einrichten..."
+    python -m app.checkin_benutzer || echo "WARNUNG: Check-in-Benutzer konnten nicht eingerichtet werden"
+
     echo "Check-in-Datenbank migrieren..."
     alembic -c alembic_checkin.ini upgrade head || echo "WARNUNG: Check-in-Datenbank konnte nicht migriert werden"
 fi
