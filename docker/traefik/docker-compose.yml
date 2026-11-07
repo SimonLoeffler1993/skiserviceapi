@@ -66,8 +66,8 @@ services:
         image: ghcr.io/simonloeffler1993/skiserviceapi:latest
         logging: *default-logging
         container_name: skiserviceapi
-        # Nur für den Hardware-Scanner: Die Firmware spricht kein HTTPS. Alle anderen gehen über Traefik.
-        # Ohne Hardware-Scanner kann der Port weg.
+        # Nur für Hardware-Scanner mit http:// als Server-Adresse (oder Firmware ohne HTTPS). Alle anderen gehen über
+        # Traefik. Aktuelle Scanner können https://API_DOMAIN eintragen, dann kann der Port weg.
         ports:
             - "${SCANNER_PORT:-8000}:8000"
         labels:
