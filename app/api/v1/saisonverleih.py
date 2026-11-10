@@ -60,12 +60,15 @@ async def list_saisonverleih(
         art: Optional[Literal["saison", "tag"]] = Query(default=None, description="Nur Saison- oder Tagesverleih"),
         sortierung: Literal["neueste", "aelteste"] = Query(default="aelteste", description="Zuletzt oder zuerst erfasste oben"),
         suche: Optional[str] = Query(default=None, max_length=100, description="Teil von Vor- und/oder Nachname des Kunden"),
+        status: Optional[Literal["vorbereitung", "vorbereitet", "unterwegs", "zurueck"]] = Query(default=None, description="Nur Verleihe mit diesem Status"),
+        bezahlt: Optional[Literal["ja", "nein"]] = Query(default=None, description="Nur bezahlte bzw. offene Verleihe"),
+        benachrichtigt: Optional[Literal["nein", "abholung", "rueckgabe"]] = Query(default=None, description="Nur Verleihe mit dieser Benachrichtigung"),
         db: Session = Depends(get_db)
     ):
     """
     Listet alle Saisonverleih-Einträge auf.
     """
-    saisonverleih_liste = crud_saisonverleih.get_saisonverleih_liste(db, limit, last_id, saisonID, alle, art, sortierung, suche)
+    saisonverleih_liste = crud_saisonverleih.get_saisonverleih_liste(db, limit, last_id, saisonID, alle, art, sortierung, suche, status, bezahlt, benachrichtigt)
     return saisonverleih_liste
 
 @router.get("/belegung", response_model=list[VerleihBelegung])
