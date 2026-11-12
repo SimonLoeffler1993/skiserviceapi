@@ -39,7 +39,19 @@ def create_saisonverleihpreis(db: Session, preis_data: SaisonVerleihPreisBase):
 def get_saisonverleih(db: Session, saisonverleih_id: int):
     return db.query(SaisonVerleih).filter(SaisonVerleih.ID == saisonverleih_id).first()
 
-def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] = False, art: Optional[str] = None, sortierung: str = "aelteste", suche: Optional[str] = None):
+def get_saisonverleih_liste(
+    db: Session,
+    limit: int = 15,
+    last_id: Optional[int] = None,
+    saisonID: Optional[int] = None,
+    alle: Optional[bool] = False,
+    art: Optional[str] = None,
+    sortierung: str = "aelteste",
+    suche: Optional[str] = None,
+    status: Optional[str] = None,
+    bezahlt: Optional[str] = None,
+    benachrichtigt: Optional[str] = None,
+):
     # Wenn keine Saison ID angegeben ist, nehme die aktuelle Saison
     if saisonID is None:
         SkiSaison = crud_saison.get_AktuelleSaison(db)
@@ -51,6 +63,15 @@ def get_saisonverleih_liste(db: Session, limit: int = 15, last_id: Optional[int]
         query = query.filter(SaisonVerleih.Art == art)
     if suche and suche.strip():
         query = query.join(SaisonVerleih.Kunde).filter(*kunde_name_bedingungen(suche))
+    if status is not None:
+        query = query.filter(SaisonVerleih.Status == status)
+    # Bezahlt leer gilt als nicht bezahlt
+    if bezahlt == "ja":
+        query = query.filter(SaisonVerleih.Bezahlt.is_(True))
+    elif bezahlt == "nein":
+        query = query.filter(or_(SaisonVerleih.Bezahlt.is_(None), SaisonVerleih.Bezahlt.is_(False)))
+    if benachrichtigt is not None:
+        query = query.filter(SaisonVerleih.Benachrichtigt == benachrichtigt)
 
     # Wenn "alle" True ist, gebe alle Einträge zurück, andernfalls wende Pagination an
     if alle:

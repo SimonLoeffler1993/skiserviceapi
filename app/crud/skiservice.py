@@ -2,7 +2,7 @@ from datetime import datetime, date
 from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import update, desc
+from sqlalchemy import update, desc, func, or_
 from sqlalchemy.engine import CursorResult
 
 from app.models.skiservice import Auftrag, Ski, AuftragNummer
@@ -107,7 +107,18 @@ def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> bool:
     db.commit()
     return True
 
-def get_skiservice_liste(db: Session, limit: int = 15, last_id: Optional[int] = None, saisonID: Optional[int] = None, alle: Optional[bool] =False, sortierung: str = "neueste", suche: Optional[str] = None):
+def get_skiservice_liste(
+    db: Session,
+    limit: int = 15,
+    last_id: Optional[int] = None,
+    saisonID: Optional[int] = None,
+    alle: Optional[bool] = False,
+    sortierung: str = "neueste",
+    suche: Optional[str] = None,
+    status: Optional[str] = None,
+    bezahlt: Optional[str] = None,
+    benachrichtigt: Optional[str] = None,
+):
     # Falls keine Saison ID angegebn ist, wird die aktuelle Saison verwendet
     if saisonID is None:
         SkiSaison = crud_saison.get_AktuelleSaison(db)
@@ -117,6 +128,25 @@ def get_skiservice_liste(db: Session, limit: int = 15, last_id: Optional[int] = 
     query = db.query(Auftrag).filter(Auftrag.zu == saisonID)
     if suche and suche.strip():
         query = query.join(Auftrag.kunde).filter(*kunde_name_bedingungen(suche))
+
+    # Wie: "1" fertig, "2" abgeholt, alles andere (auch NULL) gilt als in Bearbeitung
+    if status == "fertig":
+        query = query.filter(Auftrag.wie == "1")
+    elif status == "abgeholt":
+        query = query.filter(Auftrag.wie == "2")
+    elif status == "bearbeitung":
+        query = query.filter(or_(Auftrag.wie.is_(None), Auftrag.wie.notin_(["1", "2"])))
+
+    # In alten Daten steht "ja" in unterschiedlicher Schreibweise, leer gilt als nein
+    if bezahlt == "ja":
+        query = query.filter(func.lower(Auftrag.bezahlt) == "ja")
+    elif bezahlt == "nein":
+        query = query.filter(or_(Auftrag.bezahlt.is_(None), func.lower(Auftrag.bezahlt) != "ja"))
+
+    if benachrichtigt == "ja":
+        query = query.filter(func.lower(Auftrag.benachrichtigt) == "ja")
+    elif benachrichtigt == "nein":
+        query = query.filter(or_(Auftrag.benachrichtigt.is_(None), func.lower(Auftrag.benachrichtigt) != "ja"))
 
     if alle:
         return query.order_by(Auftrag.id).all()

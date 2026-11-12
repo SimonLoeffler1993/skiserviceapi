@@ -1,0 +1,52 @@
+# Lokale Testdatenbanken (nur Entwicklung!): MariaDB und MySQL nebeneinander
+#   podman-compose -f docker/testdb/docker-compose.yml up -d
+#
+# MariaDB: localhost:3307   MySQL: localhost:3308
+# Benutzer root / test  oder  ski / ski
+# Datenbanken: skiserviceapp (Haupt-DB) und checkin (Zwischen-DB der Check-in-App)
+#
+# API gegen eine der beiden starten, z. B.:
+#   DB_HOST=127.0.0.1 DB_PORT=3307 DB_USER=ski DB_PASSWORD=ski DB_NAME=skiserviceapp alembic upgrade head
+
+services:
+  mariadb:
+    image: docker.io/library/mariadb:11
+    container_name: skitest-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: test
+      MARIADB_DATABASE: skiserviceapp
+      MARIADB_USER: ski
+      MARIADB_PASSWORD: ski
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - skitest-mariadb:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d:ro,z
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mysql:
+    image: docker.io/library/mysql:8.4
+    container_name: skitest-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: test
+      MYSQL_DATABASE: skiserviceapp
+      MYSQL_USER: ski
+      MYSQL_PASSWORD: ski
+    ports:
+      - "127.0.0.1:3308:3306"
+    volumes:
+      - skitest-mysql:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d:ro,z
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-ptest"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  skitest-mariadb:
+  skitest-mysql:

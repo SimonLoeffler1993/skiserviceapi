@@ -32,12 +32,15 @@ async def skiauftragListe(
     alle: bool = Query(default=False, description="Alle Einträge ohne Pagination zurückgeben"),
     sortierung: Literal["neueste", "aelteste"] = Query(default="neueste", description="Zuletzt oder zuerst erfasste oben"),
     suche: Optional[str] = Query(default=None, max_length=100, description="Teil von Vor- und/oder Nachname des Kunden"),
+    status: Optional[Literal["bearbeitung", "fertig", "abgeholt"]] = Query(default=None, description="Nur Aufträge mit diesem Status"),
+    bezahlt: Optional[Literal["ja", "nein"]] = Query(default=None, description="Nur bezahlte bzw. offene Aufträge"),
+    benachrichtigt: Optional[Literal["ja", "nein"]] = Query(default=None, description="Nur benachrichtigte bzw. nicht benachrichtigte Aufträge"),
     db: Session = Depends(get_db)
 ):
     """
     Listet alle Skiservice auf
     """
-    return crud_skiservice.get_skiservice_liste(db,limit, last_id, saisonID, alle, sortierung, suche)
+    return crud_skiservice.get_skiservice_liste(db, limit, last_id, saisonID, alle, sortierung, suche, status, bezahlt, benachrichtigt)
 
 @router.get("/test")
 async def test():
