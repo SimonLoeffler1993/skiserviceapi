@@ -94,16 +94,6 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("SMTP_USER", "mail", "Benutzer", beschreibung="Leer lassen, wenn der Server ohne Anmeldung versendet (Exchange Relay)."),
     EinstellungDefinition("SMTP_PASSWORD", "mail", "Passwort", typ="passwort"),
     EinstellungDefinition("EMAIL_FROM", "mail", "Absender Adresse"),
-    EinstellungDefinition("MAIL_BETREFF_FERTIG", "mail", "Betreff Fertig-Mail", standard="Dein Skiservice ist fertig!"),
-    EinstellungDefinition("MAIL_BETREFF_VERLEIH_ABHOLUNG", "mail", "Betreff Abhol-Mail Verleih",
-                          standard="Deine Leihski sind abholbereit!"),
-    EinstellungDefinition("MAIL_BETREFF_VERLEIH_RUECKGABE", "mail", "Betreff Rückgabe-Mail Verleih",
-                          standard="Bitte denk an die Rückgabe deiner Leihski"),
-    EinstellungDefinition("MAIL_BETREFF_QUITTUNG", "mail", "Betreff Quittungs-Mail", standard="Deine Quittung",
-                          beschreibung="Die Quittungsnummer wird angehängt."),
-    EinstellungDefinition("MAIL_FERTIG_INHALT", "mail", "Inhalt Fertig-Mail", typ="auswahl", standard="preise",
-                          optionen=["fertig", "preise"],
-                          beschreibung="Nur die Fertig-Meldung oder zusätzlich die Auflistung der Leistungen mit Preisen."),
 
     # Lexware
     EinstellungDefinition("LEXWARE_BASEURL", "lexware", "API Adresse", standard="https://api.lexware.io"),

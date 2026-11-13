@@ -13,10 +13,12 @@ from app.api.v1 import bindungsdaten
 from app.api.v1 import handware
 from app.api.v1 import health
 from app.api.v1 import checkin
+from app.api.v1 import mailvorlagen
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services import checkin_schluessel
 from app.services import einstellungen as einstellungen_service
+from app.services import mailvorlagen as mailvorlagen_service
 
 # TODO: #10 Logging einstellungen
 logging.basicConfig(
@@ -40,6 +42,12 @@ async def lifespan(app: FastAPI):
             checkin_schluessel.beim_start(db)
     except Exception:
         logging.getLogger(__name__).exception("Check-in-Schlüssel konnte nicht bereitgestellt werden")
+    try:
+        # Fehlende Mail-Vorlagen mit dem Originaltext anlegen
+        with SessionLocal() as db:
+            mailvorlagen_service.beim_start(db)
+    except Exception:
+        logging.getLogger(__name__).exception("Mail-Vorlagen konnten nicht angelegt werden")
     yield
 
 app = FastAPI(title="SkiApp API", version="0.0.1", lifespan=lifespan)
@@ -76,6 +84,7 @@ app.include_router(bindungsdaten.router, prefix=appPrefix)
 app.include_router(handware.router, prefix=appPrefix)
 app.include_router(health.router, prefix=appPrefix)
 app.include_router(checkin.router, prefix=appPrefix)
+app.include_router(mailvorlagen.router, prefix=appPrefix)
 
 @app.get("/")
 def read_root():

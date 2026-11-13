@@ -12,3 +12,4 @@ from app.models.einstellung import Einstellung
 from app.models.bindungsdaten import Bindungsdaten
 from app.models.handware import Handware
 from app.models.checkin_schluessel import CheckinSchluessel
+from app.models.mailvorlage import MailVorlage
