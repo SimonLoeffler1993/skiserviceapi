@@ -141,7 +141,8 @@ _ALTE_SCHLUESSEL = list(_ALTE_BETREFFS) + ["MAIL_FERTIG_INHALT"]
 
 # Was der Editor erzeugen darf, alles andere wird beim Speichern entfernt
 _TAGS = {"p", "br", "strong", "em", "u", "s", "h2", "h3", "ul", "ol", "li", "a", "span", "div"}
-_ATTRIBUTE = {"a": {"href"}, "span": {"data-platzhalter"}, "div": {"data-baustein"}}
+# "*": leer, sonst bleiben title und lang an jedem Element erhalten
+_ATTRIBUTE = {"*": set(), "a": {"href"}, "span": {"data-platzhalter"}, "div": {"data-baustein"}}
 _URL_SCHEMATA = {"http", "https", "mailto", "tel"}
 
 # Mail-Programme kennen keine Stylesheets, deshalb bekommt jedes Element sein Aussehen direkt
@@ -216,6 +217,8 @@ def bereinige_inhalt(definition: VorlageDefinition, inhalt: str) -> str:
     # Beschriftungen des Editors in den Marken weglassen, damit der Vergleich mit dem Original stimmt
     sauber = _PLATZHALTER_HTML.sub(lambda m: f'<span data-platzhalter="{m.group(1)}"></span>', sauber)
     sauber = _BAUSTEIN_HTML.sub(lambda m: f'<div data-baustein="{m.group(1)}"></div>', sauber)
+    # Leere Absätze am Ende (der Editor hängt nach einem Baustein einen an) nicht mitschicken
+    sauber = re.sub(r"(<p></p>)+$", "", sauber)
     if not re.sub(r"<[^>]*>", "", sauber).strip() and "data-" not in sauber:
         raise ValueError("Der Text der Vorlage darf nicht leer sein.")
     for name in re.findall(r'data-platzhalter="([^"]*)"', sauber):
