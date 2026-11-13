@@ -14,6 +14,7 @@ from app.api.v1 import handware
 from app.api.v1 import health
 from app.api.v1 import checkin
 from app.api.v1 import mailvorlagen
+from app.api.v1 import werkstatt
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services import checkin_schluessel
@@ -85,6 +86,7 @@ app.include_router(handware.router, prefix=appPrefix)
 app.include_router(health.router, prefix=appPrefix)
 app.include_router(checkin.router, prefix=appPrefix)
 app.include_router(mailvorlagen.router, prefix=appPrefix)
+app.include_router(werkstatt.router, prefix=appPrefix)
 
 @app.get("/")
 def read_root():
