@@ -1,5 +1,4 @@
 from collections import defaultdict
-from fastapi.templating import Jinja2Templates
 import logging
 import smtplib
 import ssl
@@ -9,9 +8,8 @@ from email.mime.text import MIMEText
 
 from app.schemas.saisonverleih import SaisonVerleihRead
 from app.schemas.skiservice import AuftragSchema, SkiSchema
-from app.services import einstellungen
-
-templates = Jinja2Templates(directory="app/templates")
+from app.services import einstellungen, mailvorlagen
+from app.utils.formate import eur
 
 logger = logging.getLogger(__name__)
 
@@ -60,26 +58,37 @@ def sendeMail(msg: MIMEMultipart | MIMEText):
             server.login(smtpUser, einstellungen.hole("SMTP_PASSWORD"))
         server.send_message(msg)
 
-def fertigMailHtml(auftrag: AuftragSchema) -> str:
-    """HTML der Fertig-Mail, je nach Einstellung mit oder ohne Preisauflistung."""
-    mit_preisen = einstellungen.hole("MAIL_FERTIG_INHALT") == "preise"
-    ski_zusammenfassung = skizusammenfassen(auftrag.skis) if mit_preisen else {}
-    total_preis = sum(service["gesamtpreis"] for service in ski_zusammenfassung.values())
+def _kunde_werte(kunde) -> dict[str, str]:
+    vorname = (kunde.Vorname or "").strip() if kunde else ""
+    nachname = (kunde.Nachname or "").strip() if kunde else ""
+    return {
+        "kunde_vorname": vorname,
+        "kunde_nachname": nachname,
+        "kunde_name": " ".join(teil for teil in (vorname, nachname) if teil),
+    }
 
-    return templates.get_template("fertig_skiservice_mail.html").render(
-        auftrag=auftrag, skiservices=ski_zusammenfassung, total_preis=total_preis, mit_preisen=mit_preisen)
+def fertigMail(auftrag: AuftragSchema) -> tuple[str, str]:
+    """Betreff und HTML der Fertig-Mail aus der Vorlage "skiservice_fertig"."""
+    leistungen = list(skizusammenfassen(auftrag.skis).values())
+    gesamt = sum(leistung["gesamtpreis"] for leistung in leistungen)
+    werte = {**_kunde_werte(auftrag.kunde), **mailvorlagen.firma_werte(), "gesamtpreis": eur(gesamt)}
+    preistabelle = {"leistungen": leistungen, "gesamt": gesamt, "mwst_satz": mailvorlagen.mwst_satz()}
+    return mailvorlagen.rendern("skiservice_fertig", werte, {"preistabelle": preistabelle})
+
+def fertigMailHtml(auftrag: AuftragSchema) -> str:
+    return fertigMail(auftrag)[1]
 
 def sendeFertigMail(auftrag: AuftragSchema):
     if not auftrag.kunde or not auftrag.kunde.Email:
         logger.info("Keine E-Mail Adresse beim Kunden hinterlegt, keine Fertig-Mail versendet.")
         return False
 
-    html = fertigMailHtml(auftrag)
+    betreff, html = fertigMail(auftrag)
 
     msg = MIMEMultipart()
     msg['From'] = einstellungen.hole("EMAIL_FROM")
     msg['To'] = auftrag.kunde.Email
-    msg['Subject'] = einstellungen.hole("MAIL_BETREFF_FERTIG")
+    msg['Subject'] = betreff
 
     msg.attach(MIMEText(html, "html"))
     try:
@@ -90,8 +99,11 @@ def sendeFertigMail(auftrag: AuftragSchema):
         return False
 
 
-def verleihMailHtml(verleih: SaisonVerleihRead, art: str) -> str:
-    """HTML der Abhol- bzw. Rückgabe-Mail eines Verleihs, mit dem Material."""
+def verleihMail(verleih: SaisonVerleihRead, art: str) -> tuple[str, str]:
+    """
+    Betreff und HTML der Abhol- ("abholung") bzw. Rückgabe-Mail ("rueckgabe") eines Verleihs, mit dem Material.
+    Die Rückgabe hat zwei Vorlagen: Tagesverleih mit Enddatum und Saisonverleih.
+    """
     material = []
     for nr, m in enumerate(verleih.Material, start=1):
         teile = []
@@ -105,14 +117,22 @@ def verleihMailHtml(verleih: SaisonVerleihRead, art: str) -> str:
         if teile:
             material.append({"name": (m.SkiFahrerName or "").strip() or f"Ausrüstung #{nr}", "teile": teile})
 
-    return templates.get_template(f"verleih_{art}_mail.html").render(
-        verleih=verleih,
-        kunde=verleih.Kunde,
-        material=material,
-        ende_am=verleih.Ende_Am.strftime("%d.%m.%Y") if verleih.Art == "tag" and verleih.Ende_Am else None,
-        firma_name=einstellungen.hole("FIRMA_NAME"),
-        firma_telefon=einstellungen.hole("FIRMA_TELEFON"),
-    )
+    ende_am = verleih.Ende_Am.strftime("%d.%m.%Y") if verleih.Art == "tag" and verleih.Ende_Am else ""
+    if art == "abholung":
+        vorlage = "verleih_abholung"
+    else:
+        vorlage = "verleih_rueckgabe_tag" if ende_am else "verleih_rueckgabe_saison"
+
+    werte = {
+        **_kunde_werte(verleih.Kunde),
+        **mailvorlagen.firma_werte(),
+        "verleih_name": verleih.Name or "",
+        "rueckgabe_datum": ende_am,
+    }
+    return mailvorlagen.rendern(vorlage, werte, {"materialliste": {"verleih_name": verleih.Name, "material": material}})
+
+def verleihMailHtml(verleih: SaisonVerleihRead, art: str) -> str:
+    return verleihMail(verleih, art)[1]
 
 def sendeVerleihMail(verleih: SaisonVerleihRead, art: str) -> bool:
     """
@@ -123,12 +143,14 @@ def sendeVerleihMail(verleih: SaisonVerleihRead, art: str) -> bool:
         logger.info("Keine E-Mail Adresse beim Kunden hinterlegt, keine Verleih-Mail versendet.")
         return False
 
+    betreff, html = verleihMail(verleih, art)
+
     msg = MIMEMultipart()
     msg['From'] = einstellungen.hole("EMAIL_FROM")
     msg['To'] = verleih.Kunde.Email
-    msg['Subject'] = einstellungen.hole("MAIL_BETREFF_VERLEIH_ABHOLUNG" if art == "abholung" else "MAIL_BETREFF_VERLEIH_RUECKGABE")
+    msg['Subject'] = betreff
 
-    msg.attach(MIMEText(verleihMailHtml(verleih, art), "html"))
+    msg.attach(MIMEText(html, "html"))
     try:
         sendeMail(msg)
         return True
@@ -141,16 +163,13 @@ def sendeQuittungMail(email: str, nummer: str, pdf: bytes, dateiname: str) -> bo
     Versendet die Quittung als PDF-Anhang an eine Adresse.
     False, wenn der Versand fehlschlägt.
     """
+    betreff, html = mailvorlagen.rendern("quittung", {**mailvorlagen.firma_werte(), "quittung_nummer": nummer})
+
     msg = MIMEMultipart()
     msg['From'] = einstellungen.hole("EMAIL_FROM")
     msg['To'] = email
-    msg['Subject'] = f'{einstellungen.hole("MAIL_BETREFF_QUITTUNG")} {nummer}'
+    msg['Subject'] = betreff
 
-    html = templates.get_template("quittung_mail.html").render(
-        nummer=nummer,
-        firma_name=einstellungen.hole("FIRMA_NAME"),
-        firma_telefon=einstellungen.hole("FIRMA_TELEFON"),
-    )
     msg.attach(MIMEText(html, "html"))
     anhang = MIMEApplication(pdf, _subtype="pdf")
     anhang.add_header("Content-Disposition", "attachment", filename=dateiname)

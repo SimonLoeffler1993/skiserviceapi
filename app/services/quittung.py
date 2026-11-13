@@ -10,6 +10,7 @@ from weasyprint import HTML
 from app.models.quittung import Quittung, QuittungArtikel
 from app.services import einstellungen
 from app.utils.lexware import LexwareAPI
+from app.utils.formate import datum as _datum, eur as _eur
 from app.utils.girocode import girocode_png_data_uri, iban_formatiert
 from app.schemas.quittung import QuittungArtikelSchema, QuittungBezug, QuittungKundeSchema, QuittungListeEintrag, QuittungOutSchema, QuittungsTyp, QuittungGruppeArtikel
 from app.models.kunde import SkiKunde
@@ -19,19 +20,6 @@ from app.crud import skiservice as crud_skiservice
 from app.crud import saisonverleih as crud_saisonverleih
 
 templates = Jinja2Templates(directory="app/templates")
-
-def _datum(wert) -> str:
-    """'2026-10-18' / date / datetime -> '18.10.2026'"""
-    if not wert:
-        return ""
-    if isinstance(wert, str):
-        wert = date.fromisoformat(wert[:10])
-    return wert.strftime("%d.%m.%Y")
-
-def _eur(wert) -> str:
-    """1234.5 -> '1.234,50 €'"""
-    text = f"{Decimal(str(wert or 0)):,.2f}"
-    return text.replace(",", "X").replace(".", ",").replace("X", ".") + " €"
 
 templates.env.filters["datum"] = _datum
 templates.env.filters["eur"] = _eur
