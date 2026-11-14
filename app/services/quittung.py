@@ -161,13 +161,23 @@ def zahlart_text(bar: bool | None, karte: bool | None, ueberweisung: bool | None
     return ", ".join(name for name, aktiv in (("Bar", bar), ("EC", karte), ("Überweisung", ueberweisung)) if aktiv)
 
 def quittungen_liste(db: Session, saison_id: int) -> list[QuittungListeEintrag]:
+    """Alle Quittungen einer Saison mit Artikeln, Betrag, Kunde und Bezügen."""
+    return _quittungen_eintraege(db, Quittung.Saison_ID == saison_id)
+
+def quittungen_nach_ids(db: Session, ids: set[int]) -> list[QuittungListeEintrag]:
+    """Die Quittungen mit diesen IDs, z.B. alle aus der Historie eines Kunden."""
+    if not ids:
+        return []
+    return _quittungen_eintraege(db, Quittung.ID.in_(ids))
+
+def _quittungen_eintraege(db: Session, bedingung) -> list[QuittungListeEintrag]:
     """
-    Alle Quittungen einer Saison mit Artikeln, Betrag, Kunde und Bezügen.
+    Quittungen zu einer Filterbedingung mit Artikeln, Betrag, Kunde und Bezügen, neueste zuerst.
     Aufträge und Verleihe werden gesammelt geladen (je eine Abfrage), nicht pro Quittung.
     """
     quittungen = (
         db.query(Quittung)
-        .filter(Quittung.Saison_ID == saison_id)
+        .filter(bedingung)
         .options(selectinload(Quittung.artikels))
         .order_by(Quittung.ID.desc())
         .all()
