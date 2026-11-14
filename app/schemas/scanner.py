@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from enum import IntEnum
 from typing import Literal
 
+from app.schemas.mailstatus import MailStatus
 from app.schemas.skiservice import AuftragSchema
 
 # TriggerStatus muss mit der ESP Firmware übereinstimmen, damit die Werte korrekt interpretiert werden können
@@ -25,6 +26,8 @@ class ScanAntwort(BaseModel):
     message: str
     # Erkanntes Etikett: "service" oder "verleih"
     art: Literal["service", "verleih"] | None = None
+    # Automatische Kundenmail durch diesen Scan (Abhol-Mail vom Verleih)
+    mail: MailStatus = None
 
 class ScannerWebSocketMessage(BaseModel):
     message: str
@@ -33,6 +36,14 @@ class ScannerWebSocketMessage(BaseModel):
     ski_id: int | None = None
     service_id: int | None = None
     data: AuftragSchema | None = None
+    # "verleih": Bindungsscan eines Verleih-Etiketts, ohne data. Sonst Skiservice
+    art: Literal["service", "verleih"] | None = None
+    verleih_id: int | None = None
+    # Anzeigename des Verleihs und Kunde, für den Hinweis im Center
+    verleih_name: str | None = None
+    kunde: str | None = None
+    # Automatische Kundenmail: "gesendet" oder "fehlgeschlagen"
+    mail: MailStatus = None
 
 class ScannerMeldung(BaseModel):
     """Regelmäßige Meldung des Scanners (Health-Check), zeigt im Center, dass er verbunden ist."""

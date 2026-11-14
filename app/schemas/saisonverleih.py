@@ -3,6 +3,7 @@ from typing import Literal, Optional, List
 from datetime import date
 
 from app.schemas.kunde import SkiKundeOut
+from app.schemas.mailstatus import MailStatus
 from app.schemas.saison import SaisonRead
 from app.schemas.materialski import EigenSkiRead
 from app.schemas.materialschuh import EigenSchuhRead
@@ -161,6 +162,11 @@ class SaisonVerleihRead(SaisonVerleihBase):
     }
     # class Config:
     #     from_attributes = True
+
+
+class SaisonVerleihMitMail(SaisonVerleihRead):
+    """Verleih nach einer Bindungsprüfung, mit dem Ergebnis der Abhol-Mail."""
+    mail: MailStatus = None
 
 
 # --- Saisonverleih-Preis ---

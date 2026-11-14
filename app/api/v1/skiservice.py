@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.concurrency import run_in_threadpool
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from typing import Literal, Optional
 
@@ -9,6 +10,7 @@ from app.crud import skiservicepreis as crud_skiservicepreis
 
 from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema, SkiBindungFertigSchema, AuftragUpdateSchema, SkiCreateSchema, SkiUpdateSchema
 from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
+from app.schemas.mailstatus import MailStatus
 from app.schemas.skiservicepreise import SkiServicePreiseBase, SkiServicePreiseSchema
 
 from app.utils.skiscannerguimanager import scanner_gui_manager as scanner_manager
@@ -74,6 +76,8 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
     nachricht = "Ski fertig bearbeitet: Ski IDs {}".format(AuftragSkiFertig.ski_ids)
 
     auftragSchema = AuftragSchema.model_validate(auftrag)
+    # Ergebnis der Fertig-Mail, für den Hinweis auf der Scanner-Seite
+    mail: MailStatus = None
 
     if alleSkiFertig:
         nachricht = " Alle Ski sind fertig bearbeitet."
@@ -84,6 +88,11 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
             if mailSend:
                 crud_skiservice.setzeBenachrichtigt(db, AuftragSkiFertig.id, benachrichtigt=True)
                 nachricht += " und Kunde benachrichtigt."
+                mail = "gesendet"
+            elif auftragSchema.kunde and auftragSchema.kunde.Email:
+                # Ohne Adresse ist nichts fehlgeschlagen, dafür hat das Center einen eigenen Hinweis
+                nachricht += " E-Mail an den Kunden konnte nicht gesendet werden."
+                mail = "fehlgeschlagen"
         else:
             nachricht += " Kunde wurde bereits benachrichtigt."
 
@@ -93,10 +102,12 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
         scannername=None,
         ski_id=None,
         service_id=AuftragSkiFertig.id,
-        data=auftragSchema if auftrag else None
+        data=auftragSchema if auftrag else None,
+        mail=mail,
     ))
 
-    return auftrag
+    # Auftrag wie bisher, ergänzt um das Ergebnis der Mail
+    return {**jsonable_encoder(auftrag), "mail": mail}
 
 @router.post("/bindungfertig")
 async def bindungfertig(SkisChecked: SkiBindungFertigSchema, db: Session = Depends(get_db)):
