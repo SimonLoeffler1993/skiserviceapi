@@ -45,6 +45,14 @@ class SkiKundeOut(SkiKundeBasis):
     Ort: OrtOut | None = None
 
 
+class KundenListe(BaseModel):
+    """Eine Seite der Kundenliste, gesamt zählt alle Treffer über alle Seiten."""
+    eintraege: list[SkiKundeOut]
+    gesamt: int
+    seite: int
+    pro_seite: int
+
+
 class SkiKundeZuTerminal(BaseModel):
     terminal: str
     kunde_id: int

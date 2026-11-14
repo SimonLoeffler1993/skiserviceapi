@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from typing import Optional
 
@@ -8,6 +8,8 @@ from app.models.ort import Ort
 
 class SkiKunde(Base):
     __tablename__ = "adresse"
+    # Für die alphabetisch sortierte Kundenliste
+    __table_args__ = (Index("ix_adresse_name", "Nachname", "Vorname"),)
     ID: Mapped[int] = mapped_column(Integer, primary_key=True)
     Nachname: Mapped[str | None] = mapped_column(String(100))
     Vorname: Mapped[str | None] = mapped_column(String(100))

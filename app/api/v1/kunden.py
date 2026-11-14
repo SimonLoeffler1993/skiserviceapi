@@ -1,10 +1,12 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.db.deps import get_db
-from app.schemas.kunde import SkiKundeOut, SkiKundeSpeichern
+from app.schemas.kunde import KundenListe, SkiKundeOut, SkiKundeSpeichern
 from app.schemas.kundehistorie import KundeHistorie
 from app.crud import kunde as crud_kunde
 from app.crud import saisonverleih as crud_saisonverleih
@@ -40,6 +42,20 @@ def search_kunde(
     if not vorname and not nachname:
         raise HTTPException(status_code=400, detail="Mindestens ein Name muss angegeben werden")
     return crud_kunde.search_kunde(db, vorname, nachname)
+
+# Muss vor /{kunde_id} stehen, sonst wird "liste" als ID gelesen
+@router.get("/liste", response_model=KundenListe)
+def kunden_liste(
+    seite: int = Query(1, ge=1),
+    pro_seite: int = Query(25, ge=1, le=100),
+    suche: str | None = Query(None, max_length=100, description="Wörter aus Vor- oder Nachname"),
+    sortierung: Literal["name", "neueste"] = Query("name"),
+    db: Session = Depends(get_db),
+):
+    """Alle Kunden seitenweise, die Suche grenzt die Liste optional ein."""
+    suche = (suche or "").strip() or None
+    eintraege, gesamt = crud_kunde.kunden_liste(db, seite, pro_seite, suche, sortierung)
+    return {"eintraege": eintraege, "gesamt": gesamt, "seite": seite, "pro_seite": pro_seite}
 
 # Muss vor /{kunde_id} stehen, sonst wird "letzte" als ID gelesen
 @router.get("/letzte", response_model=list[SkiKundeOut])
