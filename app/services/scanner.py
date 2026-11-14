@@ -17,7 +17,7 @@ from app.crud import skiservice as crud_skiservice
 from app.models.skiservice import Ski
 from app.schemas.scanner import ScanAntwort, ScannerRead, ScannerWebSocketMessage, TriggerStatus
 from app.schemas.skiservice import AuftragSchema
-from app.services.verleih_benachrichtigung import abhol_mail_nach_wechsel, status_vor_aenderung
+from app.services.verleih_benachrichtigung import abhol_mail_mit_status, status_vor_aenderung
 from app.utils.skiscannerguimanager import scanner_gui_manager
 
 logger = logging.getLogger(__name__)
@@ -96,19 +96,32 @@ async def _bindung_service(db: Session, etikett: Etikett) -> ScanAntwort:
     return _antwort(True, f"Bindung von Ski {ski.id} geprüft", "service")
 
 
-def _bindung_verleih(db: Session, etikett: Etikett) -> ScanAntwort:
+def _bindung_verleih(db: Session, etikett: Etikett) -> tuple[ScanAntwort, Optional[ScannerWebSocketMessage]]:
+    """Gibt neben der Antwort die Nachricht fürs Center zurück, gesendet wird sie im Event-Loop."""
     if etikett.position_id is None:
-        return _antwort(False, "Etikett ohne Materialzeile", "verleih")
+        return _antwort(False, "Etikett ohne Materialzeile", "verleih"), None
     verleih = crud_saisonverleih.get_saisonverleih(db, etikett.id)
     material = next((m for m in verleih.Material if m.ID == etikett.position_id), None) if verleih else None
     if material is None:
-        return _antwort(False, f"Material {etikett.position_id} nicht im Verleih {etikett.id} gefunden", "verleih")
+        return _antwort(False, f"Material {etikett.position_id} nicht im Verleih {etikett.id} gefunden", "verleih"), None
     if material.BindungGeprueft:
-        return _antwort(True, "Bindung war bereits geprüft", "verleih")
+        return _antwort(True, "Bindung war bereits geprüft", "verleih"), None
     status_vorher = status_vor_aenderung(db, verleih.ID)
     verleih = crud_saisonverleih.pruefe_bindungen(db, verleih.ID, [material.ID])
-    abhol_mail_nach_wechsel(db, verleih, status_vorher)
-    return _antwort(True, f"Bindung von Material {material.ID} im Verleih {verleih.Name} geprüft", "verleih")
+    verleih, mail = abhol_mail_mit_status(db, verleih, status_vorher)
+    antwort = _antwort(True, f"Bindung von Material {material.ID} im Verleih {verleih.Name} geprüft", "verleih")
+    antwort.mail = mail
+    kunde = verleih.Kunde
+    name = ", ".join(teil for teil in (kunde.Nachname, kunde.Vorname) if teil) if kunde else ""
+    return antwort, ScannerWebSocketMessage(
+        message="Bindung geprüft",
+        success=True,
+        art="verleih",
+        verleih_id=verleih.ID,
+        verleih_name=verleih.Name,
+        kunde=name or None,
+        mail=mail,
+    )
 
 
 async def scan_auswerten(db: Session, scan: ScannerRead) -> ScanAntwort:
@@ -123,4 +136,9 @@ async def scan_auswerten(db: Session, scan: ScannerRead) -> ScanAntwort:
     if etikett.art == "service":
         return await _bindung_service(db, etikett)
     # Kann die Abhol-Mail senden (SMTP blockiert), daher nicht im Event-Loop
-    return await run_in_threadpool(_bindung_verleih, db, etikett)
+    antwort, nachricht = await run_in_threadpool(_bindung_verleih, db, etikett)
+    if nachricht is not None:
+        # Mit Scannername: nur das Tablet mit diesem Scanner zeigt den Hinweis
+        nachricht.scannername = scan.name
+        await scanner_gui_manager.sende_data_broadcast(nachricht)
+    return antwort

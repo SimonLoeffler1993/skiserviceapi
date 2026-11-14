@@ -8,7 +8,9 @@ from app.schemas.materialschuh import (
     VerleihSchuhModellBase, VerleihSchuhModellRead, VerleihSchuhModellUpdate,
 )
 from app.schemas.materialverwendung import Ausmustern, LoeschErgebnis, StammdatenVerwendung, VerleihVerwendung
+from app.schemas.materialdetails import SchuhDetails
 from app.models.materialschuh import VerleihSchuhHersteller, VerleihSchuhModell
+from app.services import materialerloes
 from app.crud import materialschuh as crud_materialschuh
 from app.crud import materialverwendung
 from app.crud.materialverwendung import MaterialKonflikt, MaterialUngueltig
@@ -88,6 +90,13 @@ def verwendung_eigen_schuh(schuh_id: int, db: Session = Depends(get_db)):
     Verleihe, in denen der Schuh steckt.
     """
     return crud_materialschuh.verwendung_eigen_schuh(db, _schuh_oder_404(db, schuh_id))
+
+@router.get("/eigen/{schuh_id}/details", response_model=SchuhDetails)
+def details_eigen_schuh(schuh_id: int, db: Session = Depends(get_db)):
+    """
+    Ein Schuh mit jeder Verleihzeile einzeln und dem Erwirtschafteten.
+    """
+    return materialerloes.schuh_details(db, _schuh_oder_404(db, schuh_id))
 
 @router.patch("/eigen/{schuh_id}/ausgemustert", response_model=EigenSchuhRead)
 def ausmustern_eigen_schuh(schuh_id: int, daten: Ausmustern, db: Session = Depends(get_db)):

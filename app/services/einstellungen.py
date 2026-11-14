@@ -20,7 +20,8 @@ from app.models.einstellung import Einstellung
 
 logger = logging.getLogger(__name__)
 
-EinstellungTyp = Literal["text", "zahl", "bool", "auswahl", "passwort"]
+# zahl = ganze Zahl, dezimal = Zahl mit Nachkommastellen (z.B. Euro)
+EinstellungTyp = Literal["text", "zahl", "dezimal", "bool", "auswahl", "passwort"]
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ GRUPPEN = {
     "drucker": "Etikettendrucker",
     "mail": "E-Mail",
     "lexware": "Lexware Office",
+    "verleih": "Verleih",
     "anwendung": "Anwendung",
 }
 
@@ -105,6 +107,14 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           beschreibung="PDF: eigene Quittung erstellen und als Beleg mit PDF hochladen. "
                                        "Rechnung: Rechnung direkt in Lexware anlegen, in der Anwendung nur externe Quittung."),
 
+    # Verleih: Auswertung je Materialstück (Material-Details im Center)
+    EinstellungDefinition("VERLEIH_ANTEIL_SKI_PROZENT", "verleih", "Anteil Ski in %", typ="zahl", standard=50,
+                          beschreibung="Stehen Ski und Schuh in einer Verleihzeile, bekommt der Ski diesen Anteil am Preis, "
+                                       "der Schuh den Rest. Ohne Schuh bzw. ohne Ski zählt der ganze Preis. Stöcke zählen nicht."),
+    EinstellungDefinition("VERLEIH_SKI_SERVICE_ABZUG", "verleih", "Abzug je Service am Leihski in €", typ="dezimal", standard=0.0,
+                          beschreibung="Wird beim Eintragen eines Service am Leihski vorgeschlagen und vom Erwirtschafteten abgezogen. "
+                                       "Bereits eingetragene Services ändern sich nicht."),
+
     # Anwendung
     EinstellungDefinition("HOST", "anwendung", "Öffentliche Adresse", standard="https://ms-skiservice.de",
                           beschreibung="Basis für die QR-Codes auf den Skiservice Etiketten."),
@@ -141,9 +151,27 @@ def _umwandeln(definition: EinstellungDefinition, wert: str | None) -> Any:
             return int(wert)
         except ValueError:
             return definition.standard
+    if definition.typ == "dezimal":
+        try:
+            return _dezimal(wert)
+        except ValueError:
+            return definition.standard
     if definition.typ == "bool":
         return wert.strip().lower() in ("true", "1", "ja")
     return wert
+
+
+def _dezimal(wert: Any) -> float:
+    """Zahl mit Nachkommastellen, auch mit Dezimalkomma. Wirft ValueError bei ungültiger Eingabe."""
+    if isinstance(wert, bool):
+        raise ValueError("keine Zahl")
+    try:
+        zahl = float(str(wert).strip().replace(",", "."))
+    except (TypeError, ValueError):
+        raise ValueError("keine Zahl")
+    if zahl != zahl or zahl in (float("inf"), float("-inf")):
+        raise ValueError("keine Zahl")
+    return zahl
 
 
 def _als_text(definition: EinstellungDefinition, wert: Any) -> str | None:
@@ -151,6 +179,8 @@ def _als_text(definition: EinstellungDefinition, wert: Any) -> str | None:
         return None
     if definition.typ == "bool":
         return "true" if wert in (True, "true", "1", 1) else "false"
+    if definition.typ == "dezimal" and wert != "":
+        return str(_dezimal(wert))
     return str(wert).strip()
 
 
@@ -244,7 +274,17 @@ def speichern(db: Session, werte: dict[str, Any]):
             try:
                 int(wert)
             except (TypeError, ValueError):
+                raise ValueError(f"{definition.bezeichnung} muss eine ganze Zahl sein.")
+        if definition.typ == "dezimal" and wert not in (None, ""):
+            try:
+                zahl = _dezimal(wert)
+            except ValueError:
                 raise ValueError(f"{definition.bezeichnung} muss eine Zahl sein.")
+            if zahl < 0:
+                raise ValueError(f"{definition.bezeichnung} darf nicht negativ sein.")
+    anteil = werte.get("VERLEIH_ANTEIL_SKI_PROZENT")
+    if anteil not in (None, "") and not 0 <= int(anteil) <= 100:
+        raise ValueError("Der Anteil Ski muss zwischen 0 und 100 % liegen.")
 
     for schluessel, wert in werte.items():
         definition = DEFINITION_NACH_SCHLUESSEL[schluessel]

@@ -1,11 +1,10 @@
-from sqlalchemy import ColumnElement, or_, select
+from typing import Literal
+
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from app.models.kunde import SkiKunde
 from app.schemas.kunde import SkiKundeSpeichern
-
-def get_kunden(db: Session):
-    return db.query(SkiKunde).all()
 
 def get_kunde(db: Session, kunde_id: int):
     return db.query(SkiKunde).filter(SkiKunde.ID == kunde_id).first()
@@ -32,6 +31,32 @@ def kunde_name_bedingungen(suche: str) -> list[ColumnElement[bool]]:
         or_(SkiKunde.Vorname.contains(wort, autoescape=True), SkiKunde.Nachname.contains(wort, autoescape=True))
         for wort in suche.split()
     ]
+
+
+def kunden_liste(
+    db: Session,
+    seite: int,
+    pro_seite: int,
+    suche: str | None,
+    sortierung: Literal["name", "neueste"],
+) -> tuple[list[SkiKunde], int]:
+    """Eine Seite der Kundenliste und die Gesamtzahl der Treffer, die Suche ist optional."""
+    bedingungen = kunde_name_bedingungen(suche) if suche else []
+    gesamt = db.scalar(select(func.count()).select_from(SkiKunde).where(*bedingungen)) or 0
+    if sortierung == "neueste":
+        reihenfolge = [SkiKunde.ID.desc()]
+    else:
+        # ID als letztes Kriterium, damit gleiche Namen beim Blättern nicht springen
+        reihenfolge = [SkiKunde.Nachname, SkiKunde.Vorname, SkiKunde.ID]
+    stmt = (
+        select(SkiKunde)
+        .where(*bedingungen)
+        .options(selectinload(SkiKunde.Ort))
+        .order_by(*reihenfolge)
+        .offset((seite - 1) * pro_seite)
+        .limit(pro_seite)
+    )
+    return list(db.scalars(stmt).all()), gesamt
 
 
 def search_kunde(db: Session, vorname: str, nachname: str) -> list[SkiKunde]:

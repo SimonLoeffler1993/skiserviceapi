@@ -5,11 +5,11 @@ from datetime import date
 
 from app.db.deps import get_db
 from app.crud import saisonverleih as crud_saisonverleih
-from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate, VerleihStatusAenderung, BindungGeprueftAnfrage, VerleihBenachrichtigtAenderung, VerleihBenachrichtigenAnfrage
+from app.schemas.saisonverleih import VerleihBelegung, SaisonVerleihPreisBase, SaisonVerleihPreisRead, SaisonVerleihPreiseListe, SaisonVerleihRead, SaisonVerleihMitMail, SaisonVerleihCreate, SaisonVerleihUpdate, SaisonVerleihMaterialBase, SaisonVerleihMaterialUpdate, VerleihStatusAenderung, BindungGeprueftAnfrage, VerleihBenachrichtigtAenderung, VerleihBenachrichtigenAnfrage
 from app.utils import skipdf
 from app.utils.mail import sendeVerleihMail
 from app.services.bezahlstatus import verleih_bezahlt_setzen
-from app.services.verleih_benachrichtigung import abhol_mail_nach_wechsel as _abhol_mail_nach_wechsel, status_vor_aenderung as _status
+from app.services.verleih_benachrichtigung import abhol_mail_mit_status, abhol_mail_nach_wechsel as _abhol_mail_nach_wechsel, status_vor_aenderung as _status
 from app.schemas.quittung import BezahltSetzen
 
 router = APIRouter(
@@ -228,15 +228,19 @@ def aendere_material(saisonverleih_id: int, material_id: int, daten: SaisonVerle
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{saisonverleih_id}/bindung-geprueft", response_model=SaisonVerleihRead)
+@router.post("/{saisonverleih_id}/bindung-geprueft", response_model=SaisonVerleihMitMail)
 def bindung_geprueft(saisonverleih_id: int, anfrage: BindungGeprueftAnfrage, db: Session = Depends(get_db)):
     """
     Markiert die Bindungen der Materialzeilen als geprüft (ohne material_ids alle).
     Sind danach alle geprüft, wechselt ein Verleih in Vorbereitung auf "vorbereitet" und der Kunde bekommt die Abhol-Mail.
+    mail meldet, ob sie versendet wurde.
     """
     status_vorher = _status(db, saisonverleih_id)
     verleih = _verleih_oder_404(crud_saisonverleih.pruefe_bindungen(db, saisonverleih_id, anfrage.material_ids))
-    return _abhol_mail_nach_wechsel(db, verleih, status_vorher)
+    verleih, mail = abhol_mail_mit_status(db, verleih, status_vorher)
+    antwort = SaisonVerleihMitMail.model_validate(verleih)
+    antwort.mail = mail
+    return antwort
 
 
 @router.delete("/{saisonverleih_id}/material/{material_id}", response_model=SaisonVerleihRead)

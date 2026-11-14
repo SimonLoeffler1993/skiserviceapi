@@ -1,11 +1,18 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.db.deps import get_db
-from app.schemas.kunde import SkiKundeOut, SkiKundeSpeichern
+from app.schemas.kunde import KundenListe, SkiKundeOut, SkiKundeSpeichern
+from app.schemas.kundehistorie import KundeHistorie
 from app.crud import kunde as crud_kunde
+from app.crud import saisonverleih as crud_saisonverleih
+from app.crud import skiservice as crud_skiservice
 from app.services import einstellungen
+from app.services.quittung import quittungen_nach_ids
 
 router = APIRouter(
     prefix="/kunden",
@@ -36,6 +43,20 @@ def search_kunde(
         raise HTTPException(status_code=400, detail="Mindestens ein Name muss angegeben werden")
     return crud_kunde.search_kunde(db, vorname, nachname)
 
+# Muss vor /{kunde_id} stehen, sonst wird "liste" als ID gelesen
+@router.get("/liste", response_model=KundenListe)
+def kunden_liste(
+    seite: int = Query(1, ge=1),
+    pro_seite: int = Query(25, ge=1, le=100),
+    suche: str | None = Query(None, max_length=100, description="Wörter aus Vor- oder Nachname"),
+    sortierung: Literal["name", "neueste"] = Query("name"),
+    db: Session = Depends(get_db),
+):
+    """Alle Kunden seitenweise, die Suche grenzt die Liste optional ein."""
+    suche = (suche or "").strip() or None
+    eintraege, gesamt = crud_kunde.kunden_liste(db, seite, pro_seite, suche, sortierung)
+    return {"eintraege": eintraege, "gesamt": gesamt, "seite": seite, "pro_seite": pro_seite}
+
 # Muss vor /{kunde_id} stehen, sonst wird "letzte" als ID gelesen
 @router.get("/letzte", response_model=list[SkiKundeOut])
 def letzte_kunden(db: Session = Depends(get_db)):
@@ -48,20 +69,42 @@ def letzte_kunden(db: Session = Depends(get_db)):
 
 @router.get("/{kunde_id}", response_model= SkiKundeOut)
 async def get_kunde(kunde_id: int, db: Session = Depends(get_db)):
-    return crud_kunde.get_kunde(db, kunde_id)
+    kunde = crud_kunde.get_kunde(db, kunde_id)
+    if kunde is None:
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    return kunde
+
+@router.get("/{kunde_id}/historie", response_model=KundeHistorie)
+def get_historie(kunde_id: int, db: Session = Depends(get_db)):
+    """Aufträge, Verleihe und die zugehörigen Quittungen eines Kunden über alle Saisons."""
+    if crud_kunde.get_kunde(db, kunde_id) is None:
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    auftraege = crud_skiservice.auftraege_kunde(db, kunde_id)
+    verleihe = crud_saisonverleih.verleihe_kunde(db, kunde_id)
+    # Quittungen haben keinen Kunden, sie hängen am Auftrag bzw. Verleih
+    quittung_ids = {a.quittung_id for a in auftraege if a.quittung_id} | {v.QuittungID for v in verleihe if v.QuittungID}
+    return {
+        "auftraege": auftraege,
+        "verleihe": verleihe,
+        "quittungen": quittungen_nach_ids(db, quittung_ids),
+    }
 
 @router.put("/{kunde_id}")
 async def update_kunde(kunde_id: int, kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     existing_kunde = crud_kunde.get_kunde(db, kunde_id)
     if not existing_kunde:
-        raise HTTPException(status_code=404, detail="Kunde not found")
-    return crud_kunde.update_kunde(db, kunde_id, kunde)
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    try:
+        return crud_kunde.update_kunde(db, kunde_id, kunde)
+    except IntegrityError:
+        # Die PLZ ist ein Fremdschlüssel auf die Postleitzahlen
+        db.rollback()
+        raise HTTPException(status_code=400, detail="PLZ nicht gefunden")
 
 @router.post("/erfassen")
 async def erfassen_kunde(kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     return crud_kunde.erfassen_kunde(db, kunde)
 
-# TODO Put Route für kunden aktualisieren
 
 
 # @router.get("/{kunde_id}", response_model=SkiKundeOut)

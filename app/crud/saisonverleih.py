@@ -39,6 +39,23 @@ def create_saisonverleihpreis(db: Session, preis_data: SaisonVerleihPreisBase):
 def get_saisonverleih(db: Session, saisonverleih_id: int):
     return db.query(SaisonVerleih).filter(SaisonVerleih.ID == saisonverleih_id).first()
 
+def verleihe_kunde(db: Session, kunde_id: int) -> list[SaisonVerleih]:
+    """Alle Verleihe eines Kunden (Saison und Tag) über alle Saisons, neueste zuerst."""
+    material = selectinload(SaisonVerleih.Material)
+    return (
+        db.query(SaisonVerleih)
+        .filter(SaisonVerleih.Kunde_ID == kunde_id)
+        .options(
+            selectinload(SaisonVerleih.Saison),
+            material.selectinload(SaisonVerleihMaterial.Ski),
+            material.selectinload(SaisonVerleihMaterial.Schuh),
+            material.selectinload(SaisonVerleihMaterial.Stock),
+            material.selectinload(SaisonVerleihMaterial.bindungsdaten),
+        )
+        .order_by(SaisonVerleih.ID.desc())
+        .all()
+    )
+
 def get_saisonverleih_liste(
     db: Session,
     limit: int = 15,
