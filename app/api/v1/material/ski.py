@@ -8,7 +8,10 @@ from app.schemas.materialski import (
     VerleihSkiModellBase, VerleihSkiModellRead, VerleihSkiModellUpdate,
 )
 from app.schemas.materialverwendung import Ausmustern, LoeschErgebnis, StammdatenVerwendung, VerleihVerwendung
+from app.schemas.materialdetails import SkiDetails, SkiServiceCreate, SkiServiceRead, SkiServiceUpdate
 from app.models.materialski import SkiArt, VerleihSkiHersteller, VerleihSkiModell
+from app.models.materialskiservice import VerleihSkiService
+from app.services import materialerloes
 from app.crud import materialski as crud_materialski
 from app.crud import materialverwendung
 from app.crud.materialverwendung import MaterialKonflikt, MaterialUngueltig
@@ -32,6 +35,13 @@ def _ski_oder_404(db: Session, ski_id: int):
     if ski is None:
         raise HTTPException(status_code=404, detail="Ski nicht gefunden")
     return ski
+
+
+def _service_oder_404(db: Session, service_id: int):
+    service = db.get(VerleihSkiService, service_id)
+    if service is None:
+        raise HTTPException(status_code=404, detail="Service nicht gefunden")
+    return service
 
 
 @router.get("/test")
@@ -87,6 +97,39 @@ def verwendung_eigen_ski(ski_id: int, db: Session = Depends(get_db)):
     Verleihe, in denen der Ski steckt.
     """
     return crud_materialski.verwendung_eigen_ski(db, _ski_oder_404(db, ski_id))
+
+@router.get("/eigen/{ski_id}/details", response_model=SkiDetails)
+def details_eigen_ski(ski_id: int, db: Session = Depends(get_db)):
+    """
+    Ein Ski mit jeder Verleihzeile einzeln, seinen Services und dem Erwirtschafteten.
+    """
+    return materialerloes.ski_details(db, _ski_oder_404(db, ski_id))
+
+@router.post("/eigen/{ski_id}/service", response_model=SkiServiceRead)
+def erstelle_ski_service(ski_id: int, daten: SkiServiceCreate, db: Session = Depends(get_db)):
+    """
+    Trägt einen Service am Leihski ein. Ohne Abzug gilt der Betrag aus den Einstellungen.
+    """
+    if not daten.Bezeichnung.strip():
+        raise HTTPException(status_code=400, detail="Die Bezeichnung darf nicht leer sein.")
+    return materialerloes.erstelle_service(db, _ski_oder_404(db, ski_id), daten)
+
+@router.patch("/service/{service_id}", response_model=SkiServiceRead)
+def aendere_ski_service(service_id: int, daten: SkiServiceUpdate, db: Session = Depends(get_db)):
+    """
+    Ändert einen Service am Leihski (Datum, Bezeichnung, Abzug).
+    """
+    if daten.Bezeichnung is not None and not daten.Bezeichnung.strip():
+        raise HTTPException(status_code=400, detail="Die Bezeichnung darf nicht leer sein.")
+    return materialerloes.aendere_service(db, _service_oder_404(db, service_id), daten)
+
+@router.delete("/service/{service_id}", response_model=LoeschErgebnis)
+def loesche_ski_service(service_id: int, db: Session = Depends(get_db)):
+    """
+    Löscht einen Service am Leihski.
+    """
+    materialerloes.loesche_service(db, _service_oder_404(db, service_id))
+    return {"success": True}
 
 @router.patch("/eigen/{ski_id}/ausgemustert", response_model=EigenSkiRead)
 def ausmustern_eigen_ski(ski_id: int, daten: Ausmustern, db: Session = Depends(get_db)):
