@@ -4,8 +4,12 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.db.deps import get_db
 from app.schemas.kunde import SkiKundeOut, SkiKundeSpeichern
+from app.schemas.kundehistorie import KundeHistorie
 from app.crud import kunde as crud_kunde
+from app.crud import saisonverleih as crud_saisonverleih
+from app.crud import skiservice as crud_skiservice
 from app.services import einstellungen
+from app.services.quittung import quittungen_nach_ids
 
 router = APIRouter(
     prefix="/kunden",
@@ -49,6 +53,21 @@ def letzte_kunden(db: Session = Depends(get_db)):
 @router.get("/{kunde_id}", response_model= SkiKundeOut)
 async def get_kunde(kunde_id: int, db: Session = Depends(get_db)):
     return crud_kunde.get_kunde(db, kunde_id)
+
+@router.get("/{kunde_id}/historie", response_model=KundeHistorie)
+def get_historie(kunde_id: int, db: Session = Depends(get_db)):
+    """Aufträge, Verleihe und die zugehörigen Quittungen eines Kunden über alle Saisons."""
+    if crud_kunde.get_kunde(db, kunde_id) is None:
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    auftraege = crud_skiservice.auftraege_kunde(db, kunde_id)
+    verleihe = crud_saisonverleih.verleihe_kunde(db, kunde_id)
+    # Quittungen haben keinen Kunden, sie hängen am Auftrag bzw. Verleih
+    quittung_ids = {a.quittung_id for a in auftraege if a.quittung_id} | {v.QuittungID for v in verleihe if v.QuittungID}
+    return {
+        "auftraege": auftraege,
+        "verleihe": verleihe,
+        "quittungen": quittungen_nach_ids(db, quittung_ids),
+    }
 
 @router.put("/{kunde_id}")
 async def update_kunde(kunde_id: int, kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):

@@ -107,6 +107,16 @@ def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> bool:
     db.commit()
     return True
 
+def auftraege_kunde(db: Session, kunde_id: int) -> list[Auftrag]:
+    """Alle Aufträge eines Kunden über alle Saisons, neueste zuerst."""
+    return (
+        db.query(Auftrag)
+        .filter(Auftrag.kunden_id == kunde_id)
+        .options(selectinload(Auftrag.skis).selectinload(Ski.bindungsdaten))
+        .order_by(desc(Auftrag.id))
+        .all()
+    )
+
 def get_skiservice_liste(
     db: Session,
     limit: int = 15,
