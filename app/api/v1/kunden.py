@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -52,7 +53,10 @@ def letzte_kunden(db: Session = Depends(get_db)):
 
 @router.get("/{kunde_id}", response_model= SkiKundeOut)
 async def get_kunde(kunde_id: int, db: Session = Depends(get_db)):
-    return crud_kunde.get_kunde(db, kunde_id)
+    kunde = crud_kunde.get_kunde(db, kunde_id)
+    if kunde is None:
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    return kunde
 
 @router.get("/{kunde_id}/historie", response_model=KundeHistorie)
 def get_historie(kunde_id: int, db: Session = Depends(get_db)):
@@ -73,14 +77,18 @@ def get_historie(kunde_id: int, db: Session = Depends(get_db)):
 async def update_kunde(kunde_id: int, kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     existing_kunde = crud_kunde.get_kunde(db, kunde_id)
     if not existing_kunde:
-        raise HTTPException(status_code=404, detail="Kunde not found")
-    return crud_kunde.update_kunde(db, kunde_id, kunde)
+        raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
+    try:
+        return crud_kunde.update_kunde(db, kunde_id, kunde)
+    except IntegrityError:
+        # Die PLZ ist ein Fremdschlüssel auf die Postleitzahlen
+        db.rollback()
+        raise HTTPException(status_code=400, detail="PLZ nicht gefunden")
 
 @router.post("/erfassen")
 async def erfassen_kunde(kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     return crud_kunde.erfassen_kunde(db, kunde)
 
-# TODO Put Route für kunden aktualisieren
 
 
 # @router.get("/{kunde_id}", response_model=SkiKundeOut)
