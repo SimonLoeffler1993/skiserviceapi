@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.api.v1.health import health_antwort
 from app.schemas.scanner import ScanAntwort, ScannerGeraet, ScannerMeldung, ScannerRead
 from app.services.scanner import scan_auswerten
-from app.utils.scannerregister import scanner_register
+from app.utils.scannerregister import ScannerUnbekannt, UpdateNichtMoeglich, scanner_register
 from app.utils.skiscannerguimanager import scanner_gui_manager as scanner_manager
 from app.db.deps import get_db
 
@@ -33,15 +33,33 @@ def melden(meldung: ScannerMeldung, db: Session = Depends(get_db)):
     """
     Health-Check des Scanners (alle 30 s): trägt ihn als verbunden ein und prüft wie /health die Datenbank.
     Bei nicht erreichbarer Datenbank 503.
+    Wurde im Center ein Firmware-Update angestoßen, steht einmalig "update": true in der Antwort:
+    der Scanner prüft dann selbst auf eine neue Firmware und installiert sie.
     """
-    scanner_register.melden(meldung)
-    return health_antwort(db)
+    antwort = health_antwort(db)
+    # Bei einem Datenbankfehler (503) bleibt die Anforderung für die nächste Meldung stehen
+    if scanner_register.melden(meldung, health_check=isinstance(antwort, dict)):
+        antwort["update"] = True
+    return antwort
 
 
 @router.get("/geraete", response_model=list[ScannerGeraet])
 def geraete():
     """Alle Scanner, die sich in den letzten 24 h gemeldet haben, mit verbunden = Meldung in den letzten 75 s."""
     return scanner_register.liste()
+
+
+@router.post("/geraete/{name}/update", response_model=ScannerGeraet)
+def update_anstossen(name: str):
+    """
+    Stößt das Firmware-Update eines Scanners an. Er erfährt es bei seiner nächsten Meldung (spätestens nach 30 s).
+    """
+    try:
+        return scanner_register.update_anfordern(name)
+    except ScannerUnbekannt:
+        raise HTTPException(status_code=404, detail="Scanner nicht gefunden.")
+    except UpdateNichtMoeglich as fehler:
+        raise HTTPException(status_code=409, detail=str(fehler))
 
 
 @router.websocket("/data")
