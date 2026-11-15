@@ -53,7 +53,14 @@ class ScannerMeldung(BaseModel):
     ip: str | None = None
     # USB-Barcodescanner am ESP32 angeschlossen
     usb_scanner: bool = True
+    # Firmware kann sich selbst aktualisieren (ältere Firmware schickt das Feld nicht)
+    update_faehig: bool = False
+    # Stand des Selbst-Updates: "" / "pruefe" / "laedt" / "aktuell" / "fehlgeschlagen"
+    update_status: str | None = None
+    update_fehler: str | None = None
 
 class ScannerGeraet(ScannerMeldung):
     zuletzt: datetime
     verbunden: bool
+    # Im Center angestoßenes Update, auf das der Scanner noch nicht reagiert hat
+    update_angefordert: datetime | None = None
