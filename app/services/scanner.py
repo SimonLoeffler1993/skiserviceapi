@@ -16,6 +16,7 @@ from app.crud import skiservice as crud_skiservice
 from app.models.skiservice import Ski
 from app.schemas.scanner import ScanAntwort, ScannerRead, ScannerWebSocketMessage, TriggerStatus
 from app.schemas.skiservice import AuftragSchema
+from app.services import einstellungen
 from app.utils.skiscannerguimanager import scanner_gui_manager
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,12 @@ def etikett_lesen(code: str) -> Optional[Etikett]:
     return None
 
 
+def _countdown(aktion: Literal["fertig", "bindung"]) -> int:
+    """Sekunden bis zum Speichern im Center, aus den Einstellungen."""
+    wert = einstellungen.hole(f"SCANNER_COUNTDOWN_{aktion.upper()}")
+    return max(0, min(int(wert), einstellungen.SCANNER_COUNTDOWN_MAX))
+
+
 def _antwort(success: bool, message: str, art=None) -> ScanAntwort:
     (logger.info if success else logger.warning)("Scan: %s", message)
     return ScanAntwort(success=success, message=message, art=art)
@@ -65,6 +72,7 @@ async def _fertigstellen(db: Session, scan: ScannerRead, etikett: Etikett) -> Sc
         success=True,
         scannername=scan.name,
         aktion="fertig",
+        countdown=_countdown("fertig"),
         ski_id=etikett.position_id,
         service_id=auftrag.id,
         data=AuftragSchema.model_validate(auftrag),
@@ -90,6 +98,7 @@ async def _bindung_service(db: Session, scan: ScannerRead, etikett: Etikett) -> 
         success=True,
         scannername=scan.name,
         aktion="bindung",
+        countdown=_countdown("bindung"),
         ski_id=ski.id,
         service_id=auftrag.id,
         data=AuftragSchema.model_validate(auftrag),
@@ -115,6 +124,7 @@ async def _bindung_verleih(db: Session, scan: ScannerRead, etikett: Etikett) -> 
         scannername=scan.name,
         art="verleih",
         aktion="bindung",
+        countdown=_countdown("bindung"),
         verleih_id=verleih.ID,
         material_id=material.ID,
         verleih_name=verleih.Name,

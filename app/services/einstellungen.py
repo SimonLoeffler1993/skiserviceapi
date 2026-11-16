@@ -46,6 +46,7 @@ GRUPPEN = {
     "mail": "E-Mail",
     "lexware": "Lexware Office",
     "verleih": "Verleih",
+    "scanner": "Hardware-Scanner",
     "anwendung": "Anwendung",
 }
 
@@ -55,6 +56,9 @@ VERLEIH_STARTSTATUS_TEXT = (
     "In Vorbereitung: Material wird noch hergerichtet. Vorbereitet: Material ist fertig, "
     "wird automatisch gesetzt, sobald alle Bindungen geprüft sind. Unterwegs: gilt als heute abgeholt."
 )
+
+# Längster Countdown am Hardware-Scanner in Sekunden
+SCANNER_COUNTDOWN_MAX = 60
 
 DEFINITIONEN: list[EinstellungDefinition] = [
     # Firma
@@ -114,6 +118,14 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("VERLEIH_SKI_SERVICE_ABZUG", "verleih", "Abzug je Service am Leihski in €", typ="dezimal", standard=0.0,
                           beschreibung="Wird beim Eintragen eines Service am Leihski vorgeschlagen und vom Erwirtschafteten abgezogen. "
                                        "Bereits eingetragene Services ändern sich nicht."),
+
+    # Hardware-Scanner: Countdown im Center, bevor ein Scan gespeichert wird
+    EinstellungDefinition("SCANNER_COUNTDOWN_FERTIG", "scanner", "Countdown Fertigstellen in Sekunden", typ="zahl", standard=10,
+                          beschreibung="Zeit zum Abbrechen, bevor ein gescannter Ski fertig gestellt wird. "
+                                       "0 = sofort ohne Countdown, höchstens 60."),
+    EinstellungDefinition("SCANNER_COUNTDOWN_BINDUNG", "scanner", "Countdown Bindung geprüft in Sekunden", typ="zahl", standard=10,
+                          beschreibung="Zeit zum Abbrechen, bevor eine gescannte Bindung (Skiservice und Verleih) als geprüft gespeichert wird. "
+                                       "0 = sofort ohne Countdown, höchstens 60."),
 
     # Anwendung
     EinstellungDefinition("HOST", "anwendung", "Öffentliche Adresse", standard="https://ms-skiservice.de",
@@ -285,6 +297,10 @@ def speichern(db: Session, werte: dict[str, Any]):
     anteil = werte.get("VERLEIH_ANTEIL_SKI_PROZENT")
     if anteil not in (None, "") and not 0 <= int(anteil) <= 100:
         raise ValueError("Der Anteil Ski muss zwischen 0 und 100 % liegen.")
+    for schluessel in ("SCANNER_COUNTDOWN_FERTIG", "SCANNER_COUNTDOWN_BINDUNG"):
+        sekunden = werte.get(schluessel)
+        if sekunden not in (None, "") and not 0 <= int(sekunden) <= SCANNER_COUNTDOWN_MAX:
+            raise ValueError(f"{DEFINITION_NACH_SCHLUESSEL[schluessel].bezeichnung}: 0 bis {SCANNER_COUNTDOWN_MAX} erlaubt.")
 
     for schluessel, wert in werte.items():
         definition = DEFINITION_NACH_SCHLUESSEL[schluessel]
