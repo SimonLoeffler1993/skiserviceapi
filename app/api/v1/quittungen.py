@@ -184,7 +184,7 @@ def sende_quittung_mail(quittung_id: int, anfrage: QuittungMailAnfrage, db: Sess
     for e in anfrage.emails:
         emails.setdefault(e.lower(), e)
     for email in emails.values():
-        if sendeQuittungMail(email, quittung.Nummer, pdf, dateiname):
+        if sendeQuittungMail(email, quittung.Nummer, pdf, dateiname, quittung.ID):
             ergebnis.gesendet.append(email)
         else:
             ergebnis.fehlgeschlagen.append(email)
