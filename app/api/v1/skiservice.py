@@ -8,7 +8,7 @@ from app.db.deps import get_db
 from app.crud import skiservice as crud_skiservice
 from app.crud import skiservicepreis as crud_skiservicepreis
 
-from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema, SkiBindungFertigSchema, AuftragUpdateSchema, SkiCreateSchema, SkiUpdateSchema
+from app.schemas.skiservice import AuftragSchema, AuftragSkiFertigSchema, AuftragCreateSchema, SkiBindungFertigSchema, AuftragUpdateSchema, AuftragAbgeholtSetzen, SkiCreateSchema, SkiUpdateSchema
 from app.schemas.scanner import ScannerRead, TriggerStatus, ScannerWebSocketMessage
 from app.schemas.mailstatus import MailStatus
 from app.schemas.skiservicepreise import SkiServicePreiseBase, SkiServicePreiseSchema
@@ -37,12 +37,13 @@ async def skiauftragListe(
     status: Optional[Literal["bearbeitung", "fertig", "abgeholt"]] = Query(default=None, description="Nur Aufträge mit diesem Status"),
     bezahlt: Optional[Literal["ja", "nein"]] = Query(default=None, description="Nur bezahlte bzw. offene Aufträge"),
     benachrichtigt: Optional[Literal["ja", "nein"]] = Query(default=None, description="Nur benachrichtigte bzw. nicht benachrichtigte Aufträge"),
+    erledigte: bool = Query(default=True, description="false blendet erledigte Aufträge aus (abgeholt und bezahlt)"),
     db: Session = Depends(get_db)
 ):
     """
     Listet alle Skiservice auf
     """
-    return crud_skiservice.get_skiservice_liste(db, limit, last_id, saisonID, alle, sortierung, suche, status, bezahlt, benachrichtigt)
+    return crud_skiservice.get_skiservice_liste(db, limit, last_id, saisonID, alle, sortierung, suche, status, bezahlt, benachrichtigt, erledigte)
 
 @router.get("/test")
 async def test():
@@ -185,6 +186,14 @@ def setze_auftrag_bezahlt(skiservice_auftrag_id: int, daten: BezahltSetzen, db: 
     if auftrag_bezahlt_setzen(db, skiservice_auftrag_id, daten.bezahlt, daten.mit_quittung, daten.quittung_entfernen) is None:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
     return crud_skiservice.getSkiserviceAuftrag(db, skiservice_auftrag_id)
+
+@router.patch("/auftrag/{skiservice_auftrag_id}/abgeholt", response_model=AuftragSchema)
+def setze_auftrag_abgeholt(skiservice_auftrag_id: int, daten: AuftragAbgeholtSetzen, db: Session = Depends(get_db)):
+    """
+    Setzt den Auftrag auf abgeholt (mit Datum) oder nimmt die Abholung zurück, auch bei bezahlten Aufträgen.
+    """
+    return _auftrag_oder_404(crud_skiservice.setzeAbgeholt(db, skiservice_auftrag_id, daten.abgeholt))
+
 
 @router.post("/auftrag/{skiservice_auftrag_id}/benachrichtigen", response_model=AuftragSchema)
 def benachrichtige_kunde(skiservice_auftrag_id: int, db: Session = Depends(get_db)):

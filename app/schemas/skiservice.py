@@ -52,6 +52,7 @@ class AuftragSchema(BaseModel):
     zu: str
     fertig_date: Optional[str] = None
     abhol_date: Optional[str] = None
+    abgeholt_am: Optional[date] = None
     anzahlung: Optional[str] = None
     bezahlt: str
     bezahlt_am: Optional[date] = None
@@ -74,7 +75,7 @@ class AuftragSchema(BaseModel):
     def serialize_datetime(self, dt: datetime, _info) -> Optional[str]:
         return dt.isoformat() if dt else None
 
-    @field_serializer("bezahlt_am")
+    @field_serializer("bezahlt_am", "abgeholt_am")
     def serialize_date(self, d: date, _info) -> Optional[str]:
         return d.isoformat() if d else None
     
@@ -103,6 +104,11 @@ class AuftragUpdateSchema(BaseModel):
     abhol_date: Optional[str] = None
     # Kunde von Hand benachrichtigt (z.B. angerufen), false nimmt das wieder zurück
     benachrichtigt: Optional[bool] = None
+
+
+class AuftragAbgeholtSetzen(BaseModel):
+    # false nimmt die Abholung wieder zurück
+    abgeholt: bool
 
 
 class SkiUpdateSchema(BaseModel):

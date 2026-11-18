@@ -42,6 +42,8 @@ class KasseBezahlenSchema(BaseModel):
     ueberweisung: bool = False
     karte: bool = False
     bar: bool = False
+    # Bezahlte Aufträge und Verleihe gleich auf abgeholt setzen
+    abgeholt: bool = False
 
 # Einfache Prüfung, email-validator ist nicht installiert
 EmailAdresse = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=100)]

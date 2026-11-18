@@ -14,6 +14,8 @@ from app.models.quittung import Quittung, QuittungArtikel
 from app.models.handware import Handware
 from app.crud import saison as crud_saison
 from app.crud import quittung as crud_quittung
+from app.crud.skiservice import auftrag_abgeholt_anwenden
+from app.crud.saisonverleih import status_anwenden
 from app.services.lexware_sync import lexware_modus, rechnung_anlegen
 from app.services.quittung import material_bezeichnung, handware_gruppe
 
@@ -272,6 +274,8 @@ class KasseService:
                 auftrag.bezahlt = "ja"
                 auftrag.bezahlt_am = date.today()
                 auftrag.quittung_id = quittung.ID
+                if zuBezahlen.abgeholt:
+                    auftrag_abgeholt_anwenden(auftrag, True)
                 quittung.AnzAuftrag += 1
 
                 # Skiservice Auftrag als Quittungsartikel hinzufügen
@@ -288,6 +292,9 @@ class KasseService:
                 verleih.Bezahlt = True
                 verleih.Bezahlt_Am = date.today()
                 verleih.QuittungID = quittung.ID
+                # Schon abgeholte oder zurückgegebene Verleihe behalten ihren Status
+                if zuBezahlen.abgeholt and verleih.Status in ("vorbereitung", "vorbereitet"):
+                    status_anwenden(verleih, "unterwegs")
                 quittung.AnzVerleih += 1
 
                 # Verleih als Quittungsartikel hinzufügen
