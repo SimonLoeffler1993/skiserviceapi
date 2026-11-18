@@ -109,6 +109,8 @@ def quittung_pdf_hochladen(db: Session, quittung_id: int) -> Quittung:
     quittung = db.get(Quittung, quittung_id)
     if quittung is None:
         raise LookupError(f"Quittung {quittung_id} nicht gefunden.")
+    if quittung.Storniert:
+        raise SyncKonflikt("Die Quittung ist storniert.")
     if quittung.NurExtern:
         raise SyncKonflikt("Externe Quittungen liegen bereits in Lexware.")
     if quittung.BuchhaltungSync:

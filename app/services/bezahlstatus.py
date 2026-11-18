@@ -73,7 +73,8 @@ def lexware_abgleichen(db: Session, quittung: Quittung, lex_daten: dict) -> bool
     "Offen" in Lexware setzt nichts zurück: Kassen-Quittungen stehen dort offen, bis die Zahlung zugeordnet ist.
     Committet nur, wenn sich etwas geändert hat, und gibt das zurück.
     """
-    if not lexware_bezahlt(lex_daten):
+    # Eine stornierte Quittung bleibt storniert, auch wenn der Beleg in Lexware bezahlt ist
+    if quittung.Storniert or not lexware_bezahlt(lex_daten):
         return False
     datum = lexware_bezahlt_am(lex_daten) or date.today()
     if not quittung_bezahlt_setzen(db, quittung, True, datum):

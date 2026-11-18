@@ -1,6 +1,7 @@
 
 from fastapi import HTTPException
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 from collections import Counter, defaultdict
 from datetime import date
@@ -186,31 +187,44 @@ def _quittungen_eintraege(db: Session, bedingung) -> list[QuittungListeEintrag]:
     if not ids:
         return []
 
+    # Stornierte Quittungen haben keine Zuordnung mehr: ihre Aufträge und Verleihe stehen nur noch in den Artikeln
+    storno_a = {p.Auftrag_ID for q in quittungen if q.Storniert for p in q.artikels if p.Auftrag_ID is not None}
+    storno_v = {p.Verleih_ID for q in quittungen if q.Storniert for p in q.artikels if p.Verleih_ID is not None}
+
     auftraege = (
         db.query(Auftrag)
-        .filter(Auftrag.quittung_id.in_(ids))
+        .filter(or_(Auftrag.quittung_id.in_(ids), Auftrag.id.in_(storno_a)))
         .options(selectinload(Auftrag.skis), selectinload(Auftrag.kunde).selectinload(SkiKunde.Ort))
         .order_by(Auftrag.id)
         .all()
     )
     verleihe = (
         db.query(SaisonVerleih)
-        .filter(SaisonVerleih.QuittungID.in_(ids))
+        .filter(or_(SaisonVerleih.QuittungID.in_(ids), SaisonVerleih.ID.in_(storno_v)))
         .options(selectinload(SaisonVerleih.Material), selectinload(SaisonVerleih.Kunde).selectinload(SkiKunde.Ort))
         .order_by(SaisonVerleih.ID)
         .all()
     )
     nach_quittung_a: dict[int, list[Auftrag]] = defaultdict(list)
     for a in auftraege:
-        nach_quittung_a[a.quittung_id].append(a)
+        if a.quittung_id is not None:
+            nach_quittung_a[a.quittung_id].append(a)
     nach_quittung_v: dict[int, list[SaisonVerleih]] = defaultdict(list)
     for v in verleihe:
-        nach_quittung_v[v.QuittungID].append(v)
+        if v.QuittungID is not None:
+            nach_quittung_v[v.QuittungID].append(v)
+    auftrag_nach_id = {a.id: a for a in auftraege}
+    verleih_nach_id = {v.ID: v for v in verleihe}
 
     liste = []
     for q in quittungen:
-        q_auftraege = nach_quittung_a.get(q.ID, [])
-        q_verleihe = nach_quittung_v.get(q.ID, [])
+        if q.Storniert:
+            # Inzwischen gelöschte Aufträge und Verleihe fehlen einfach
+            q_auftraege = [auftrag_nach_id[p.Auftrag_ID] for p in q.artikels if p.Auftrag_ID in auftrag_nach_id]
+            q_verleihe = [verleih_nach_id[p.Verleih_ID] for p in q.artikels if p.Verleih_ID in verleih_nach_id]
+        else:
+            q_auftraege = nach_quittung_a.get(q.ID, [])
+            q_verleihe = nach_quittung_v.get(q.ID, [])
         gruppen = [auftrag_gruppe(a) for a in q_auftraege] + [verleih_gruppe(v) for v in q_verleihe]
         if (gruppe := handware_gruppe(q.artikels)):
             gruppen.append(gruppe)
@@ -231,6 +245,8 @@ def _quittungen_eintraege(db: Session, bedingung) -> list[QuittungListeEintrag]:
             NurExtern=bool(q.NurExtern),
             LexID=q.LexID or None,
             BuchhaltungSync=bool(q.BuchhaltungSync),
+            Storniert=bool(q.Storniert),
+            Storniert_Am=q.Storniert_Am,
             artikelgruppen=gruppen,
         ))
     return liste
@@ -259,6 +275,8 @@ class QuittungsService:
             buchhaltungSync=quittung.BuchhaltungSync,
             lexID=quittung.LexID,
             nurExtern=quittung.NurExtern,
+            storniert=bool(quittung.Storniert),
+            storniert_Am=quittung.Storniert_Am,
         )
 
         if quittung.NurExtern:
@@ -268,6 +286,12 @@ class QuittungsService:
         # Kunden der Aufträge und Verleihe, nach ID
         kunden: dict[int, SkiKunde] = {}
         for artikel in quittung.artikels:
+            # Nach dem Storno sind Auftrag und Verleih wieder frei und können gelöscht worden sein
+            if quittung.Storniert and (
+                (artikel.Auftrag_ID is not None and self.db.get(Auftrag, artikel.Auftrag_ID) is None)
+                or (artikel.Verleih_ID is not None and self.db.get(SaisonVerleih, artikel.Verleih_ID) is None)
+            ):
+                continue
             if artikel.Auftrag_ID is not None:
                 quittungOut.artikelgruppen.append(_AuftragzuArtikel(artikel.Auftrag_ID, self.db))
                 # Bereits geladen, db.get liest aus der Session
@@ -310,7 +334,7 @@ class QuittungsService:
             inhaber = (einstellungen.hole("BANK_KONTOINHABER") or "").strip() or FIRMA["name"]
             bic = einstellungen.hole("BANK_BIC") or None
             bank = {"inhaber": inhaber, "iban": iban_formatiert(iban), "bic": bic, "name": einstellungen.hole("BANK_NAME")}
-            if data.ueberweisung and summe > 0:
+            if data.ueberweisung and summe > 0 and not data.storniert:
                 # z.B. "Quittung 12 · 26/27S5, 26/27SV7"
                 nummern = [g.bezeichnung.split(" - ")[1] for g in data.artikelgruppen if g.bezeichnung.count(" - ") >= 1]
                 verwendungszweck = data.nummer + (f" - {', '.join(nummern)}" if nummern else "")
