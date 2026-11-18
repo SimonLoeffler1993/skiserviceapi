@@ -7,6 +7,8 @@ from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
+from app.crud import quittung as crud_quittung
+from app.models.handware import Handware
 from app.models.quittung import Quittung
 from app.models.saisonverleih import SaisonVerleih
 from app.models.skiservice import Auftrag
@@ -82,29 +84,119 @@ def lexware_abgleichen(db: Session, quittung: Quittung, lex_daten: dict) -> bool
     return True
 
 
-def auftrag_bezahlt_setzen(db: Session, auftrag_id: int, bezahlt: bool, mit_quittung: bool) -> Auftrag | None:
-    """Setzt einen Auftrag von Hand auf (nicht) bezahlt, auf Wunsch mit seiner Quittung und deren Positionen."""
+def quittung_stornieren(db: Session, quittung: Quittung) -> None:
+    """
+    Storniert die Quittung, ohne Commit: alle Aufträge und Verleihe darauf werden nicht bezahlt und von ihr gelöst
+    (sie erscheinen wieder in der Kasse), verkaufte Handware geht zurück auf den Bestand.
+    Die Artikel der Quittung bleiben stehen, damit sichtbar bleibt, was storniert wurde.
+    Lexware wird nicht angefasst: ein Beleg dort wird von Hand storniert.
+    """
+    for auftrag in db.query(Auftrag).filter(Auftrag.quittung_id == quittung.ID):
+        _auftrag_setzen(auftrag, False, None)
+        auftrag.quittung_id = None
+    for verleih in db.query(SaisonVerleih).filter(SaisonVerleih.QuittungID == quittung.ID):
+        _verleih_setzen(verleih, False, None)
+        verleih.QuittungID = None
+    # Gegenstück zum Verkauf an der Kasse: Anzahl nur zur Orientierung, ohne Bestand bleibt sie leer
+    for position in quittung.artikels:
+        if position.Artikel_Kategorie != "Handware":
+            continue
+        handware = db.query(Handware).filter(Handware.ID == position.Artikel_ID).with_for_update().first()
+        if handware is not None and handware.Anzahl is not None:
+            handware.Anzahl += position.Menge or 0
+    quittung.Storniert = True
+    quittung.Storniert_Am = date.today()
+    quittung.Bezahlt = False
+    quittung.Bezahlt_Am = None
+    logger.info("Quittung %s storniert", quittung.ID)
+
+
+def aus_quittung_entfernen(
+        db: Session, quittung: Quittung, auftrag: Auftrag | None = None, verleih: SaisonVerleih | None = None,
+    ) -> None:
+    """
+    Nimmt genau einen Auftrag oder Verleih von der Quittung, ohne Commit. Die übrigen Positionen bleiben bezahlt.
+    War es die letzte Position, wird die Quittung storniert (ein von Hand zugewiesener Lexware-Beleg gelöscht).
+    """
+    manuell = quittung.ManuellZugewiesen
+    if auftrag is not None:
+        auftrag.quittung_id = None
+    if verleih is not None:
+        verleih.QuittungID = None
+    db.flush()
+    if quittung.Storniert:
+        return
+    if manuell:
+        # Wie beim Aufheben der Zuweisung: nur löschen, wenn nichts anderes mehr auf die Quittung zeigt
+        if not crud_quittung.quittung_verwendet(db, quittung.ID):
+            db.delete(quittung)
+        return
+
+    eigene = [
+        p for p in quittung.artikels
+        if (auftrag is not None and p.Auftrag_ID == auftrag.id) or (verleih is not None and p.Verleih_ID == verleih.ID)
+    ]
+    if len(eigene) == len(quittung.artikels) and not crud_quittung.quittung_verwendet(db, quittung.ID):
+        # Letzte Position: ihre Zeile bleibt als Nachweis auf der stornierten Quittung
+        quittung_stornieren(db, quittung)
+        return
+    for position in eigene:
+        quittung.artikels.remove(position)
+    if auftrag is not None:
+        quittung.AnzAuftrag = max((quittung.AnzAuftrag or 0) - 1, 0)
+    if verleih is not None:
+        quittung.AnzVerleih = max((quittung.AnzVerleih or 0) - 1, 0)
+
+
+def auftrag_bezahlt_setzen(
+        db: Session, auftrag_id: int, bezahlt: bool, mit_quittung: bool, quittung_entfernen: bool = False,
+    ) -> Auftrag | None:
+    """
+    Setzt einen Auftrag von Hand auf (nicht) bezahlt, auf Wunsch mit seiner Quittung und deren Positionen.
+    Mit quittung_entfernen wird er bei "nicht bezahlt" stattdessen allein von der Quittung genommen.
+    """
     auftrag = db.get(Auftrag, auftrag_id)
     if auftrag is None:
         return None
     heute = date.today()
-    if mit_quittung and auftrag.quittung_id and (quittung := db.get(Quittung, auftrag.quittung_id)):
-        quittung_bezahlt_setzen(db, quittung, bezahlt, heute)
-    _auftrag_setzen(auftrag, bezahlt, heute)
+    quittung = db.get(Quittung, auftrag.quittung_id) if auftrag.quittung_id else None
+    if quittung_entfernen and not bezahlt:
+        _auftrag_setzen(auftrag, False, heute)
+        if quittung is not None:
+            aus_quittung_entfernen(db, quittung, auftrag=auftrag)
+        else:
+            auftrag.quittung_id = None
+    else:
+        if mit_quittung and quittung is not None:
+            quittung_bezahlt_setzen(db, quittung, bezahlt, heute)
+        _auftrag_setzen(auftrag, bezahlt, heute)
     db.commit()
     logger.info("Auftrag %s von Hand auf %s gesetzt", auftrag_id, "bezahlt" if bezahlt else "nicht bezahlt")
     return auftrag
 
 
-def verleih_bezahlt_setzen(db: Session, verleih_id: int, bezahlt: bool, mit_quittung: bool) -> SaisonVerleih | None:
-    """Setzt einen Verleih von Hand auf (nicht) bezahlt, auf Wunsch mit seiner Quittung und deren Positionen."""
+def verleih_bezahlt_setzen(
+        db: Session, verleih_id: int, bezahlt: bool, mit_quittung: bool, quittung_entfernen: bool = False,
+    ) -> SaisonVerleih | None:
+    """
+    Setzt einen Verleih von Hand auf (nicht) bezahlt, auf Wunsch mit seiner Quittung und deren Positionen.
+    Mit quittung_entfernen wird er bei "nicht bezahlt" stattdessen allein von der Quittung genommen.
+    """
     verleih = db.get(SaisonVerleih, verleih_id)
     if verleih is None:
         return None
     heute = date.today()
-    if mit_quittung and verleih.QuittungID and (quittung := db.get(Quittung, verleih.QuittungID)):
-        quittung_bezahlt_setzen(db, quittung, bezahlt, heute)
-    _verleih_setzen(verleih, bezahlt, heute)
+    quittung = db.get(Quittung, verleih.QuittungID) if verleih.QuittungID else None
+    if quittung_entfernen and not bezahlt:
+        _verleih_setzen(verleih, False, heute)
+        if quittung is not None:
+            aus_quittung_entfernen(db, quittung, verleih=verleih)
+        else:
+            verleih.QuittungID = None
+    else:
+        if mit_quittung and quittung is not None:
+            quittung_bezahlt_setzen(db, quittung, bezahlt, heute)
+        _verleih_setzen(verleih, bezahlt, heute)
     db.commit()
     logger.info("Verleih %s von Hand auf %s gesetzt", verleih_id, "bezahlt" if bezahlt else "nicht bezahlt")
     return verleih

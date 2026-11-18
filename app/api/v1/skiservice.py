@@ -180,8 +180,9 @@ def setze_auftrag_bezahlt(skiservice_auftrag_id: int, daten: BezahltSetzen, db: 
     """
     Setzt den Auftrag von Hand auf bezahlt oder nicht bezahlt.
     Mit mit_quittung werden die Quittung und alle Positionen darauf ebenfalls geändert.
+    Mit quittung_entfernen wird bei "nicht bezahlt" nur dieser Auftrag von der Quittung genommen.
     """
-    if auftrag_bezahlt_setzen(db, skiservice_auftrag_id, daten.bezahlt, daten.mit_quittung) is None:
+    if auftrag_bezahlt_setzen(db, skiservice_auftrag_id, daten.bezahlt, daten.mit_quittung, daten.quittung_entfernen) is None:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
     return crud_skiservice.getSkiserviceAuftrag(db, skiservice_auftrag_id)
 
