@@ -142,8 +142,9 @@ def setze_verleih_bezahlt(saisonverleih_id: int, daten: BezahltSetzen, db: Sessi
     """
     Setzt den Verleih von Hand auf bezahlt oder nicht bezahlt.
     Mit mit_quittung werden die Quittung und alle Positionen darauf ebenfalls geändert.
+    Mit quittung_entfernen wird bei "nicht bezahlt" nur dieser Verleih von der Quittung genommen.
     """
-    if verleih_bezahlt_setzen(db, saisonverleih_id, daten.bezahlt, daten.mit_quittung) is None:
+    if verleih_bezahlt_setzen(db, saisonverleih_id, daten.bezahlt, daten.mit_quittung, daten.quittung_entfernen) is None:
         raise HTTPException(status_code=404, detail="Saisonverleih not found")
     return crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
 

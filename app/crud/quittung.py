@@ -18,6 +18,7 @@ def get_quittung(db: Session, quittung_id: int):
     db_quittung.Bezahlt = db_quittung.Bezahlt or False
     db_quittung.BuchhaltungSync = db_quittung.BuchhaltungSync or False
     db_quittung.NurExtern = db_quittung.NurExtern or False
+    db_quittung.Storniert = db_quittung.Storniert or False
 
     return db_quittung
 

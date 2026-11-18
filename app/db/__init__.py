@@ -14,3 +14,4 @@ from app.models.handware import Handware
 from app.models.checkin_schluessel import CheckinSchluessel
 from app.models.mailvorlage import MailVorlage
 from app.models.materialskiservice import VerleihSkiService
+from app.models.mailprotokoll import MailProtokoll

@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 from urllib.parse import parse_qs, urlparse
 
-from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.crud import saisonverleih as crud_saisonverleih
@@ -17,7 +16,7 @@ from app.crud import skiservice as crud_skiservice
 from app.models.skiservice import Ski
 from app.schemas.scanner import ScanAntwort, ScannerRead, ScannerWebSocketMessage, TriggerStatus
 from app.schemas.skiservice import AuftragSchema
-from app.services.verleih_benachrichtigung import abhol_mail_mit_status, status_vor_aenderung
+from app.services import einstellungen
 from app.utils.skiscannerguimanager import scanner_gui_manager
 
 logger = logging.getLogger(__name__)
@@ -50,6 +49,12 @@ def etikett_lesen(code: str) -> Optional[Etikett]:
     return None
 
 
+def _countdown(aktion: Literal["fertig", "bindung"]) -> int:
+    """Sekunden bis zum Speichern im Center, aus den Einstellungen."""
+    wert = einstellungen.hole(f"SCANNER_COUNTDOWN_{aktion.upper()}")
+    return max(0, min(int(wert), einstellungen.SCANNER_COUNTDOWN_MAX))
+
+
 def _antwort(success: bool, message: str, art=None) -> ScanAntwort:
     (logger.info if success else logger.warning)("Scan: %s", message)
     return ScanAntwort(success=success, message=message, art=art)
@@ -66,6 +71,8 @@ async def _fertigstellen(db: Session, scan: ScannerRead, etikett: Etikett) -> Sc
         message="Scan abgeschlossen",
         success=True,
         scannername=scan.name,
+        aktion="fertig",
+        countdown=_countdown("fertig"),
         ski_id=etikett.position_id,
         service_id=auftrag.id,
         data=AuftragSchema.model_validate(auftrag),
@@ -73,7 +80,7 @@ async def _fertigstellen(db: Session, scan: ScannerRead, etikett: Etikett) -> Sc
     return _antwort(True, f"Auftrag {auftrag.name or auftrag.id} an das Center gesendet", "service")
 
 
-async def _bindung_service(db: Session, etikett: Etikett) -> ScanAntwort:
+async def _bindung_service(db: Session, scan: ScannerRead, etikett: Etikett) -> ScanAntwort:
     if etikett.position_id is None:
         return _antwort(False, "Etikett ohne Ski", "service")
     ski = db.get(Ski, etikett.position_id)
@@ -81,47 +88,51 @@ async def _bindung_service(db: Session, etikett: Etikett) -> ScanAntwort:
         return _antwort(False, f"Ski {etikett.position_id} nicht im Auftrag {etikett.id} gefunden", "service")
     if not ski.bindung_check:
         return _antwort(False, "Kein Bindungscheck beauftragt", "service")
+    auftrag = crud_skiservice.getSkiserviceAuftrag(db, etikett.id)
+    if auftrag is None:
+        return _antwort(False, f"Auftrag {etikett.id} nicht gefunden", "service")
+    # Wie beim Fertigstellen: gespeichert wird erst im Center nach dem Countdown.
+    # Bereits geprüft: das Center zeigt den Ski trotzdem, ohne Countdown
+    await scanner_gui_manager.sende_data_broadcast(ScannerWebSocketMessage(
+        message="Scan abgeschlossen",
+        success=True,
+        scannername=scan.name,
+        aktion="bindung",
+        countdown=_countdown("bindung"),
+        ski_id=ski.id,
+        service_id=auftrag.id,
+        data=AuftragSchema.model_validate(auftrag),
+    ))
     if ski.bindung_status:
         return _antwort(True, "Bindung war bereits geprüft", "service")
-    crud_skiservice.setzeBindungGeprueft(db, [ski.id])
-    # Ohne Scannername: das Center lädt den Auftrag nur neu, kein Fertig-Countdown
-    auftrag = crud_skiservice.getSkiserviceAuftrag(db, etikett.id)
-    await scanner_gui_manager.sende_data_broadcast(ScannerWebSocketMessage(
-        message="Bindung geprüft",
-        success=True,
-        ski_id=ski.id,
-        service_id=etikett.id,
-        data=AuftragSchema.model_validate(auftrag) if auftrag else None,
-    ))
-    return _antwort(True, f"Bindung von Ski {ski.id} geprüft", "service")
+    return _antwort(True, f"Bindung von Ski {ski.id} an das Center gesendet", "service")
 
 
-def _bindung_verleih(db: Session, etikett: Etikett) -> tuple[ScanAntwort, Optional[ScannerWebSocketMessage]]:
-    """Gibt neben der Antwort die Nachricht fürs Center zurück, gesendet wird sie im Event-Loop."""
+async def _bindung_verleih(db: Session, scan: ScannerRead, etikett: Etikett) -> ScanAntwort:
     if etikett.position_id is None:
-        return _antwort(False, "Etikett ohne Materialzeile", "verleih"), None
+        return _antwort(False, "Etikett ohne Materialzeile", "verleih")
     verleih = crud_saisonverleih.get_saisonverleih(db, etikett.id)
     material = next((m for m in verleih.Material if m.ID == etikett.position_id), None) if verleih else None
     if material is None:
-        return _antwort(False, f"Material {etikett.position_id} nicht im Verleih {etikett.id} gefunden", "verleih"), None
-    if material.BindungGeprueft:
-        return _antwort(True, "Bindung war bereits geprüft", "verleih"), None
-    status_vorher = status_vor_aenderung(db, verleih.ID)
-    verleih = crud_saisonverleih.pruefe_bindungen(db, verleih.ID, [material.ID])
-    verleih, mail = abhol_mail_mit_status(db, verleih, status_vorher)
-    antwort = _antwort(True, f"Bindung von Material {material.ID} im Verleih {verleih.Name} geprüft", "verleih")
-    antwort.mail = mail
+        return _antwort(False, f"Material {etikett.position_id} nicht im Verleih {etikett.id} gefunden", "verleih")
     kunde = verleih.Kunde
     name = ", ".join(teil for teil in (kunde.Nachname, kunde.Vorname) if teil) if kunde else ""
-    return antwort, ScannerWebSocketMessage(
-        message="Bindung geprüft",
+    # Gespeichert (und ggf. die Abhol-Mail gesendet) wird erst im Center nach dem Countdown
+    await scanner_gui_manager.sende_data_broadcast(ScannerWebSocketMessage(
+        message="Scan abgeschlossen",
         success=True,
+        scannername=scan.name,
         art="verleih",
+        aktion="bindung",
+        countdown=_countdown("bindung"),
         verleih_id=verleih.ID,
+        material_id=material.ID,
         verleih_name=verleih.Name,
         kunde=name or None,
-        mail=mail,
-    )
+    ))
+    if material.BindungGeprueft:
+        return _antwort(True, "Bindung war bereits geprüft", "verleih")
+    return _antwort(True, f"Bindung von Material {material.ID} im Verleih {verleih.Name} an das Center gesendet", "verleih")
 
 
 async def scan_auswerten(db: Session, scan: ScannerRead) -> ScanAntwort:
@@ -134,11 +145,5 @@ async def scan_auswerten(db: Session, scan: ScannerRead) -> ScanAntwort:
     if scan.trigger == TriggerStatus.fertig:
         return await _fertigstellen(db, scan, etikett)
     if etikett.art == "service":
-        return await _bindung_service(db, etikett)
-    # Kann die Abhol-Mail senden (SMTP blockiert), daher nicht im Event-Loop
-    antwort, nachricht = await run_in_threadpool(_bindung_verleih, db, etikett)
-    if nachricht is not None:
-        # Mit Scannername: nur das Tablet mit diesem Scanner zeigt den Hinweis
-        nachricht.scannername = scan.name
-        await scanner_gui_manager.sende_data_broadcast(nachricht)
-    return antwort
+        return await _bindung_service(db, scan, etikett)
+    return await _bindung_verleih(db, scan, etikett)

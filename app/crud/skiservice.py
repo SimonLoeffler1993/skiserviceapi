@@ -34,7 +34,9 @@ def setzeSkiFertig(db: Session, skiservice_auftrag_id: int, ski_ids: list[int]):
 
     if alleFertig:
         auftrag.fertig_date = datetime.now().strftime("%d.%m.%Y")  # Auftragsfertigstellungsdatum setzen
-        auftrag.wie = "1"  # Auftrag als fertig markieren
+        # Auftrag als fertig markieren, ein schon abgeholter bleibt abgeholt
+        if auftrag.wie != "2":
+            auftrag.wie = "1"
     
 
     db.commit()
@@ -128,6 +130,7 @@ def get_skiservice_liste(
     status: Optional[str] = None,
     bezahlt: Optional[str] = None,
     benachrichtigt: Optional[str] = None,
+    erledigte: bool = True,
 ):
     # Falls keine Saison ID angegebn ist, wird die aktuelle Saison verwendet
     if saisonID is None:
@@ -152,6 +155,13 @@ def get_skiservice_liste(
         query = query.filter(func.lower(Auftrag.bezahlt) == "ja")
     elif bezahlt == "nein":
         query = query.filter(or_(Auftrag.bezahlt.is_(None), func.lower(Auftrag.bezahlt) != "ja"))
+
+    # Erledigt = abgeholt und bezahlt
+    if not erledigte:
+        query = query.filter(or_(
+            Auftrag.wie.is_(None), Auftrag.wie != "2",
+            Auftrag.bezahlt.is_(None), func.lower(Auftrag.bezahlt) != "ja",
+        ))
 
     if benachrichtigt == "ja":
         query = query.filter(func.lower(Auftrag.benachrichtigt) == "ja")
@@ -184,15 +194,49 @@ def _ist_bezahlt(auftrag: Auftrag) -> bool:
     return auftrag.bezahlt == "ja" or auftrag.quittung_id is not None
 
 
+def _alle_ski_fertig(auftrag: Auftrag) -> bool:
+    return bool(auftrag.skis) and all(ski.status == 1 for ski in auftrag.skis)
+
+
 def _fertig_status_aktualisieren(auftrag: Auftrag):
-    """Setzt den Auftrag auf fertig, wenn alle Ski fertig sind, sonst wieder auf offen."""
-    if auftrag.skis and all(ski.status == 1 for ski in auftrag.skis):
-        if auftrag.wie != "1":
-            auftrag.wie = "1"
+    """
+    Setzt den Auftrag auf fertig, wenn alle Ski fertig sind, sonst wieder auf offen.
+    Ein abgeholter Auftrag bleibt abgeholt, nur sein Fertig-Datum wird mitgeführt.
+    """
+    if _alle_ski_fertig(auftrag):
+        if auftrag.fertig_date is None or auftrag.wie not in ("1", "2"):
             auftrag.fertig_date = datetime.now().strftime("%d.%m.%Y")
+        if auftrag.wie != "2":
+            auftrag.wie = "1"
     else:
-        auftrag.wie = None
         auftrag.fertig_date = None
+        if auftrag.wie != "2":
+            auftrag.wie = None
+
+
+def auftrag_abgeholt_anwenden(auftrag: Auftrag, abgeholt: bool):
+    """
+    Setzt den Auftrag auf abgeholt bzw. nimmt das zurück, ohne Commit (auch für die Kasse).
+    Zurückgenommen ergibt sich der Status wieder aus den Ski.
+    """
+    if abgeholt:
+        auftrag.wie = "2"
+        auftrag.abgeholt_am = auftrag.abgeholt_am or date.today()
+        return
+    auftrag.abgeholt_am = None
+    if auftrag.wie == "2":
+        auftrag.wie = "1" if _alle_ski_fertig(auftrag) else None
+
+
+def setzeAbgeholt(db: Session, auftrag_id: int, abgeholt: bool):
+    """Auch bei bezahlten Aufträgen erlaubt: abgeholt wird oft erst nach dem Bezahlen."""
+    auftrag = getSkiserviceAuftrag(db, auftrag_id)
+    if auftrag is None:
+        return None
+    auftrag_abgeholt_anwenden(auftrag, abgeholt)
+    db.commit()
+    db.refresh(auftrag)
+    return auftrag
 
 
 def aendereAuftrag(db: Session, auftrag_id: int, daten: AuftragUpdateSchema):

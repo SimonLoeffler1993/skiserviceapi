@@ -44,6 +44,12 @@ class ScannerWebSocketMessage(BaseModel):
     kunde: str | None = None
     # Automatische Kundenmail: "gesendet" oder "fehlgeschlagen"
     mail: MailStatus = None
+    # Was das Center nach dem Countdown mit dem Scan macht
+    aktion: Literal["fertig", "bindung"] | None = None
+    # Gescannte Materialzeile eines Verleih-Etiketts
+    material_id: int | None = None
+    # Sekunden bis zum Speichern im Center, 0 = sofort (Einstellungen SCANNER_COUNTDOWN_*)
+    countdown: int | None = None
 
 class ScannerMeldung(BaseModel):
     """Regelmäßige Meldung des Scanners (Health-Check), zeigt im Center, dass er verbunden ist."""

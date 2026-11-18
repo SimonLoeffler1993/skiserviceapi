@@ -331,16 +331,13 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
         "data":db_saisonverleih
         }
 
-def setze_status(db: Session, saisonverleih_id: int, status: str):
+def status_anwenden(saisonverleih: SaisonVerleih, status: str):
     """
-    Setzt den Status (vorbereitung, vorbereitet, unterwegs, zurueck), auch rückwärts zum Korrigieren.
+    Setzt den Status ohne Commit (auch für die Kasse).
     Abgeholt_Am, Zurueck und Zurueck_Am werden passend mitgeführt.
     """
     if status not in ("vorbereitung", "vorbereitet", "unterwegs", "zurueck"):
         raise ValueError(f"Unbekannter Status: {status}")
-    saisonverleih = get_saisonverleih(db, saisonverleih_id)
-    if not saisonverleih:
-        return None
     heute = datetime.date.today()
     saisonverleih.Status = status
     if status in ("vorbereitung", "vorbereitet"):
@@ -349,6 +346,18 @@ def setze_status(db: Session, saisonverleih_id: int, status: str):
         saisonverleih.Abgeholt_Am = heute
     saisonverleih.Zurueck = status == "zurueck"
     saisonverleih.Zurueck_Am = (saisonverleih.Zurueck_Am or heute) if status == "zurueck" else None
+
+
+def setze_status(db: Session, saisonverleih_id: int, status: str):
+    """
+    Setzt den Status (vorbereitung, vorbereitet, unterwegs, zurueck), auch rückwärts zum Korrigieren.
+    """
+    if status not in ("vorbereitung", "vorbereitet", "unterwegs", "zurueck"):
+        raise ValueError(f"Unbekannter Status: {status}")
+    saisonverleih = get_saisonverleih(db, saisonverleih_id)
+    if not saisonverleih:
+        return None
+    status_anwenden(saisonverleih, status)
     db.commit()
     db.refresh(saisonverleih)
     return saisonverleih

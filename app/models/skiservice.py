@@ -41,12 +41,16 @@ class Auftrag(Base):
     kunden_id: Mapped[int] = mapped_column("Kunden_ID", Integer, ForeignKey("adresse.ID"))
     start_date: Mapped[datetime] = mapped_column("Start_Date", TIMESTAMP, server_default=func.now())
     ende_date: Mapped[Optional[str]] = mapped_column("Ende_Date", String(150))
+    # Status: "1" fertig, "2" abgeholt, alles andere (auch NULL) in Bearbeitung
     wie: Mapped[Optional[str]] = mapped_column("Wie", String(1))
     a_ski: Mapped[Optional[str]] = mapped_column("A_Ski", String(11))
     ettiket: Mapped[Optional[str]] = mapped_column("Ettiket", String(5))
     zu: Mapped[str] = mapped_column("ZU", String(10), nullable=False)
     fertig_date: Mapped[Optional[str]] = mapped_column("Fertig_Date", String(10))
+    # Gewünschtes "Fertig bis", nicht die tatsächliche Abholung
     abhol_date: Mapped[Optional[str]] = mapped_column("Abhol_Date", String(10))
+    # Tatsächliche Abholung, gehört zu Wie = "2"
+    abgeholt_am: Mapped[Optional[date]] = mapped_column("Abgeholt_Am", Date)
     anzahlung: Mapped[Optional[str]] = mapped_column("Anzahlung", String(11))
     bezahlt: Mapped[str] = mapped_column("Bezahlt", String(11), default="nein")
     bezahlt_am: Mapped[Optional[date]] = mapped_column("Bezahlt_Am", Date)

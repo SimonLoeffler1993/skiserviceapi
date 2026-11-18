@@ -22,6 +22,9 @@ class Quittung(Base):
     BuchhaltungSync: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
     LexID: Mapped[str | None] = mapped_column(String(150), nullable=True, default=None)
     NurExtern: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False)
+    # Storniert: zählt nicht mehr, Aufträge und Verleihe sind gelöst. Die Artikel bleiben als Nachweis stehen
+    Storniert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    Storniert_Am: Mapped[date | None] = mapped_column(Date, nullable=True, default=None)
     # Relation zu den Artikels, die in dieser Quittung enthalten sind
     artikels: Mapped[list["QuittungArtikel"]] = relationship("QuittungArtikel", back_populates="quittung", cascade="all, delete-orphan")
 

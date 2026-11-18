@@ -55,6 +55,7 @@
   .zahlung .status { font-weight: bold; }
   .bezahlt  { color: #1b7a34; }
   .offen    { color: #b3261e; }
+  .storniert { color: #b3261e; font-size: 12pt; text-transform: uppercase; letter-spacing: 0.5mm; }
 
   .unterschrift { page-break-inside: avoid; margin-top: 18mm; }
   .unterschrift .linie { width: 70mm; border-top: 1px solid #1a1a1a; padding-top: 1.5mm; font-size: 8pt; color: #777; }
@@ -180,7 +181,11 @@
 
 {# ---------- Zahlung ---------- #}
 <div class="zahlung">
-  {% if quittung.ueberweisung %}
+  {% if quittung.storniert %}
+    <span class="status storniert">Storniert</span>
+    {% if quittung.storniert_Am %} am {{ quittung.storniert_Am | datum }}{% endif %}
+    <br>Diese Quittung ist ungültig.
+  {% elif quittung.ueberweisung %}
   <table class="ueberweisung">
     <tr>
       <td>
@@ -212,10 +217,10 @@
   {% set arten = [] %}
   {% if quittung.bar %}{% set _ = arten.append("Bar") %}{% endif %}
   {% if quittung.karte %}{% set _ = arten.append("Karte") %}{% endif %}
-  {% if arten and not quittung.ueberweisung %}<br>Zahlungsart: {{ arten | join(", ") }}{% endif %}
+  {% if arten and not quittung.ueberweisung and not quittung.storniert %}<br>Zahlungsart: {{ arten | join(", ") }}{% endif %}
 </div>
 
-{% if quittung.bezahlt and not quittung.ueberweisung %}
+{% if quittung.bezahlt and not quittung.ueberweisung and not quittung.storniert %}
 <div class="unterschrift">
   <div class="linie">Ort, Datum, Unterschrift</div>
 </div>

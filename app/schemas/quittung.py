@@ -25,6 +25,8 @@ class QuittungBase(BaseModel):
     Bezahlt: bool
     BuchhaltungSync: bool
     LexID: str | None = None
+    Storniert: bool = False
+    Storniert_Am: date | None = None
     BezahlInfo: BezahlInfoSchema | None = None
 
 
@@ -70,6 +72,9 @@ class BezahltSetzen(BaseModel):
     bezahlt: bool
     # Quittung und alle Positionen darauf ebenfalls ändern
     mit_quittung: bool = False
+    # Nur bei "nicht bezahlt": nur diesen Auftrag oder Verleih von der Quittung nehmen.
+    # Die übrigen Positionen bleiben bezahlt, eine dadurch leere Quittung wird storniert
+    quittung_entfernen: bool = False
 
 class QuittungNurExtern(BaseModel):
     # Genau eines von beiden: Saisonverleih oder Skiservice-Auftrag
@@ -120,6 +125,8 @@ class QuittungOutSchema(BaseModel):
     lexID: str | None = None
     artikelgruppen: list[QuittungGruppeArtikel] = []
     nurExtern: bool = False
+    storniert: bool = False
+    storniert_Am: date | None = None
     kunde: QuittungKundeSchema | None = None
 
 class QuittungGruppeArtikel(BaseModel):
@@ -158,4 +165,6 @@ class QuittungListeEintrag(BaseModel):
     NurExtern: bool
     LexID: str | None = None
     BuchhaltungSync: bool
+    Storniert: bool = False
+    Storniert_Am: date | None = None
     artikelgruppen: list[QuittungGruppeArtikel] = []

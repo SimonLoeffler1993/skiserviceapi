@@ -18,7 +18,7 @@ from app.utils.mail import sendeQuittungMail
 from app.crud import saison as crud_saison
 from app.services.lexware_sync import SyncKonflikt, quittung_pdf_hochladen
 from app.utils.lexware import LexwareFehler
-from app.services.bezahlstatus import lexware_abgleichen, lexware_bezahlt, lexware_bezahlt_am
+from app.services.bezahlstatus import lexware_abgleichen, lexware_bezahlt, lexware_bezahlt_am, quittung_stornieren
 
 router = APIRouter(
     prefix="/quittungen",
@@ -77,7 +77,8 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
     if not quittung:
         raise HTTPException(status_code=404, detail="Quittung not found")
     # Nur Quittungen, die in Lexware angelegt sind, haben dort einen Bezahlstatus
-    if bezahlinfo and quittung.LexID and einstellungen.hole("LEXWARE_APIKEY"):
+    # Stornierte Quittungen werden nicht mehr abgeglichen
+    if bezahlinfo and quittung.LexID and not quittung.Storniert and einstellungen.hole("LEXWARE_APIKEY"):
         try:
     
             # TODO Datum für Lex Sync in DB Speichern
@@ -123,6 +124,21 @@ def quittung_nach_lexware(quittung_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail=str(e))
     return crud_quittung.get_quittung(db, quittung.ID)
 
+@router.post("/quittung/{quittung_id}/storno", response_model=QuittungRead)
+def storniere_quittung(quittung_id: int, db: Session = Depends(get_db)):
+    """
+    Storniert eine Quittung: Aufträge und Verleihe darauf werden nicht bezahlt und von ihr gelöst,
+    verkaufte Handware geht zurück auf den Bestand. Ein Beleg in Lexware wird dort von Hand storniert.
+    """
+    quittung = crud_quittung.get_quittung(db, quittung_id)
+    if quittung is None:
+        raise HTTPException(status_code=404, detail="Quittung nicht gefunden")
+    if quittung.Storniert:
+        raise HTTPException(status_code=409, detail="Die Quittung ist bereits storniert.")
+    quittung_stornieren(db, quittung)
+    db.commit()
+    return crud_quittung.get_quittung(db, quittung_id)
+
 @router.get("/quittung/{quittung_id}/pdf")
 def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
     """
@@ -158,6 +174,8 @@ def sende_quittung_mail(quittung_id: int, anfrage: QuittungMailAnfrage, db: Sess
     quittung = crud_quittung.get_quittung(db, quittung_id)
     if quittung is None:
         raise HTTPException(status_code=404, detail="Quittung nicht gefunden")
+    if quittung.Storniert:
+        raise HTTPException(status_code=409, detail="Die Quittung ist storniert und wird nicht mehr versendet.")
 
     pdf, dateiname = _quittung_pdf_oder_fehler(db, quittung)
     ergebnis = QuittungMailErgebnis(gesendet=[], fehlgeschlagen=[])
@@ -166,7 +184,7 @@ def sende_quittung_mail(quittung_id: int, anfrage: QuittungMailAnfrage, db: Sess
     for e in anfrage.emails:
         emails.setdefault(e.lower(), e)
     for email in emails.values():
-        if sendeQuittungMail(email, quittung.Nummer, pdf, dateiname):
+        if sendeQuittungMail(email, quittung.Nummer, pdf, dateiname, quittung.ID):
             ergebnis.gesendet.append(email)
         else:
             ergebnis.fehlgeschlagen.append(email)
