@@ -60,10 +60,43 @@ def protokolliere(
         logger.exception("Mail an %s konnte nicht protokolliert werden", empfaenger)
 
 
-def _mit_nummer(db: Session, mails: list[MailProtokoll]) -> list[dict]:
-    """Ergänzt die angezeigte Quittungsnummer."""
+def _fuer_anzeige(db: Session, mails: list[MailProtokoll]) -> list[dict]:
+    """
+    Ergänzt die angezeigte Quittungsnummer und die Bezüge: der Auftrag bzw. Verleih der Mail,
+    bei einer Quittungs-Mail alle Aufträge und Verleihe, die auf die Quittung zeigen.
+    Geladen wird gesammelt (je eine Abfrage), nicht pro Mail.
+    """
     ids = {m.Quittung_ID for m in mails if m.Quittung_ID}
     nummern = {q.ID: q.Nummer for q in db.query(Quittung).filter(Quittung.ID.in_(ids))} if ids else {}
+
+    auftrag_ids = {m.Auftrag_ID for m in mails if m.Auftrag_ID}
+    verleih_ids = {m.Verleih_ID for m in mails if m.Verleih_ID}
+    auftraege = (
+        db.query(Auftrag.id, Auftrag.name, Auftrag.quittung_id)
+        .filter(or_(Auftrag.id.in_(auftrag_ids), Auftrag.quittung_id.in_(ids)))
+        .order_by(Auftrag.id)
+        .all()
+    ) if auftrag_ids or ids else []
+    verleihe = (
+        db.query(SaisonVerleih.ID, SaisonVerleih.Name, SaisonVerleih.QuittungID)
+        .filter(or_(SaisonVerleih.ID.in_(verleih_ids), SaisonVerleih.QuittungID.in_(ids)))
+        .order_by(SaisonVerleih.ID)
+        .all()
+    ) if verleih_ids or ids else []
+
+    def bezuege(m: MailProtokoll) -> list[dict]:
+        liste = [
+            {"art": "auftrag", "id": a.id, "name": a.name}
+            for a in auftraege
+            if a.id == m.Auftrag_ID or (m.Quittung_ID and a.quittung_id == m.Quittung_ID)
+        ]
+        liste += [
+            {"art": "verleih", "id": v.ID, "name": v.Name}
+            for v in verleihe
+            if v.ID == m.Verleih_ID or (m.Quittung_ID and v.QuittungID == m.Quittung_ID)
+        ]
+        return liste
+
     return [
         {
             "ID": m.ID,
@@ -79,6 +112,7 @@ def _mit_nummer(db: Session, mails: list[MailProtokoll]) -> list[dict]:
             "Verleih_ID": m.Verleih_ID,
             "Quittung_ID": m.Quittung_ID,
             "Quittung_Nummer": nummern.get(m.Quittung_ID),
+            "Bezuege": bezuege(m),
         }
         for m in mails
     ]
@@ -98,7 +132,7 @@ def _suche(db: Session, eigene, quittung_ids: set[int]) -> list[dict]:
         .order_by(MailProtokoll.Gesendet_Am.desc(), MailProtokoll.ID.desc())
         .all()
     )
-    return _mit_nummer(db, mails)
+    return _fuer_anzeige(db, mails)
 
 
 def mails_auftrag(db: Session, auftrag_id: int) -> list[dict]:
