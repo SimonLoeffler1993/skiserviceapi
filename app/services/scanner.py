@@ -86,13 +86,12 @@ async def _bindung_service(db: Session, scan: ScannerRead, etikett: Etikett) -> 
     ski = db.get(Ski, etikett.position_id)
     if ski is None or ski.auftrag_id != etikett.id:
         return _antwort(False, f"Ski {etikett.position_id} nicht im Auftrag {etikett.id} gefunden", "service")
-    if not ski.bindung_check:
-        return _antwort(False, "Kein Bindungscheck beauftragt", "service")
     auftrag = crud_skiservice.getSkiserviceAuftrag(db, etikett.id)
     if auftrag is None:
         return _antwort(False, f"Auftrag {etikett.id} nicht gefunden", "service")
     # Wie beim Fertigstellen: gespeichert wird erst im Center nach dem Countdown.
-    # Bereits geprüft: das Center zeigt den Ski trotzdem, ohne Countdown
+    # Bereits geprüft oder kein Bindungscheck beauftragt: das Center zeigt den Ski trotzdem,
+    # mit Hinweis und ohne Countdown
     await scanner_gui_manager.sende_data_broadcast(ScannerWebSocketMessage(
         message="Scan abgeschlossen",
         success=True,
@@ -103,6 +102,9 @@ async def _bindung_service(db: Session, scan: ScannerRead, etikett: Etikett) -> 
         service_id=auftrag.id,
         data=AuftragSchema.model_validate(auftrag),
     ))
+    if not ski.bindung_check:
+        # Der Scanner meldet weiter einen Fehler (rote LED)
+        return _antwort(False, "Kein Bindungscheck beauftragt", "service")
     if ski.bindung_status:
         return _antwort(True, "Bindung war bereits geprüft", "service")
     return _antwort(True, f"Bindung von Ski {ski.id} an das Center gesendet", "service")
