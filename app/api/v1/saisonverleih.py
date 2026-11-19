@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 from typing import Literal, Optional
 from datetime import date
@@ -11,6 +11,8 @@ from app.utils.mail import sendeVerleihMail
 from app.services.bezahlstatus import verleih_bezahlt_setzen
 from app.services.verleih_benachrichtigung import abhol_mail_mit_status, abhol_mail_nach_wechsel as _abhol_mail_nach_wechsel, status_vor_aenderung as _status
 from app.schemas.quittung import BezahltSetzen
+from app.schemas.scanner import ScannerWebSocketMessage
+from app.utils.skiscannerguimanager import scanner_gui_manager
 
 router = APIRouter(
     prefix="/saisonverleih",
@@ -230,7 +232,7 @@ def aendere_material(saisonverleih_id: int, material_id: int, daten: SaisonVerle
 
 
 @router.post("/{saisonverleih_id}/bindung-geprueft", response_model=SaisonVerleihMitMail)
-def bindung_geprueft(saisonverleih_id: int, anfrage: BindungGeprueftAnfrage, db: Session = Depends(get_db)):
+def bindung_geprueft(saisonverleih_id: int, anfrage: BindungGeprueftAnfrage, hintergrund: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Markiert die Bindungen der Materialzeilen als geprüft (ohne material_ids alle).
     Sind danach alle geprüft, wechselt ein Verleih in Vorbereitung auf "vorbereitet" und der Kunde bekommt die Abhol-Mail.
@@ -241,6 +243,13 @@ def bindung_geprueft(saisonverleih_id: int, anfrage: BindungGeprueftAnfrage, db:
     verleih, mail = abhol_mail_mit_status(db, verleih, status_vorher)
     antwort = SaisonVerleihMitMail.model_validate(verleih)
     antwort.mail = mail
+    # Statusmeldung ohne Scannername, damit andere Tablets und das Werkstatt-Dashboard gleich neu laden
+    hintergrund.add_task(scanner_gui_manager.sende_data_broadcast, ScannerWebSocketMessage(
+        message="Bindung geprüft",
+        success=True,
+        art="verleih",
+        verleih_id=saisonverleih_id,
+    ))
     return antwort
 
 

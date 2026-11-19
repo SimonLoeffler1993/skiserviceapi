@@ -96,18 +96,20 @@ def createSkiserviceAuftrag(db: Session, auftrag_data: AuftragCreateSchema):
     db.refresh(new_auftrag)
     return new_auftrag
 
-def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> bool:
+def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> list[int]:
+    """Markiert die Bindungen als geprüft. Gibt die IDs der betroffenen Aufträge zurück, leer = keine Ski gefunden."""
     skis = db.query(Ski).filter(Ski.id.in_(ski_ids)).all()
-    
+
     if not skis:
-        return False
+        return []
 
     for ski in skis:
         ski.bindung_status = True
         ski.gepueft = date.today()
+    auftrag_ids = sorted({ski.auftrag_id for ski in skis if ski.auftrag_id is not None})
 
     db.commit()
-    return True
+    return auftrag_ids
 
 def auftraege_kunde(db: Session, kunde_id: int) -> list[Auftrag]:
     """Alle Aufträge eines Kunden über alle Saisons, neueste zuerst."""

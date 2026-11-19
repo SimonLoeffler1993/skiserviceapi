@@ -115,11 +115,20 @@ async def bindungfertig(SkisChecked: SkiBindungFertigSchema, db: Session = Depen
     """
     Endpunkt der eine Bindung auf geprüft setzt
     """
-    success = crud_skiservice.setzeBindungGeprueft(db, SkisChecked.ski_ids)
-    
-    if not success:
+    auftrag_ids = crud_skiservice.setzeBindungGeprueft(db, SkisChecked.ski_ids)
+
+    if not auftrag_ids:
         raise HTTPException(status_code=404, detail="Keine Skis gefunden")
-    
+
+    # Wie beim Fertigstellen: Statusmeldung ohne Scannername, damit andere Tablets
+    # und das Werkstatt-Dashboard gleich neu laden
+    for auftrag_id in auftrag_ids:
+        await scanner_manager.sende_data_broadcast(ScannerWebSocketMessage(
+            message="Bindung geprüft",
+            success=True,
+            service_id=auftrag_id,
+        ))
+
     return {"success": True}
 
 @router.get("/preise", response_model=list[SkiServicePreiseSchema])
