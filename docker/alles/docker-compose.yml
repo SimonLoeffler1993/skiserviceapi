@@ -11,6 +11,10 @@ services:
         ports:
             - "8000:8000"
         environment:
+            # Nur beim allerersten Start ohne Benutzer: legt diesen Admin an (Passwort muss danach geändert werden).
+            # Alternativ den ersten Admin im Center unter /einrichtung anlegen. Danach wieder entfernen.
+            - ADMIN_BENUTZER=${ADMIN_BENUTZER:-}
+            - ADMIN_PASSWORT=${ADMIN_PASSWORT:-}
             - DB_HOST=${DB_HOST}
             - DB_PORT=${DB_PORT}
             - DB_USER=${DB_USER}
@@ -39,6 +43,8 @@ services:
             - skiserviceapi
         environment:
             - BACKEND_URL=${BACKEND_URL}
+            # Geräteschlüssel "Kundenterminal" aus dem Center (Verwalten → Geräte)
+            - GERAETE_SCHLUESSEL=${TERMINAL_SCHLUESSEL:-}
         restart: unless-stopped
 
     skiservicecenter:

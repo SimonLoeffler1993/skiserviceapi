@@ -77,6 +77,10 @@ services:
             - traefik.http.routers.api.tls.certresolver=dns
             - traefik.http.services.api.loadbalancer.server.port=8000
         environment:
+            # Nur beim allerersten Start ohne Benutzer: legt diesen Admin an (Passwort muss danach geändert werden).
+            # Alternativ den ersten Admin im Center unter /einrichtung anlegen. Danach wieder entfernen.
+            - ADMIN_BENUTZER=${ADMIN_BENUTZER:-}
+            - ADMIN_PASSWORT=${ADMIN_PASSWORT:-}
             - DB_HOST=mariadb
             - DB_PORT=3306
             - DB_USER=${DB_USER}
@@ -116,6 +120,8 @@ services:
         environment:
             # Geht auch an den Browser, deshalb die HTTPS-Adresse
             - BACKEND_URL=https://${API_DOMAIN}
+            # Geräteschlüssel "Kundenterminal" aus dem Center (Verwalten → Geräte)
+            - GERAETE_SCHLUESSEL=${TERMINAL_SCHLUESSEL:-}
         networks:
             - intern
         depends_on:
