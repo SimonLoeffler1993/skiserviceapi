@@ -96,18 +96,20 @@ def createSkiserviceAuftrag(db: Session, auftrag_data: AuftragCreateSchema):
     db.refresh(new_auftrag)
     return new_auftrag
 
-def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> bool:
+def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> list[int]:
+    """Markiert die Bindungen als geprüft. Gibt die IDs der betroffenen Aufträge zurück, leer = keine Ski gefunden."""
     skis = db.query(Ski).filter(Ski.id.in_(ski_ids)).all()
-    
+
     if not skis:
-        return False
+        return []
 
     for ski in skis:
         ski.bindung_status = True
         ski.gepueft = date.today()
+    auftrag_ids = sorted({ski.auftrag_id for ski in skis if ski.auftrag_id is not None})
 
     db.commit()
-    return True
+    return auftrag_ids
 
 def auftraege_kunde(db: Session, kunde_id: int) -> list[Auftrag]:
     """Alle Aufträge eines Kunden über alle Saisons, neueste zuerst."""
@@ -196,6 +198,19 @@ def _ist_bezahlt(auftrag: Auftrag) -> bool:
 
 def _alle_ski_fertig(auftrag: Auftrag) -> bool:
     return bool(auftrag.skis) and all(ski.status == 1 for ski in auftrag.skis)
+
+
+def fertig_mail_faellig(auftrag: Auftrag) -> bool:
+    """
+    Ob die Fertig-Mail jetzt fällig ist: alle Ski fertig und, je nach Einstellung
+    SKISERVICE_FERTIG_MAIL_WANN, auch alle beauftragten Bindungschecks geprüft.
+    Ski ohne Bindungscheck zählen als erledigt.
+    """
+    if not _alle_ski_fertig(auftrag):
+        return False
+    if einstellungen.hole("SKISERVICE_FERTIG_MAIL_WANN") != "service_bindung":
+        return True
+    return all(ski.bindung_status for ski in auftrag.skis if ski.bindung_check)
 
 
 def _fertig_status_aktualisieren(auftrag: Auftrag):

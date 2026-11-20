@@ -100,6 +100,10 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("SMTP_USER", "mail", "Benutzer", beschreibung="Leer lassen, wenn der Server ohne Anmeldung versendet (Exchange Relay)."),
     EinstellungDefinition("SMTP_PASSWORD", "mail", "Passwort", typ="passwort"),
     EinstellungDefinition("EMAIL_FROM", "mail", "Absender Adresse"),
+    EinstellungDefinition("SKISERVICE_FERTIG_MAIL_WANN", "mail", "Skiservice Fertig-Mail senden", typ="auswahl",
+                          standard="service", optionen=["service", "service_bindung"],
+                          beschreibung="Service: sobald alle Ski fertig sind, offene Bindungsprüfungen egal. "
+                                       "Service + Bindung: erst wenn zusätzlich alle beauftragten Bindungschecks geprüft sind."),
 
     # Lexware
     EinstellungDefinition("LEXWARE_BASEURL", "lexware", "API Adresse", standard="https://api.lexware.io"),
