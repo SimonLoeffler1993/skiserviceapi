@@ -21,6 +21,7 @@ import nh3
 from fastapi.templating import Jinja2Templates
 from markupsafe import escape
 from sqlalchemy.orm import Session
+from app.services import ereignisse
 
 from app.db.session import SessionLocal
 from app.models.einstellung import Einstellung
@@ -364,6 +365,7 @@ def speichern(db: Session, schluessel: str, betreff: str, inhalt: str) -> dict:
     definition = _definition(schluessel)
     zeile = _schreibe(db, definition, bereinige_betreff(definition, betreff),
                       bereinige_inhalt(definition, inhalt), datetime.now())
+    ereignisse.erfasse(db, "vorlage_geaendert", text=definition.bezeichnung)
     db.commit()
     return _fuer_anzeige(definition, zeile)
 
@@ -372,6 +374,7 @@ def zuruecksetzen(db: Session, schluessel: str) -> dict:
     """Setzt Betreff und Inhalt wieder auf den Originaltext."""
     definition = _definition(schluessel)
     zeile = _schreibe(db, definition, definition.original_betreff, definition.original_inhalt, None)
+    ereignisse.erfasse(db, "vorlage_geaendert", text=f"{definition.bezeichnung} (auf Original zurückgesetzt)")
     db.commit()
     return _fuer_anzeige(definition, zeile)
 

@@ -359,11 +359,17 @@ def speichern(db: Session, werte: dict[str, Any]):
         if sekunden not in (None, "") and not 0 <= int(sekunden) <= SCANNER_COUNTDOWN_MAX:
             raise ValueError(f"{DEFINITION_NACH_SCHLUESSEL[schluessel].bezeichnung}: 0 bis {SCANNER_COUNTDOWN_MAX} erlaubt.")
 
+    # Spät importiert: ereignisse -> zugriff -> einstellungen
+    from app.services import ereignisse
     for schluessel, wert in werte.items():
         definition = DEFINITION_NACH_SCHLUESSEL[schluessel]
         if definition.geheim and (wert is None or wert == ""):
             continue
         eintrag = db.get(Einstellung, schluessel)
+        neu = _als_text(definition, wert)
+        if (eintrag.Wert if eintrag else None) != neu:
+            ereignisse.erfasse(db, "einstellung_geaendert", text=definition.bezeichnung,
+                               daten={"schluessel": schluessel, "wert": "geändert" if definition.geheim else neu})
         if eintrag is None:
             db.add(Einstellung(Schluessel=schluessel, Wert=_als_text(definition, wert)))
         else:

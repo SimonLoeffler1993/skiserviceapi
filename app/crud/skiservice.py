@@ -10,6 +10,7 @@ from app.crud import saison as crud_saison
 from app.crud.kunde import kunde_name_bedingungen
 from app.schemas.skiservice import AuftragCreateSchema, AuftragUpdateSchema, SkiCreateSchema, SkiUpdateSchema
 from app.services import einstellungen
+from app.services import ereignisse
 from app.crud.bindungsdaten import setze_bindungsdaten
 
 def getSkiserviceAuftrag(db: Session, skiservice_auftrag_id: int, mitski: bool = True):
@@ -26,6 +27,8 @@ def setzeSkiFertig(db: Session, skiservice_auftrag_id: int, ski_ids: list[int]):
 
     for ski in auftrag.skis:
         if ski.id in ski_ids:
+            if ski.status != 1:
+                ereignisse.erfasse(db, "ski_fertig", auftrag_id=auftrag.id, kunde_id=auftrag.kunden_id, text=ski.name or "")
             ski.status = 1  # Status auf "fertig" setzen
             ski.fertig_date = datetime.now().strftime("%d.%m.%Y")  # Fertigstellungsdatum setzen
 
@@ -92,6 +95,9 @@ def createSkiserviceAuftrag(db: Session, auftrag_data: AuftragCreateSchema):
     for ski, ski_daten in zip(new_auftrag.skis, auftrag_data.skis):
         setze_bindungsdaten(db, ski, auftrag_data.kunden_id, ski_daten.bindungsdaten, ski_daten.vorlage_id)
     db.add(new_auftrag)
+    db.flush()
+    ereignisse.erfasse(db, "auftrag_angelegt", auftrag_id=new_auftrag.id, kunde_id=new_auftrag.kunden_id,
+                       text=f"{name}, {len(new_auftrag.skis)} Ski")
     db.commit()
     db.refresh(new_auftrag)
     return new_auftrag
@@ -104,6 +110,9 @@ def setzeBindungGeprueft(db: Session, ski_ids: list[int]) -> list[int]:
         return []
 
     for ski in skis:
+        if not ski.bindung_status:
+            ereignisse.erfasse(db, "bindung_geprueft", auftrag_id=ski.auftrag_id,
+                               kunde_id=ski.auftrag.kunden_id if ski.auftrag else None, text=ski.name or "")
         ski.bindung_status = True
         ski.gepueft = date.today()
     auftrag_ids = sorted({ski.auftrag_id for ski in skis if ski.auftrag_id is not None})
@@ -248,7 +257,11 @@ def setzeAbgeholt(db: Session, auftrag_id: int, abgeholt: bool):
     auftrag = getSkiserviceAuftrag(db, auftrag_id)
     if auftrag is None:
         return None
+    war_abgeholt = auftrag.wie == "2"
     auftrag_abgeholt_anwenden(auftrag, abgeholt)
+    if abgeholt != war_abgeholt:
+        ereignisse.erfasse(db, "auftrag_abgeholt" if abgeholt else "auftrag_abgeholt_zurueck",
+                           auftrag_id=auftrag.id, kunde_id=auftrag.kunden_id)
     db.commit()
     db.refresh(auftrag)
     return auftrag
@@ -319,10 +332,14 @@ def aendereSki(db: Session, auftrag_id: int, ski_id: int, daten: SkiUpdateSchema
     if preisrelevant and _ist_bezahlt(auftrag):
         raise AuftragGesperrt("Der Auftrag ist bezahlt, Service und Preise können nicht mehr geändert werden.")
 
+    status_vorher = ski.status
     for feld, wert in aenderungen.items():
         if wert is None and feld not in ("komentar",):
             continue
         setattr(ski, feld, wert)
+    if "status" in aenderungen and (status_vorher == 1) != (ski.status == 1):
+        ereignisse.erfasse(db, "ski_fertig" if ski.status == 1 else "ski_fertig_zurueck",
+                           auftrag_id=auftrag.id, kunde_id=auftrag.kunden_id, text=ski.name or "")
 
     if "status" in aenderungen:
         ski.fertig_date = datetime.now().strftime("%d.%m.%Y") if ski.status == 1 else None
@@ -362,6 +379,8 @@ def loescheAuftrag(db: Session, auftrag_id: int) -> bool:
         return False
     if _ist_bezahlt(auftrag):
         raise AuftragGesperrt("Der Auftrag ist bezahlt und kann nicht gelöscht werden.")
+    # Ohne Auftrag_ID: die Zeile verschwindet, das Ereignis bleibt beim Kunden
+    ereignisse.erfasse(db, "auftrag_geloescht", kunde_id=auftrag.kunden_id, text=auftrag.name or "")
     db.delete(auftrag)
     db.commit()
     return True

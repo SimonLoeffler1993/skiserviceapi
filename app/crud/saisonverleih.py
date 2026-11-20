@@ -13,6 +13,7 @@ from app.crud import saison as crud_saison
 from app.crud.kunde import kunde_name_bedingungen
 from app.utils.skiEttiket import SkiEttiket
 from app.services import einstellungen
+from app.services import ereignisse
 from app.crud.bindungsdaten import bindung_werte, setze_bindungsdaten
 
 logger = logging.getLogger(__name__)
@@ -303,6 +304,9 @@ def create_saisonverleih(db: Session, saisonverleih: SaisonVerleihCreate):
             setze_bindungsdaten(db, neues_material, saisonverleih.Kunde_ID, material.bindungsdaten, material.vorlage_id)
 
         db.add(db_saisonverleih)
+        db.flush()
+        ereignisse.erfasse(db, "verleih_angelegt", verleih_id=db_saisonverleih.ID, kunde_id=db_saisonverleih.Kunde_ID,
+                           text=f"{db_saisonverleih.Name}, {len(db_saisonverleih.Material)} Ausrüstung")
         db.commit()
         db.refresh(db_saisonverleih)
 
@@ -357,7 +361,11 @@ def setze_status(db: Session, saisonverleih_id: int, status: str):
     saisonverleih = get_saisonverleih(db, saisonverleih_id)
     if not saisonverleih:
         return None
+    vorher = saisonverleih.Status
     status_anwenden(saisonverleih, status)
+    if vorher != status:
+        ereignisse.erfasse(db, "verleih_zurueckgegeben" if status == "zurueck" else "verleih_status",
+                           verleih_id=saisonverleih.ID, kunde_id=saisonverleih.Kunde_ID, text=f"{vorher} → {status}")
     db.commit()
     db.refresh(saisonverleih)
     return saisonverleih
@@ -550,6 +558,12 @@ def _status_nach_pruefung(saisonverleih: SaisonVerleih):
         saisonverleih.Status = "vorbereitung"
 
 
+def _material_bezeichnung(material: SaisonVerleihMaterial) -> str:
+    teile = [material.SkiFahrerName, f"Ski {material.skinr}" if material.skinr else None,
+             f"Schuh {material.schuhnr}" if material.schuhnr else None]
+    return ", ".join(t for t in teile if t) or f"Zeile {material.ID}"
+
+
 def pruefe_bindungen(db: Session, saisonverleih_id: int, material_ids: Optional[list[int]] = None):
     """
     Markiert die Bindung der Materialzeilen als geprüft, ohne Angabe alle.
@@ -563,6 +577,8 @@ def pruefe_bindungen(db: Session, saisonverleih_id: int, material_ids: Optional[
         if material.BindungGeprueft:
             continue
         if material_ids is None or material.ID in material_ids:
+            ereignisse.erfasse(db, "verleih_bindung_geprueft", verleih_id=saisonverleih.ID,
+                               kunde_id=saisonverleih.Kunde_ID, text=_material_bezeichnung(material))
             material.BindungGeprueft = True
             material.BindungGeprueft_Am = heute
     _status_nach_pruefung(saisonverleih)
@@ -593,6 +609,7 @@ def loesche_saisonverleih(db: Session, saisonverleih_id: int) -> bool:
     if saisonverleih is None:
         return False
     _pruefe_nicht_bezahlt(saisonverleih)
+    ereignisse.erfasse(db, "verleih_geloescht", kunde_id=saisonverleih.Kunde_ID, text=saisonverleih.Name or "")
     db.delete(saisonverleih)
     db.commit()
     return True

@@ -66,6 +66,10 @@ class AuftragSchema(BaseModel):
     rabat_waerung: Optional[int] = None
     leih_versicherung: Optional[int] = None
     quittung_id: Optional[int] = None
+    # Nachvollziehbarkeit (Anzeigename des Benutzers), bei alten Aufträgen leer
+    angelegt_von_name: Optional[str] = None
+    geaendert_von_name: Optional[str] = None
+    geaendert_am: Optional[datetime] = None
 
     skis: list[SkiSchema] = []
 

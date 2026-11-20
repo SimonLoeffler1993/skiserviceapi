@@ -25,6 +25,10 @@ from app.services import checkin_schluessel
 from app.services import einstellungen as einstellungen_service
 from app.services import mailvorlagen as mailvorlagen_service
 from app.services import anmeldung as anmeldung_service
+from app.services import nachvollziehbarkeit
+
+# angelegt_von / geaendert_von bei jedem Flush setzen
+nachvollziehbarkeit.registrieren()
 
 # TODO: #10 Logging einstellungen
 logging.basicConfig(

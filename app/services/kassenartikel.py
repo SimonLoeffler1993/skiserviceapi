@@ -5,6 +5,8 @@ from datetime import date
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from app.core.zugriff import aktueller_benutzer_id
+from app.services import ereignisse
 
 from app.models.skiservice import Auftrag, Ski
 from app.models.saisonverleih import SaisonVerleih, SaisonVerleihMaterial
@@ -249,6 +251,7 @@ class KasseService:
                 quittung.Bar = zuBezahlen.bar
                 quittung.AnzAuftrag = 0
                 quittung.AnzVerleih = 0
+                quittung.Kassiert_Von = aktueller_benutzer_id()
             else:
                 quittung = Quittung(
                     Name=crud_saison.get_next_QuittungNummer(self.db),
@@ -265,6 +268,7 @@ class KasseService:
                     LexID="",
                     NurExtern=False
                 )
+                quittung.Kassiert_Von = aktueller_benutzer_id()
                 self.db.add(quittung)
                 # ID der Quittung holen, ohne zu committen
                 self.db.flush()
@@ -276,6 +280,9 @@ class KasseService:
                 auftrag.quittung_id = quittung.ID
                 if zuBezahlen.abgeholt:
                     auftrag_abgeholt_anwenden(auftrag, True)
+                ereignisse.erfasse(self.db, "bezahlt", auftrag_id=auftrag.id, kunde_id=auftrag.kunden_id,
+                                   quittung_id=quittung.ID,
+                                   text=f"Kasse, {quittung.Name}" + (", abgeholt" if zuBezahlen.abgeholt else ""))
                 quittung.AnzAuftrag += 1
 
                 # Skiservice Auftrag als Quittungsartikel hinzufügen
@@ -293,8 +300,12 @@ class KasseService:
                 verleih.Bezahlt_Am = date.today()
                 verleih.QuittungID = quittung.ID
                 # Schon abgeholte oder zurückgegebene Verleihe behalten ihren Status
-                if zuBezahlen.abgeholt and verleih.Status in ("vorbereitung", "vorbereitet"):
+                abholen = zuBezahlen.abgeholt and verleih.Status in ("vorbereitung", "vorbereitet")
+                if abholen:
                     status_anwenden(verleih, "unterwegs")
+                ereignisse.erfasse(self.db, "bezahlt", verleih_id=verleih.ID, kunde_id=verleih.Kunde_ID,
+                                   quittung_id=quittung.ID,
+                                   text=f"Kasse, {quittung.Name}" + (", abgeholt" if abholen else ""))
                 quittung.AnzVerleih += 1
 
                 # Verleih als Quittungsartikel hinzufügen

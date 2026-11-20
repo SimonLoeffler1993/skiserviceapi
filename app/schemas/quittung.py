@@ -167,4 +167,6 @@ class QuittungListeEintrag(BaseModel):
     BuchhaltungSync: bool
     Storniert: bool = False
     Storniert_Am: date | None = None
+    KassiertVonName: str | None = None
+    StorniertVonName: str | None = None
     artikelgruppen: list[QuittungGruppeArtikel] = []
