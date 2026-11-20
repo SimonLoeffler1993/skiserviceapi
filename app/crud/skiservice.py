@@ -200,6 +200,19 @@ def _alle_ski_fertig(auftrag: Auftrag) -> bool:
     return bool(auftrag.skis) and all(ski.status == 1 for ski in auftrag.skis)
 
 
+def fertig_mail_faellig(auftrag: Auftrag) -> bool:
+    """
+    Ob die Fertig-Mail jetzt fällig ist: alle Ski fertig und, je nach Einstellung
+    SKISERVICE_FERTIG_MAIL_WANN, auch alle beauftragten Bindungschecks geprüft.
+    Ski ohne Bindungscheck zählen als erledigt.
+    """
+    if not _alle_ski_fertig(auftrag):
+        return False
+    if einstellungen.hole("SKISERVICE_FERTIG_MAIL_WANN") != "service_bindung":
+        return True
+    return all(ski.bindung_status for ski in auftrag.skis if ski.bindung_check)
+
+
 def _fertig_status_aktualisieren(auftrag: Auftrag):
     """
     Setzt den Auftrag auf fertig, wenn alle Ski fertig sind, sonst wieder auf offen.

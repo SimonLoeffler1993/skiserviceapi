@@ -60,6 +60,22 @@ async def get_auftrag(skiservice_auftrag_id: int, db: Session = Depends(get_db))
     return auftrag
 
 
+async def _fertig_mail(db: Session, auftrag, auftragSchema: AuftragSchema) -> tuple[MailStatus, str]:
+    """
+    Sendet die Fertig-Mail, wenn der Kunde noch nicht benachrichtigt wurde.
+    Gibt den Mail-Status für den Hinweis auf der Scanner-Seite und einen Text für die Meldung zurück.
+    """
+    if (auftrag.benachrichtigt or "").lower() != "nein":
+        return None, " Kunde wurde bereits benachrichtigt."
+    if await run_in_threadpool(sendeFertigMail, auftragSchema):
+        crud_skiservice.setzeBenachrichtigt(db, auftrag.id, benachrichtigt=True)
+        return "gesendet", " und Kunde benachrichtigt."
+    if auftragSchema.kunde and auftragSchema.kunde.Email:
+        # Ohne Adresse ist nichts fehlgeschlagen, dafür hat das Center einen eigenen Hinweis
+        return "fehlgeschlagen", " E-Mail an den Kunden konnte nicht gesendet werden."
+    return None, ""
+
+
 @router.post("/skifertig")
 async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depends(get_db)):
     """
@@ -84,18 +100,12 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
         nachricht = " Alle Ski sind fertig bearbeitet."
         if not AuftragSkiFertig.mail:
             nachricht = " Alle Ski sind fertig bearbeitet (ohne Mail)."
-        elif auftrag.benachrichtigt.lower() == "nein":
-            mailSend = await run_in_threadpool(sendeFertigMail, auftragSchema)
-            if mailSend:
-                crud_skiservice.setzeBenachrichtigt(db, AuftragSkiFertig.id, benachrichtigt=True)
-                nachricht += " und Kunde benachrichtigt."
-                mail = "gesendet"
-            elif auftragSchema.kunde and auftragSchema.kunde.Email:
-                # Ohne Adresse ist nichts fehlgeschlagen, dafür hat das Center einen eigenen Hinweis
-                nachricht += " E-Mail an den Kunden konnte nicht gesendet werden."
-                mail = "fehlgeschlagen"
+        elif not crud_skiservice.fertig_mail_faellig(auftrag):
+            # Einstellung "Service + Bindung": die Mail geht erst nach der letzten Bindungsprüfung raus
+            nachricht += " Fertig-Mail folgt nach der Bindungsprüfung."
         else:
-            nachricht += " Kunde wurde bereits benachrichtigt."
+            mail, text = await _fertig_mail(db, auftrag, auftragSchema)
+            nachricht += text
 
     await scanner_manager.sende_data_broadcast(ScannerWebSocketMessage(
         message=nachricht,
@@ -120,16 +130,30 @@ async def bindungfertig(SkisChecked: SkiBindungFertigSchema, db: Session = Depen
     if not auftrag_ids:
         raise HTTPException(status_code=404, detail="Keine Skis gefunden")
 
+    # Ergebnis der Fertig-Mail, für den Hinweis auf der Scanner-Seite (bei mehreren Aufträgen das erste)
+    antwort_mail: MailStatus = None
+
     # Wie beim Fertigstellen: Statusmeldung ohne Scannername, damit andere Tablets
     # und das Werkstatt-Dashboard gleich neu laden
     for auftrag_id in auftrag_ids:
+        nachricht = "Bindung geprüft"
+        mail: MailStatus = None
+        auftrag = crud_skiservice.getSkiserviceAuftrag(db, auftrag_id)
+        # Bei Einstellung "Service + Bindung" geht die Fertig-Mail nach der letzten Bindungsprüfung raus,
+        # sonst wurde sie schon beim Fertigstellen gesendet (benachrichtigt) und hier passiert nichts
+        if auftrag is not None and crud_skiservice.fertig_mail_faellig(auftrag):
+            mail, text = await _fertig_mail(db, auftrag, AuftragSchema.model_validate(auftrag))
+            if mail is not None:
+                nachricht += "." + text
+        antwort_mail = antwort_mail or mail
         await scanner_manager.sende_data_broadcast(ScannerWebSocketMessage(
-            message="Bindung geprüft",
+            message=nachricht,
             success=True,
             service_id=auftrag_id,
+            mail=mail,
         ))
 
-    return {"success": True}
+    return {"success": True, "mail": antwort_mail}
 
 @router.get("/preise", response_model=list[SkiServicePreiseSchema])
 async def get_preise(db: Session = Depends(get_db)):
