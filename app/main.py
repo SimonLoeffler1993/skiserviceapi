@@ -16,11 +16,13 @@ from app.api.v1 import checkin
 from app.api.v1 import mailvorlagen
 from app.api.v1 import mailprotokoll
 from app.api.v1 import werkstatt
+from app.api.v1 import auth, benutzer, geraete, ereignisse
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services import checkin_schluessel
 from app.services import einstellungen as einstellungen_service
 from app.services import mailvorlagen as mailvorlagen_service
+from app.services import anmeldung as anmeldung_service
 
 # TODO: #10 Logging einstellungen
 logging.basicConfig(
@@ -50,6 +52,12 @@ async def lifespan(app: FastAPI):
             mailvorlagen_service.beim_start(db)
     except Exception:
         logging.getLogger(__name__).exception("Mail-Vorlagen konnten nicht angelegt werden")
+    try:
+        # Abgelaufene Sitzungen aufräumen, ggf. ersten Admin aus ADMIN_BENUTZER / ADMIN_PASSWORT anlegen
+        with SessionLocal() as db:
+            anmeldung_service.beim_start(db)
+    except Exception:
+        logging.getLogger(__name__).exception("Benutzerverwaltung konnte nicht vorbereitet werden")
     yield
 
 app = FastAPI(title="SkiApp API", version="0.0.1", lifespan=lifespan)
@@ -89,6 +97,10 @@ app.include_router(checkin.router, prefix=appPrefix)
 app.include_router(mailvorlagen.router, prefix=appPrefix)
 app.include_router(mailprotokoll.router, prefix=appPrefix)
 app.include_router(werkstatt.router, prefix=appPrefix)
+app.include_router(auth.router, prefix=appPrefix)
+app.include_router(benutzer.router, prefix=appPrefix)
+app.include_router(geraete.router, prefix=appPrefix)
+app.include_router(ereignisse.router, prefix=appPrefix)
 
 @app.get("/")
 def read_root():

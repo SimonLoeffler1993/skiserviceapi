@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.deps import get_db
 from app.schemas.einstellungen import EinstellungRead, EinstellungenSpeichern, TestMail, TestErgebnis
-from app.services import einstellungen
+from app.services import einstellungen, oidc
 from app.utils.mail import sendeMail
 from app.utils.skiEttiket import SkiEttiket
 from app.utils.lexware import LexwareAPI
@@ -32,6 +32,8 @@ def speichere_einstellungen(daten: EinstellungenSpeichern, db: Session = Depends
         einstellungen.speichern(db, daten.werte)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if any(s.startswith("OIDC_") for s in daten.werte):
+        oidc.cache_leeren()
     return einstellungen.alle_fuer_anzeige()
 
 
@@ -80,3 +82,13 @@ def teste_lexware():
     except Exception as e:
         return {"success": False, "message": f"Verbindung fehlgeschlagen: {e}"}
     return {"success": True, "message": f"Verbunden mit {profil.get('companyName', 'Lexware Office')}."}
+
+
+@router.post("/test/oidc", response_model=TestErgebnis)
+def teste_oidc():
+    """Ruft die Konfiguration des eingestellten OIDC-Anbieters ab."""
+    try:
+        info = oidc.testen()
+    except oidc.OidcFehler as e:
+        return {"success": False, "message": e.text}
+    return {"success": True, "message": f"Verbunden mit {info['anbieter']} ({info['issuer']}).", "data": info}
