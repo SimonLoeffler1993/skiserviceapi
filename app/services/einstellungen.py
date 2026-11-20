@@ -175,10 +175,10 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("MAX_FEHLVERSUCHE", "anmeldung", "Sperre nach Fehlversuchen", typ="zahl", standard=5,
                           beschreibung="Falsches Passwort oder falsche PIN, zusammen gezählt."),
     EinstellungDefinition("SPERRE_MINUTEN", "anmeldung", "Sperre in Minuten", typ="zahl", standard=5),
-    EinstellungDefinition("ERLAUBTE_URSPRUENGE", "anmeldung", "Adressen von Center und Kasse",
-                          beschreibung="Mit Komma getrennt, z.B. https://center.example.de,https://kasse.example.de. "
-                                       "Nur diese Seiten dürfen die API aus dem Browser aufrufen und sind als Rücksprung nach der OIDC-Anmeldung erlaubt. "
-                                       "Leer = alle Seiten erlaubt, OIDC-Anmeldung nicht möglich."),
+    EinstellungDefinition("ERLAUBTE_URSPRUENGE", "anmeldung", "Adressen von Center, Kasse und Kundenterminal",
+                          beschreibung="Mit Komma getrennt, z.B. https://center.example.de,https://kasse.example.de,https://terminal.example.de. "
+                                       "Nur diese Seiten dürfen die API aus dem Browser aufrufen (auch das Kundenterminal für die Live-Verbindung) "
+                                       "und sind als Rücksprung nach der OIDC-Anmeldung erlaubt. Leer = alle Seiten erlaubt, OIDC-Anmeldung nicht möglich."),
 
     # Anmeldung mit OIDC (ein Anbieter)
     EinstellungDefinition("OIDC_AKTIV", "oidc", "Anmeldung mit OIDC", typ="bool", standard=False),

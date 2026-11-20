@@ -123,7 +123,7 @@ def _konfiguration_pruefen() -> None:
     if not einstellungen.hole("OIDC_CLIENT_SECRET"):
         raise OidcFehler("konfiguration", "Das Client-Secret fehlt.")
     if not einstellungen.urspruenge():
-        raise OidcFehler("konfiguration", "Unter Benutzer & Anmeldung sind keine Adressen von Center und Kasse eingetragen.")
+        raise OidcFehler("konfiguration", "Unter Benutzer & Anmeldung sind keine Adressen von Center, Kasse und Kundenterminal eingetragen.")
 
 
 def aktiv() -> bool:
@@ -193,7 +193,7 @@ def ziel_pruefen(ziel: str) -> str:
     if teile.scheme not in ("http", "https") or not teile.netloc:
         raise OidcFehler("ziel_nicht_erlaubt")
     if ursprung not in [u.lower() for u in einstellungen.urspruenge()]:
-        raise OidcFehler("ziel_nicht_erlaubt", f"{ursprung} steht nicht in den Adressen von Center und Kasse.")
+        raise OidcFehler("ziel_nicht_erlaubt", f"{ursprung} steht nicht in den Adressen von Center, Kasse und Kundenterminal.")
     return ziel
 
 
