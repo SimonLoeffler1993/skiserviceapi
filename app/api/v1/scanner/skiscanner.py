@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from app.core.zugriff import Zugriff, angemeldet, anmeldung_erzwungen, geraet_oder_angemeldet, nur_admin, zugriff_aus_ticket
 from sqlalchemy.orm import Session
 
 from app.api.v1.health import health_antwort
@@ -14,22 +15,25 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-@router.get("/test")
+@router.get("/test", dependencies=[Depends(angemeldet)])
 async def test():
     return {"message": "Skiscanner API is working!"}
 
 @router.post("/scan", response_model=ScanAntwort)
-async def scan(scanner_data: ScannerRead, db: Session = Depends(get_db)):
+async def scan(scanner_data: ScannerRead, db: Session = Depends(get_db),
+               zugriff: Zugriff = Depends(geraet_oder_angemeldet("scanner"))):
     """
     Wertet einen Scan vom Skiscanner aus, je nach Modus (trigger):
     1 = Fertigstellen (nur Service-Etiketten), 2 = Bindung geprüft (Service- und Verleih-Etiketten).
     """
-    scanner_register.melden(ScannerMeldung(name=scanner_data.name, modus=scanner_data.trigger))
+    scanner_register.melden(ScannerMeldung(name=scanner_data.name, modus=scanner_data.trigger),
+                            schluessel=zugriff.schluessel.name if zugriff.schluessel else None)
     return await scan_auswerten(db, scanner_data)
 
 
 @router.post("/melden")
-def melden(meldung: ScannerMeldung, db: Session = Depends(get_db)):
+def melden(meldung: ScannerMeldung, db: Session = Depends(get_db),
+           zugriff: Zugriff = Depends(geraet_oder_angemeldet("scanner"))):
     """
     Health-Check des Scanners (alle 30 s): trägt ihn als verbunden ein und prüft wie /health die Datenbank.
     Bei nicht erreichbarer Datenbank 503.
@@ -38,18 +42,19 @@ def melden(meldung: ScannerMeldung, db: Session = Depends(get_db)):
     """
     antwort = health_antwort(db)
     # Bei einem Datenbankfehler (503) bleibt die Anforderung für die nächste Meldung stehen
-    if scanner_register.melden(meldung, health_check=isinstance(antwort, dict)):
+    if scanner_register.melden(meldung, health_check=isinstance(antwort, dict),
+                               schluessel=zugriff.schluessel.name if zugriff.schluessel else None):
         antwort["update"] = True
     return antwort
 
 
-@router.get("/geraete", response_model=list[ScannerGeraet])
+@router.get("/geraete", response_model=list[ScannerGeraet], dependencies=[Depends(angemeldet)])
 def geraete():
     """Alle Scanner, die sich in den letzten 24 h gemeldet haben, mit verbunden = Meldung in den letzten 75 s."""
     return scanner_register.liste()
 
 
-@router.post("/geraete/{name}/update", response_model=ScannerGeraet)
+@router.post("/geraete/{name}/update", response_model=ScannerGeraet, dependencies=[Depends(nur_admin)])
 def update_anstossen(name: str):
     """
     Stößt das Firmware-Update eines Scanners an. Er erfährt es bei seiner nächsten Meldung (spätestens nach 30 s).
@@ -64,6 +69,17 @@ def update_anstossen(name: str):
 
 @router.websocket("/data")
 async def websocket_endpoint(websocket: WebSocket):
+    # Kein Header möglich: angemeldet über ?ticket= (POST /auth/ticket), ohne Ticket nur im Übergang
+    ticket = websocket.query_params.get("ticket")
+    try:
+        zugriff = zugriff_aus_ticket(ticket, websocket.url.path) if ticket else None
+    except HTTPException:
+        zugriff = None
+    if (zugriff is None or zugriff.benutzer is None) and (ticket or anmeldung_erzwungen()):
+        # Erst annehmen, dann schließen: so sieht der Browser den Code 4401 und holt ein neues Ticket
+        await websocket.accept()
+        await websocket.close(code=4401)
+        return
     await scanner_manager.verbinden(websocket)
     try:
         while True:

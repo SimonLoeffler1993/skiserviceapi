@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from app.core.zugriff import Zugriff, angemeldet, geraet_oder_angemeldet
 from fastapi.responses import StreamingResponse
 import asyncio
 import json
@@ -25,7 +26,7 @@ terminal_manager = KundenTerminalManager()
 # Abstand der Heartbeats an die Terminals
 HEARTBEAT_SEKUNDEN = 15
 
-@router.get("/test")
+@router.get("/test", dependencies=[Depends(angemeldet)])
 async def test(request: Request):
     async def event_stream():
         for i in range(10):
@@ -34,12 +35,13 @@ async def test(request: Request):
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
-@router.get("/terminals")
+@router.get("/terminals", dependencies=[Depends(angemeldet)])
 async def list_terminals(request: Request):
     terminals = terminal_manager.list_terminale()
-    return {"terminals": terminals}
+    ohne = sorted(t for t in terminals if t in terminal_manager.ohne_schluessel)
+    return {"terminals": terminals, "ohne_schluessel": ohne}
 
-@router.post("/zeigekunde")
+@router.post("/zeigekunde", dependencies=[Depends(angemeldet)])
 async def zeige_kunde(daten: SkiKundeZuTerminal, request: Request, db: Session = Depends(get_db)):
     if daten.terminal not in terminal_manager.verbindungen:
         return {"status": "Terminal not connected", "terminal": daten.terminal}
@@ -59,7 +61,7 @@ async def zeige_kunde(daten: SkiKundeZuTerminal, request: Request, db: Session =
       
     return {"status": "zeige_kunde command sent"}
 
-@router.post("/send/{terminal}")
+@router.post("/send/{terminal}", dependencies=[Depends(angemeldet)])
 async def send_message(request: Request, terminal: str):
     if terminal not in terminal_manager.verbindungen:
         return {"status": "Terminal not connected", "terminal": terminal}
@@ -69,10 +71,12 @@ async def send_message(request: Request, terminal: str):
 
 
 @router.get("/connect/{terminal}")
-async def connect_terminal(request: Request, terminal: str):
+async def connect_terminal(request: Request, terminal: str,
+                           zugriff: Zugriff = Depends(geraet_oder_angemeldet("terminal"))):
+    """SSE für das Kundenterminal. EventSource kann keine Header senden: Schlüssel bzw. Anmeldung kommen als ?ticket=."""
 
     async def event_stream(terminal: str):
-        queue = await terminal_manager.connect(terminal)
+        queue = await terminal_manager.connect(terminal, mit_schluessel=zugriff.schluessel is not None)
         try:
             while True:
                 if await request.is_disconnected():

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from app.core.zugriff import nur_admin, pruefe_admin
 from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
@@ -160,7 +161,7 @@ async def get_preise(db: Session = Depends(get_db)):
     preise = crud_skiservicepreis.get_ski_service_preise(db)
     return preise
 
-@router.post("/preise", response_model=SkiServicePreiseSchema)
+@router.post("/preise", response_model=SkiServicePreiseSchema, dependencies=[Depends(nur_admin)])
 async def create_preis(preis: SkiServicePreiseBase, db: Session = Depends(get_db)):
     new_preis = crud_skiservicepreis.create_ski_service_preis(db, preis)
     return new_preis
@@ -182,7 +183,7 @@ async def erstelle_auftrag(auftrag: AuftragCreateSchema, hintergrundProzess: Bac
 
     return skiauftrag
 
-@router.post("/bindungsservice", response_model=SkiServicePreiseSchema)
+@router.post("/bindungsservice", response_model=SkiServicePreiseSchema, dependencies=[Depends(nur_admin)])
 async def set_bindungsservice(bindungsserviceid: int, db: Session = Depends(get_db)):
     """
     Setzt den Bindungsservice für einen Skiservice-Auftrag.
@@ -216,6 +217,8 @@ def setze_auftrag_bezahlt(skiservice_auftrag_id: int, daten: BezahltSetzen, db: 
     Mit mit_quittung werden die Quittung und alle Positionen darauf ebenfalls geändert.
     Mit quittung_entfernen wird bei "nicht bezahlt" nur dieser Auftrag von der Quittung genommen.
     """
+    if daten.quittung_entfernen:
+        pruefe_admin()
     if auftrag_bezahlt_setzen(db, skiservice_auftrag_id, daten.bezahlt, daten.mit_quittung, daten.quittung_entfernen) is None:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
     return crud_skiservice.getSkiserviceAuftrag(db, skiservice_auftrag_id)
@@ -242,7 +245,7 @@ def benachrichtige_kunde(skiservice_auftrag_id: int, db: Session = Depends(get_d
     return crud_skiservice.getSkiserviceAuftrag(db, skiservice_auftrag_id)
 
 
-@router.delete("/auftrag/{skiservice_auftrag_id}")
+@router.delete("/auftrag/{skiservice_auftrag_id}", dependencies=[Depends(nur_admin)])
 def loesche_auftrag(skiservice_auftrag_id: int, db: Session = Depends(get_db)):
     """
     Löscht einen Auftrag mit allen Ski. Bezahlte Aufträge können nicht gelöscht werden.

@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends
 import logging
 from contextlib import asynccontextmanager
 
@@ -17,6 +17,8 @@ from app.api.v1 import mailvorlagen
 from app.api.v1 import mailprotokoll
 from app.api.v1 import werkstatt
 from app.api.v1 import auth, benutzer, geraete, ereignisse
+from app.core.cors import EinstellungsCors
+from app.core.zugriff import angemeldet, nur_admin
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services import checkin_schluessel
@@ -64,39 +66,37 @@ app = FastAPI(title="SkiApp API", version="0.0.1", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
 
-# TODO: #9 CORS in einstellungen
-# CORS configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development; adjust in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS nach ERLAUBTE_URSPRUENGE (Einstellungen → Benutzer & Anmeldung)
+app.add_middleware(EinstellungsCors)
 
 appPrefix = "/api/v1"
+
+# Rechte, siehe app/core/zugriff.py. Ohne Vorgabe hier (kunden, orte, event, saison, skiscanner, health,
+# auth, benutzer, geraete, ereignisse) steht der Schutz an den einzelnen Routen bzw. im Router selbst.
+MITARBEITER = [Depends(angemeldet)]
+ADMIN = [Depends(nur_admin)]
 
 app.include_router(kunden.router, prefix=appPrefix)
 app.include_router(orte.router, prefix=appPrefix)
 app.include_router(event.router, prefix=appPrefix)
-app.include_router(saisonverleih.router, prefix=appPrefix)
-app.include_router(ski.router, prefix=appPrefix)
-app.include_router(schuh.router, prefix=appPrefix)
-app.include_router(stock.router, prefix=appPrefix)
-app.include_router(ettiket.router, prefix=appPrefix)
+app.include_router(saisonverleih.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(ski.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(schuh.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(stock.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(ettiket.router, prefix=appPrefix, dependencies=MITARBEITER)
 app.include_router(saison.router, prefix=appPrefix)
-app.include_router(quittungen.router, prefix=appPrefix)
+app.include_router(quittungen.router, prefix=appPrefix, dependencies=MITARBEITER)
 app.include_router(skiscanner.router, prefix=appPrefix)
-app.include_router(skiservice.router, prefix=appPrefix)
-app.include_router(kasse.router, prefix=appPrefix)
-app.include_router(einstellungen.router, prefix=appPrefix)
-app.include_router(bindungsdaten.router, prefix=appPrefix)
-app.include_router(handware.router, prefix=appPrefix)
+app.include_router(skiservice.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(kasse.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(einstellungen.router, prefix=appPrefix, dependencies=ADMIN)
+app.include_router(bindungsdaten.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(handware.router, prefix=appPrefix, dependencies=MITARBEITER)
 app.include_router(health.router, prefix=appPrefix)
-app.include_router(checkin.router, prefix=appPrefix)
-app.include_router(mailvorlagen.router, prefix=appPrefix)
-app.include_router(mailprotokoll.router, prefix=appPrefix)
-app.include_router(werkstatt.router, prefix=appPrefix)
+app.include_router(checkin.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(mailvorlagen.router, prefix=appPrefix, dependencies=ADMIN)
+app.include_router(mailprotokoll.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(werkstatt.router, prefix=appPrefix, dependencies=MITARBEITER)
 app.include_router(auth.router, prefix=appPrefix)
 app.include_router(benutzer.router, prefix=appPrefix)
 app.include_router(geraete.router, prefix=appPrefix)

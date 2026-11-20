@@ -30,7 +30,7 @@ class ScannerRegister:
         # /melden läuft im Threadpool, /scan im Event-Loop
         self._sperre = Lock()
 
-    def melden(self, meldung: ScannerMeldung, health_check: bool = False) -> bool:
+    def melden(self, meldung: ScannerMeldung, health_check: bool = False, schluessel: str | None = None) -> bool:
         """
         Trägt die Meldung ein. Gibt True zurück, wenn der Scanner jetzt ein Update starten soll:
         nur beim Health-Check und nur einmal je Anforderung.
@@ -56,7 +56,8 @@ class ScannerRegister:
                     angefordert = None
 
             self._geraete[meldung.name] = ScannerGeraet(
-                **daten, zuletzt=datetime.now(timezone.utc), verbunden=True, update_angefordert=angefordert
+                **daten, zuletzt=datetime.now(timezone.utc), verbunden=True, update_angefordert=angefordert,
+                schluessel=schluessel,
             )
             return update_starten
 

@@ -3,14 +3,16 @@ from email.mime.text import MIMEText
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.zugriff import aktueller_benutzer
 from app.db.deps import get_db
+from app.models.benutzer import Benutzer
 from app.schemas.einstellungen import EinstellungRead, EinstellungenSpeichern, TestMail, TestErgebnis
 from app.services import einstellungen, oidc
 from app.utils.mail import sendeMail
 from app.utils.skiEttiket import SkiEttiket
 from app.utils.lexware import LexwareAPI
 
-# TODO Auth: Die Einstellungen sind aktuell ohne Anmeldung erreichbar (nur internes Netz)
+# Nur Admin (in main.py eingebunden mit ADMIN)
 router = APIRouter(
     prefix="/einstellungen",
     tags=["einstellungen"],
@@ -26,8 +28,27 @@ def get_einstellungen():
     return einstellungen.alle_fuer_anzeige()
 
 
+def _anmeldepflicht_pruefen(db: Session, werte: dict) -> None:
+    """
+    Anmeldung erzwingen nur, wenn sich danach noch jemand anmelden kann: der Aufrufer ist selbst ein
+    angemeldeter Admin und es gibt einen aktiven Admin mit Passwort (Notzugang ohne OIDC).
+    """
+    if werte.get("ANMELDUNG_ERZWINGEN") not in (True, "true", "1", 1) or einstellungen.hole("ANMELDUNG_ERZWINGEN"):
+        return
+    benutzer = aktueller_benutzer()
+    if benutzer is None or not benutzer.ist_admin:
+        raise HTTPException(status_code=409, detail="Anmeldung erzwingen geht nur, wenn du selbst als Admin angemeldet bist.")
+    tragend = (db.query(Benutzer.ID)
+               .filter(Benutzer.Rolle == "admin", Benutzer.Aktiv.is_(True), Benutzer.Freigabe_Ausstehend.is_(False),
+                       Benutzer.Passwort_Hash.is_not(None))
+               .first())
+    if tragend is None:
+        raise HTTPException(status_code=409, detail="Es gibt keinen aktiven Admin mit Passwort.")
+
+
 @router.put("/", response_model=list[EinstellungRead])
 def speichere_einstellungen(daten: EinstellungenSpeichern, db: Session = Depends(get_db)):
+    _anmeldepflicht_pruefen(db, daten.werte)
     try:
         einstellungen.speichern(db, daten.werte)
     except ValueError as e:

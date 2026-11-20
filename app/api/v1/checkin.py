@@ -1,3 +1,4 @@
+from app.core.zugriff import nur_admin
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -35,13 +36,13 @@ def status(db: Session = Depends(get_db)):
     return checkin_service.status(db)
 
 
-@router.get("/schluessel", response_model=list[CheckinSchluesselRead])
+@router.get("/schluessel", response_model=list[CheckinSchluesselRead], dependencies=[Depends(nur_admin)])
 def schluessel_liste(db: Session = Depends(get_db)):
     """Schlüssel nur mit Public Key, der private Schlüssel verlässt die API nie."""
     return [_schluessel_read(eintrag) for eintrag in checkin_schluessel.liste(db)]
 
 
-@router.post("/schluessel", response_model=CheckinSchluesselRead)
+@router.post("/schluessel", response_model=CheckinSchluesselRead, dependencies=[Depends(nur_admin)])
 def schluessel_erzeugen(db: Session = Depends(get_db)):
     """Neues Schlüsselpaar. Mit gemeinsamem Ordner bekommt es die Check-in-App sofort, sonst von Hand als CHECKIN_PUBLIC_KEY eintragen."""
     return _schluessel_read(checkin_schluessel.erzeugen(db))
