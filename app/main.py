@@ -16,9 +16,9 @@ from app.api.v1 import checkin
 from app.api.v1 import mailvorlagen
 from app.api.v1 import mailprotokoll
 from app.api.v1 import werkstatt
-from app.api.v1 import auth, benutzer, geraete, ereignisse
+from app.api.v1 import auth, benutzer, geraete, ereignisse, rollen, gruppen
 from app.core.cors import EinstellungsCors
-from app.core.zugriff import angemeldet, nur_admin
+from app.core.zugriff import angemeldet, recht, schreibrecht
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services import checkin_schluessel
@@ -75,34 +75,44 @@ app.add_middleware(EinstellungsCors)
 
 appPrefix = "/api/v1"
 
-# Rechte, siehe app/core/zugriff.py. Ohne Vorgabe hier (kunden, orte, event, saison, skiscanner, health,
-# auth, benutzer, geraete, ereignisse) steht der Schutz an den einzelnen Routen bzw. im Router selbst.
-MITARBEITER = [Depends(angemeldet)]
-ADMIN = [Depends(nur_admin)]
+# Rechte, siehe app/core/rechte.py und app/core/zugriff.py. Lesen darf jeder Angemeldete, Schreiben braucht
+# das Recht des Routers. Ohne Vorgabe hier (kunden, orte, event, saison, skiscanner, health, auth, benutzer,
+# rollen, gruppen, geraete, ereignisse) steht der Schutz an den einzelnen Routen bzw. im Router selbst.
+ANGEMELDET = [Depends(angemeldet)]
+
+
+def schreiben(name: str, ausser: tuple[str, ...] = ()) -> list:
+    return [Depends(schreibrecht(name, ausser))]
+
+
+def ganz(name: str) -> list:
+    return [Depends(recht(name))]
 
 app.include_router(kunden.router, prefix=appPrefix)
 app.include_router(orte.router, prefix=appPrefix)
 app.include_router(event.router, prefix=appPrefix)
-app.include_router(saisonverleih.router, prefix=appPrefix, dependencies=MITARBEITER)
-app.include_router(ski.router, prefix=appPrefix, dependencies=MITARBEITER)
-app.include_router(schuh.router, prefix=appPrefix, dependencies=MITARBEITER)
-app.include_router(stock.router, prefix=appPrefix, dependencies=MITARBEITER)
-app.include_router(ettiket.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(saisonverleih.router, prefix=appPrefix, dependencies=schreiben("verleih.bearbeiten", ausser=("/preise",)))
+app.include_router(ski.router, prefix=appPrefix, dependencies=schreiben("material.bearbeiten"))
+app.include_router(schuh.router, prefix=appPrefix, dependencies=schreiben("material.bearbeiten"))
+app.include_router(stock.router, prefix=appPrefix, dependencies=schreiben("material.bearbeiten"))
+app.include_router(ettiket.router, prefix=appPrefix, dependencies=ANGEMELDET)
 app.include_router(saison.router, prefix=appPrefix)
-app.include_router(quittungen.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(quittungen.router, prefix=appPrefix, dependencies=ANGEMELDET)
 app.include_router(skiscanner.router, prefix=appPrefix)
-app.include_router(skiservice.router, prefix=appPrefix, dependencies=MITARBEITER)
-app.include_router(kasse.router, prefix=appPrefix, dependencies=MITARBEITER)
-app.include_router(einstellungen.router, prefix=appPrefix, dependencies=ADMIN)
-app.include_router(bindungsdaten.router, prefix=appPrefix, dependencies=MITARBEITER)
-app.include_router(handware.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(skiservice.router, prefix=appPrefix, dependencies=schreiben("skiservice.bearbeiten", ausser=("/preise", "/bindungsservice")))
+app.include_router(kasse.router, prefix=appPrefix, dependencies=schreiben("kasse.kassieren"))
+app.include_router(einstellungen.router, prefix=appPrefix, dependencies=ganz("einstellungen.verwalten"))
+app.include_router(bindungsdaten.router, prefix=appPrefix, dependencies=schreiben("skiservice.bearbeiten"))
+app.include_router(handware.router, prefix=appPrefix, dependencies=schreiben("preise.verwalten"))
 app.include_router(health.router, prefix=appPrefix)
-app.include_router(checkin.router, prefix=appPrefix, dependencies=MITARBEITER)
-app.include_router(mailvorlagen.router, prefix=appPrefix, dependencies=ADMIN)
-app.include_router(mailprotokoll.router, prefix=appPrefix, dependencies=MITARBEITER)
-app.include_router(werkstatt.router, prefix=appPrefix, dependencies=MITARBEITER)
+app.include_router(checkin.router, prefix=appPrefix, dependencies=ANGEMELDET)
+app.include_router(mailvorlagen.router, prefix=appPrefix, dependencies=ganz("vorlagen.verwalten"))
+app.include_router(mailprotokoll.router, prefix=appPrefix, dependencies=ANGEMELDET)
+app.include_router(werkstatt.router, prefix=appPrefix, dependencies=ANGEMELDET)
 app.include_router(auth.router, prefix=appPrefix)
 app.include_router(benutzer.router, prefix=appPrefix)
+app.include_router(rollen.router, prefix=appPrefix)
+app.include_router(gruppen.router, prefix=appPrefix)
 app.include_router(geraete.router, prefix=appPrefix)
 app.include_router(ereignisse.router, prefix=appPrefix)
 

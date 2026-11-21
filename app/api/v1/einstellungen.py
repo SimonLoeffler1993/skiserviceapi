@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.zugriff import aktueller_benutzer
 from app.db.deps import get_db
-from app.models.benutzer import Benutzer
+from app.crud import rechte as crud_rechte
 from app.schemas.einstellungen import EinstellungRead, EinstellungenSpeichern, TestMail, TestErgebnis
 from app.services import einstellungen, oidc
 from app.utils.mail import sendeMail
@@ -30,20 +30,15 @@ def get_einstellungen():
 
 def _anmeldepflicht_pruefen(db: Session, werte: dict) -> None:
     """
-    Anmeldung erzwingen nur, wenn sich danach noch jemand anmelden kann: der Aufrufer ist selbst ein
-    angemeldeter Admin und es gibt einen aktiven Admin mit Passwort (Notzugang ohne OIDC).
+    Anmeldung erzwingen nur, wenn sich danach noch jemand anmelden kann: der Aufrufer ist selbst angemeldet
+    und es gibt einen aktiven Benutzer mit Passwort, der Benutzer verwalten darf (Notzugang ohne OIDC).
     """
     if werte.get("ANMELDUNG_ERZWINGEN") not in (True, "true", "1", 1) or einstellungen.hole("ANMELDUNG_ERZWINGEN"):
         return
-    benutzer = aktueller_benutzer()
-    if benutzer is None or not benutzer.ist_admin:
-        raise HTTPException(status_code=409, detail="Anmeldung erzwingen geht nur, wenn du selbst als Admin angemeldet bist.")
-    tragend = (db.query(Benutzer.ID)
-               .filter(Benutzer.Rolle == "admin", Benutzer.Aktiv.is_(True), Benutzer.Freigabe_Ausstehend.is_(False),
-                       Benutzer.Passwort_Hash.is_not(None))
-               .first())
-    if tragend is None:
-        raise HTTPException(status_code=409, detail="Es gibt keinen aktiven Admin mit Passwort.")
+    if aktueller_benutzer() is None:
+        raise HTTPException(status_code=409, detail="Anmeldung erzwingen geht nur, wenn du selbst angemeldet bist.")
+    if not crud_rechte.notzugang_vorhanden(db):
+        raise HTTPException(status_code=409, detail="Es gibt keinen aktiven Benutzer mit Passwort, der Benutzer verwalten darf.")
 
 
 @router.put("/", response_model=list[EinstellungRead])

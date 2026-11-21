@@ -2,7 +2,7 @@ import httpx
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from app.core.zugriff import nur_admin
+from app.core.zugriff import recht
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -110,7 +110,7 @@ async def get_quittung(quittung_id: int, bezahlinfo: bool = False, db: Session =
             logger.exception("Bezahlstatus von Lexware konnte nicht abgerufen werden")
     return quittung
 
-@router.post("/quittung/{quittung_id}/lexware", response_model=QuittungRead, dependencies=[Depends(nur_admin)])
+@router.post("/quittung/{quittung_id}/lexware", response_model=QuittungRead, dependencies=[Depends(recht("quittungen.verwalten"))])
 def quittung_nach_lexware(quittung_id: int, db: Session = Depends(get_db)):
     """
     Lädt eine eigene Quittung als Beleg mit PDF nach Lexware hoch (z.B. wenn der automatische Upload fehlgeschlagen ist).
@@ -125,7 +125,7 @@ def quittung_nach_lexware(quittung_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail=str(e))
     return crud_quittung.get_quittung(db, quittung.ID)
 
-@router.post("/quittung/{quittung_id}/storno", response_model=QuittungRead, dependencies=[Depends(nur_admin)])
+@router.post("/quittung/{quittung_id}/storno", response_model=QuittungRead, dependencies=[Depends(recht("quittungen.verwalten"))])
 def storniere_quittung(quittung_id: int, db: Session = Depends(get_db)):
     """
     Storniert eine Quittung: Aufträge und Verleihe darauf werden nicht bezahlt und von ihr gelöst,
@@ -167,7 +167,7 @@ def _quittung_pdf_oder_fehler(db: Session, quittung) -> tuple[bytes, str]:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
 
 
-@router.post("/quittung/{quittung_id}/mail", response_model=QuittungMailErgebnis)
+@router.post("/quittung/{quittung_id}/mail", response_model=QuittungMailErgebnis, dependencies=[Depends(recht("kasse.kassieren"))])
 def sende_quittung_mail(quittung_id: int, anfrage: QuittungMailAnfrage, db: Session = Depends(get_db)):
     """
     Versendet die Quittung als PDF an eine oder mehrere Adressen, an jede eine eigene Mail.
@@ -204,7 +204,7 @@ async def get_quittung_json(quittung_id: int, db: Session = Depends(get_db)):
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
 
-@router.post("/quittung/nurextern", dependencies=[Depends(nur_admin)])
+@router.post("/quittung/nurextern", dependencies=[Depends(recht("quittungen.verwalten"))])
 def create_quittung_nur_extern(quittung_data: QuittungNurExtern, db: Session = Depends(get_db)):
     """
     Weist einem Saisonverleih oder einem Skiservice-Auftrag einen externen Lexware-Beleg als Quittung zu.
@@ -260,7 +260,7 @@ def _manuelle_quittung(db: Session, quittung_id: int):
     return quittung
 
 
-@router.delete("/quittung/zuweisung", dependencies=[Depends(nur_admin)])
+@router.delete("/quittung/zuweisung", dependencies=[Depends(recht("quittungen.verwalten"))])
 def hebe_zuweisung_auf(
         SaisonverleihID: Optional[int] = Query(default=None),
         AuftragID: Optional[int] = Query(default=None),

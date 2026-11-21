@@ -62,13 +62,16 @@ def oidc_veraltet(benutzer: Benutzer) -> bool:
     return bool(benutzer.Oidc_Issuer) and benutzer.Oidc_Issuer != oidc.issuer_oder_none()
 
 
-def ich_benutzer(benutzer: Benutzer) -> dict:
+def ich_benutzer(db: Session, benutzer: Benutzer) -> dict:
+    from app.crud import rechte as crud_rechte  # spät: crud.rechte -> services.ereignisse
+
     return {
         "id": benutzer.ID,
         "benutzername": benutzer.Benutzername,
         "anzeigename": benutzer.Anzeigename,
         "email": benutzer.Email,
-        "rolle": benutzer.Rolle,
+        "rechte": crud_rechte.rechte_liste(crud_rechte.rechte_von(db, benutzer.ID)),
+        "gruppen": crud_rechte.gruppen_von(benutzer, db),
         "hat_passwort": bool(benutzer.Passwort_Hash),
         "hat_pin": bool(benutzer.Pin_Hash),
         "passwort_aendern": bool(benutzer.Passwort_Aendern),
@@ -90,6 +93,12 @@ def status(db: Session) -> dict:
         "pin_erlaubt": bool(einstellungen.hole("PIN_ANMELDUNG_ERLAUBT")),
         "oidc": {"aktiv": oidc.aktiv(), "anbieter": oidc.anbieter_schluessel(), "button_text": oidc.button_text()},
     }
+
+
+def _crud_rechte():
+    from app.crud import rechte  # spät: crud.rechte -> services.ereignisse -> core.zugriff
+
+    return rechte
 
 
 def einrichtung_noetig(db: Session) -> bool:
@@ -169,7 +178,7 @@ def _sitzungen_anlegen(db: Session, benutzer: Benutzer, methode: str, zugriff: Z
     return {
         "geraet_token": geraet_token,
         "bediener_token": bediener_token,
-        "benutzer": ich_benutzer(benutzer),
+        "benutzer": ich_benutzer(db, benutzer),
         "geraet": ich_geraet(geraet),
     }
 
@@ -231,10 +240,11 @@ def einrichten(db: Session, benutzername: str, anzeigename: str, passwort: str, 
     passwort_regeln(passwort)
     jetzt = datetime.now()
     benutzer = Benutzer(Benutzername=benutzername.strip(), Anzeigename=anzeigename.strip(), Email=email or None,
-                        Rolle="admin", Aktiv=True, Passwort_Hash=sicherheit.passwort_hash(passwort),
+                        Aktiv=True, Passwort_Hash=sicherheit.passwort_hash(passwort),
                         Angelegt_Am=jetzt, Letzte_Anmeldung=jetzt)
     db.add(benutzer)
     db.flush()
+    _crud_rechte().zur_admin_gruppe(db, benutzer)
     ereignisse.erfasse(db, "benutzer_angelegt", benutzer_id=benutzer.ID, benutzer_name=benutzer.Anzeigename,
                        text="Erster Admin (Einrichtung)")
     return _sitzungen_anlegen(db, benutzer, "passwort", Zugriff(), geraet_name, geraet_art)
@@ -260,7 +270,7 @@ def ich(db: Session, zugriff: Zugriff) -> dict:
     benutzer = db.get(Benutzer, zugriff.benutzer.id) if zugriff.benutzer else None
     geraet = db.get(Geraetesitzung, zugriff.geraet.id) if zugriff.geraet else None
     return {
-        "benutzer": ich_benutzer(benutzer) if benutzer else None,
+        "benutzer": ich_benutzer(db, benutzer) if benutzer else None,
         "geraet": ich_geraet(geraet) if geraet else None,
         "methode": zugriff.methode,
     }
@@ -309,7 +319,7 @@ def passwort_aendern(db: Session, zugriff: Zugriff, alt: str | None, neu: str) -
     benutzer.Passwort_Hash = sicherheit.passwort_hash(neu)
     benutzer.Passwort_Aendern = False
     db.commit()
-    return ich_benutzer(benutzer)
+    return ich_benutzer(db, benutzer)
 
 
 def pin_setzen(db: Session, zugriff: Zugriff, passwort: str | None, pin: str) -> dict:
@@ -320,14 +330,14 @@ def pin_setzen(db: Session, zugriff: Zugriff, passwort: str | None, pin: str) ->
     pin_regeln(pin)
     benutzer.Pin_Hash = sicherheit.passwort_hash(pin)
     db.commit()
-    return ich_benutzer(benutzer)
+    return ich_benutzer(db, benutzer)
 
 
 def pin_loeschen(db: Session, zugriff: Zugriff) -> dict:
     benutzer = _eigener_benutzer(db, zugriff)
     benutzer.Pin_Hash = None
     db.commit()
-    return ich_benutzer(benutzer)
+    return ich_benutzer(db, benutzer)
 
 
 def oidc_trennen(db: Session, zugriff: Zugriff) -> dict:
@@ -336,7 +346,7 @@ def oidc_trennen(db: Session, zugriff: Zugriff) -> dict:
         raise AnmeldeFehler(409, "kein_passwort")
     benutzer.Oidc_Issuer = benutzer.Oidc_Mandant = benutzer.Oidc_Kennung = None
     db.commit()
-    return ich_benutzer(benutzer)
+    return ich_benutzer(db, benutzer)
 
 
 # --- Tickets -------------------------------------------------------------------
@@ -372,11 +382,17 @@ def beim_start(db: Session) -> None:
         db.commit()
         logger.info("%s abgelaufene Gerätesitzungen entfernt", len(ids))
 
+    # Systemrolle und Admin-Gruppe (und bei leerer Tabelle "Mitarbeiter") sicherstellen
+    _crud_rechte().standard_anlegen(db)
+
     benutzername = (os.getenv("ADMIN_BENUTZER") or "").strip()
     passwort = os.getenv("ADMIN_PASSWORT") or ""
     if benutzername and passwort and einrichtung_noetig(db):
-        db.add(Benutzer(Benutzername=benutzername, Anzeigename=benutzername, Rolle="admin", Aktiv=True,
-                        Passwort_Hash=sicherheit.passwort_hash(passwort), Passwort_Aendern=True, Angelegt_Am=jetzt))
+        benutzer = Benutzer(Benutzername=benutzername, Anzeigename=benutzername, Aktiv=True,
+                            Passwort_Hash=sicherheit.passwort_hash(passwort), Passwort_Aendern=True, Angelegt_Am=jetzt)
+        db.add(benutzer)
+        db.flush()
+        _crud_rechte().zur_admin_gruppe(db, benutzer)
         db.commit()
         logger.info("Erster Admin „%s“ aus ADMIN_BENUTZER angelegt; Passwort muss bei der ersten Anmeldung geändert werden",
                     benutzername)

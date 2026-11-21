@@ -44,6 +44,8 @@ ARTEN = {
     "benutzer_geaendert": "Benutzer geändert",
     "benutzer_freigegeben": "Benutzer freigegeben",
     "benutzer_geloescht": "Benutzer gelöscht",
+    "rolle_geaendert": "Rolle geändert",
+    "gruppe_geaendert": "Gruppe geändert",
     "geraeteschluessel_erzeugt": "Geräteschlüssel erzeugt",
     "geraeteschluessel_geaendert": "Geräteschlüssel geändert",
     "geraeteschluessel_geloescht": "Geräteschlüssel gelöscht",

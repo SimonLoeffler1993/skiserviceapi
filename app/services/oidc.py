@@ -401,7 +401,6 @@ def _neuer_benutzer(db: Session, identitaet: Identitaet) -> Benutzer:
         Benutzername=_benutzername_vorschlag(db, identitaet.claims),
         Anzeigename=(identitaet.name or identitaet.email or identitaet.kennung)[:100],
         Email=identitaet.email[:255] if identitaet.email else None,
-        Rolle="mitarbeiter",
         Aktiv=freigeben,
         Freigabe_Ausstehend=not freigeben,
         Angelegt_Am=datetime.now(),

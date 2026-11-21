@@ -90,7 +90,7 @@ def get_historie(kunde_id: int, db: Session = Depends(get_db)):
         "quittungen": quittungen_nach_ids(db, quittung_ids),
     }
 
-@router.put("/{kunde_id}", dependencies=[Depends(geraet_oder_angemeldet("terminal"))])
+@router.put("/{kunde_id}", dependencies=[Depends(geraet_oder_angemeldet("terminal", "kunden.bearbeiten"))])
 async def update_kunde(kunde_id: int, kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     existing_kunde = crud_kunde.get_kunde(db, kunde_id)
     if not existing_kunde:
@@ -102,7 +102,7 @@ async def update_kunde(kunde_id: int, kunde: SkiKundeSpeichern, db: Session = De
         db.rollback()
         raise HTTPException(status_code=400, detail="PLZ nicht gefunden")
 
-@router.post("/erfassen", dependencies=[Depends(geraet_oder_angemeldet("terminal"))])
+@router.post("/erfassen", dependencies=[Depends(geraet_oder_angemeldet("terminal", "kunden.bearbeiten"))])
 async def erfassen_kunde(kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     return crud_kunde.erfassen_kunde(db, kunde)
 

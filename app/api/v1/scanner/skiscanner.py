@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from app.core.zugriff import Zugriff, angemeldet, anmeldung_erzwungen, geraet_oder_angemeldet, nur_admin, zugriff_aus_ticket
+from app.core.zugriff import Zugriff, angemeldet, anmeldung_erzwungen, geraet_oder_angemeldet, recht, zugriff_aus_ticket
 from sqlalchemy.orm import Session
 
 from app.api.v1.health import health_antwort
@@ -54,7 +54,7 @@ def geraete():
     return scanner_register.liste()
 
 
-@router.post("/geraete/{name}/update", response_model=ScannerGeraet, dependencies=[Depends(nur_admin)])
+@router.post("/geraete/{name}/update", response_model=ScannerGeraet, dependencies=[Depends(recht("geraete.verwalten"))])
 def update_anstossen(name: str):
     """
     Stößt das Firmware-Update eines Scanners an. Er erfährt es bei seiner nächsten Meldung (spätestens nach 30 s).

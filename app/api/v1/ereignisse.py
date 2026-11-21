@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.zugriff import Zugriff, angemeldet, pruefe_admin
+from app.core.zugriff import Zugriff, angemeldet, pruefe_recht
 from app.db.deps import get_db
 from app.models.ereignis import Ereignis
 from app.schemas.ereignis import EreignisRead
@@ -31,7 +31,7 @@ def liste(
     if len(gesetzt) != 1:
         raise HTTPException(status_code=400, detail="Genau einer von auftrag_id, verleih_id, quittung_id, benutzer_id")
     if benutzer_id is not None:
-        pruefe_admin(zugriff)
+        pruefe_recht("benutzer.verwalten", zugriff)
     spalte, wert = next(iter(gesetzt.items()))
     eintraege = (db.query(Ereignis)
                  .filter(getattr(Ereignis, spalte) == wert)

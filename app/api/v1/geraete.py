@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.zugriff import Zugriff, nur_admin
+from app.core.zugriff import Zugriff, recht
 from app.crud import geraete as crud
 from app.db.deps import get_db
 from app.schemas.benutzer import (GeraeteschluesselAendern, GeraeteschluesselAnlegen, GeraeteschluesselErzeugt,
@@ -10,7 +10,7 @@ from app.schemas.benutzer import (GeraeteschluesselAendern, GeraeteschluesselAnl
 router = APIRouter(
     prefix="/geraete",
     tags=["geraete"],
-    dependencies=[Depends(nur_admin)],
+    dependencies=[Depends(recht("geraete.verwalten"))],
     responses={404: {"description": "Not found"}},
 )
 
@@ -25,7 +25,7 @@ def schluessel_liste(db: Session = Depends(get_db)):
 
 
 @router.post("/schluessel", response_model=GeraeteschluesselErzeugt)
-def schluessel_anlegen(daten: GeraeteschluesselAnlegen, zugriff: Zugriff = Depends(nur_admin),
+def schluessel_anlegen(daten: GeraeteschluesselAnlegen, zugriff: Zugriff = Depends(recht("geraete.verwalten")),
                        db: Session = Depends(get_db)):
     """Der Schlüssel steht nur in dieser Antwort im Klartext."""
     try:

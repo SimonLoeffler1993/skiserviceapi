@@ -1,4 +1,3 @@
-from app.core.zugriff import nur_admin
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -25,17 +24,17 @@ def liste_handware(db: Session = Depends(get_db)):
     return crud_handware.get_handware_liste(db)
 
 
-@router.post("/", response_model=HandwareRead, dependencies=[Depends(nur_admin)])
+@router.post("/", response_model=HandwareRead)
 def lege_handware_an(daten: HandwareCreate, db: Session = Depends(get_db)):
     return crud_handware.lege_handware_an(db, daten)
 
 
-@router.patch("/{handware_id}", response_model=HandwareRead, dependencies=[Depends(nur_admin)])
+@router.patch("/{handware_id}", response_model=HandwareRead)
 def aendere_handware(handware_id: int, daten: HandwareUpdate, db: Session = Depends(get_db)):
     return _handware_oder_404(crud_handware.aendere_handware(db, handware_id, daten))
 
 
-@router.delete("/{handware_id}", dependencies=[Depends(nur_admin)])
+@router.delete("/{handware_id}")
 def loesche_handware(handware_id: int, db: Session = Depends(get_db)):
     if not crud_handware.loesche_handware(db, handware_id):
         raise HTTPException(status_code=404, detail="Artikel nicht gefunden")

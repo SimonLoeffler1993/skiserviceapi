@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.zugriff import Zugriff, nur_admin
+from app.core.zugriff import Zugriff, recht
 from app.crud import benutzer as crud
 from app.db.deps import get_db
 from app.schemas.benutzer import BenutzerAendern, BenutzerAnlegen, BenutzerRead, OidcUebernehmen, PasswortSetzen
@@ -9,14 +9,14 @@ from app.schemas.benutzer import BenutzerAendern, BenutzerAnlegen, BenutzerRead,
 router = APIRouter(
     prefix="/benutzer",
     tags=["benutzer"],
-    dependencies=[Depends(nur_admin)],
+    dependencies=[Depends(recht("benutzer.verwalten"))],
     responses={404: {"description": "Not found"}},
 )
 
 
-def _ausfuehren(funktion, *args):
+def _ausfuehren(funktion, db, *args):
     try:
-        return crud.benutzer_read(funktion(*args))
+        return crud.benutzer_read(db, funktion(db, *args))
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -25,7 +25,7 @@ def _ausfuehren(funktion, *args):
 
 @router.get("/", response_model=list[BenutzerRead])
 def liste(db: Session = Depends(get_db)):
-    return [crud.benutzer_read(b) for b in crud.liste(db)]
+    return [crud.benutzer_read(db, b) for b in crud.liste(db)]
 
 
 @router.post("/", response_model=BenutzerRead)
@@ -67,7 +67,7 @@ def oidc_uebernehmen(benutzer_id: int, daten: OidcUebernehmen, db: Session = Dep
 
 
 @router.delete("/{benutzer_id}")
-def loeschen(benutzer_id: int, zugriff: Zugriff = Depends(nur_admin), db: Session = Depends(get_db)):
+def loeschen(benutzer_id: int, zugriff: Zugriff = Depends(recht("benutzer.verwalten")), db: Session = Depends(get_db)):
     try:
         crud.loeschen(db, benutzer_id, zugriff.benutzer.id if zugriff.benutzer else None)
     except LookupError as e:

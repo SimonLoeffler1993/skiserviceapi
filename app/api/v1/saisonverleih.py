@@ -1,5 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
-from app.core.zugriff import nur_admin, pruefe_admin
+from app.core.zugriff import pruefe_recht, recht
 from sqlalchemy.orm import Session
 from typing import Literal, Optional
 from datetime import date
@@ -33,7 +33,7 @@ async def get_saisonverleihpreise(db: Session = Depends(get_db)):
     preise = crud_saisonverleih.get_saisonverleihpreise(db)
     return {"preise": preise}
 
-@router.post("/preise", response_model=SaisonVerleihPreisRead, dependencies=[Depends(nur_admin)])
+@router.post("/preise", response_model=SaisonVerleihPreisRead, dependencies=[Depends(recht("preise.verwalten"))])
 async def erstelle_saisonverleihpreis(preis: SaisonVerleihPreisBase, db: Session = Depends(get_db)):
     """
     Erstellt einen neuen Saisonverleihpreis.
@@ -148,7 +148,7 @@ def setze_verleih_bezahlt(saisonverleih_id: int, daten: BezahltSetzen, db: Sessi
     Mit quittung_entfernen wird bei "nicht bezahlt" nur dieser Verleih von der Quittung genommen.
     """
     if daten.quittung_entfernen:
-        pruefe_admin()
+        pruefe_recht("quittungen.verwalten")
     if verleih_bezahlt_setzen(db, saisonverleih_id, daten.bezahlt, daten.mit_quittung, daten.quittung_entfernen) is None:
         raise HTTPException(status_code=404, detail="Saisonverleih not found")
     return crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
@@ -201,7 +201,7 @@ def aendere_saisonverleih(saisonverleih_id: int, daten: SaisonVerleihUpdate, db:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/{saisonverleih_id}", dependencies=[Depends(nur_admin)])
+@router.delete("/{saisonverleih_id}", dependencies=[Depends(recht("verleih.loeschen"))])
 def loesche_saisonverleih(saisonverleih_id: int, db: Session = Depends(get_db)):
     """
     Löscht einen Verleih mit allem Material. Bezahlte Verleihe können nicht gelöscht werden.

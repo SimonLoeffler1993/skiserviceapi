@@ -1,12 +1,9 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-
-ROLLEN = ("admin", "mitarbeiter")
-
 
 class Benutzer(Base):
     """
@@ -22,8 +19,6 @@ class Benutzer(Base):
     Benutzername: Mapped[str] = mapped_column(String(50), nullable=False)
     Anzeigename: Mapped[str] = mapped_column(String(100), nullable=False)
     Email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # "admin" oder "mitarbeiter"
-    Rolle: Mapped[str] = mapped_column(String(20), nullable=False, default="mitarbeiter")
     Aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Neuer OIDC-Benutzer, den ein Admin erst freigeben muss
     Freigabe_Ausstehend: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -43,10 +38,9 @@ class Benutzer(Base):
     Gesperrt_Bis: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     Angelegt_Am: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     Letzte_Anmeldung: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    @property
-    def ist_admin(self) -> bool:
-        return self.Rolle == "admin"
+    # Gruppen (app/models/rechte.py): die Rechte ergeben sich aus deren Rollen
+    mitgliedschaften: Mapped[list["BenutzerGruppe"]] = relationship(
+        "BenutzerGruppe", cascade="all, delete-orphan", passive_deletes=True, lazy="selectin")
 
     @property
     def darf_anmelden(self) -> bool:

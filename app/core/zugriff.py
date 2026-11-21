@@ -22,6 +22,7 @@ from typing import Literal
 from fastapi import Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from app.core import rechte as rechte_mod
 from app.core import sicherheit
 from app.db.session import SessionLocal
 from app.models.benutzer import Bedienersitzung, Benutzer, Geraeteschluessel, Geraetesitzung
@@ -38,11 +39,11 @@ class BenutzerInfo:
     id: int
     benutzername: str
     anzeigename: str
-    rolle: str
+    # Summe der Rechte aus Gruppen -> Rollen (app/core/rechte.py), "*" = alle
+    rechte: frozenset[str] = frozenset()
 
-    @property
-    def ist_admin(self) -> bool:
-        return self.rolle == "admin"
+    def hat(self, recht: str) -> bool:
+        return rechte_mod.hat(self.rechte, recht)
 
 
 @dataclass(frozen=True)
@@ -123,9 +124,11 @@ def _geraet_info(geraet: Geraetesitzung) -> GeraetInfo:
     return GeraetInfo(id=geraet.ID, name=geraet.Name, art=geraet.Art, timeout_minuten=bediener_timeout(geraet))
 
 
-def _benutzer_info(benutzer: Benutzer) -> BenutzerInfo:
+def _benutzer_info(db, benutzer: Benutzer) -> BenutzerInfo:
+    from app.crud.rechte import rechte_von  # spät: crud -> services -> zugriff
+
     return BenutzerInfo(id=benutzer.ID, benutzername=benutzer.Benutzername,
-                        anzeigename=benutzer.Anzeigename, rolle=benutzer.Rolle)
+                        anzeigename=benutzer.Anzeigename, rechte=rechte_von(db, benutzer.ID))
 
 
 def _geraet_pruefen(db, geraet: Geraetesitzung | None, jetzt: datetime) -> Geraetesitzung:
@@ -165,7 +168,7 @@ def zugriff_aus_token(token: str) -> Zugriff:
                 raise _fehler(401, "bediener_noetig")
             if jetzt - sitzung.Letzte_Aktivitaet > _SCHREIB_ABSTAND:
                 sitzung.Letzte_Aktivitaet = jetzt
-            ergebnis = Zugriff(benutzer=_benutzer_info(benutzer), geraet=_geraet_info(geraet),
+            ergebnis = Zugriff(benutzer=_benutzer_info(db, benutzer), geraet=_geraet_info(geraet),
                                bedienersitzung_id=sitzung.ID, methode=sitzung.Methode)
             db.commit()
             return ergebnis
@@ -260,21 +263,52 @@ async def angemeldet(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
     return zugriff
 
 
-async def nur_admin(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
-    """Nur Admin. Ohne Anmeldung nur, solange ANMELDUNG_ERZWINGEN aus ist."""
-    _benutzer_verlangen(zugriff)
-    pruefe_admin(zugriff)
-    return zugriff
-
-
-def pruefe_admin(zugriff: Zugriff | None = None) -> None:
-    """Für Prüfungen im Handler, z.B. wenn nur eine Variante einer Route Admin-Rechte braucht."""
+def pruefe_recht(recht: str, zugriff: Zugriff | None = None) -> None:
+    """
+    Für Prüfungen im Handler, z.B. wenn nur eine Variante einer Route ein Recht braucht.
+    Ohne Anmeldung nur, solange ANMELDUNG_ERZWINGEN aus ist (Übergang).
+    """
     zugriff = zugriff or aktueller_zugriff.get()
     if zugriff.benutzer is not None:
-        if not zugriff.benutzer.ist_admin:
-            raise _fehler(403, "nur_admin")
+        if not zugriff.benutzer.hat(recht):
+            raise _fehler(403, "recht_fehlt")
         return
     _benutzer_verlangen(zugriff)
+
+
+def recht(name: str):
+    """Dependency: angemeldet und mit diesem Recht (app/core/rechte.py)."""
+    if name not in rechte_mod.RECHTE:
+        raise ValueError(f"Unbekanntes Recht: {name}")
+
+    async def pruefen(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
+        _benutzer_verlangen(zugriff)
+        pruefe_recht(name, zugriff)
+        return zugriff
+
+    return pruefen
+
+
+_LESEND = {"GET", "HEAD", "OPTIONS"}
+
+
+def schreibrecht(name: str, ausser: tuple[str, ...] = ()):
+    """
+    Router-Dependency: Lesen für alle Angemeldeten, Schreiben (POST/PUT/PATCH/DELETE) nur mit diesem Recht.
+    ausser: Endungen von Routen-Pfaden, die stattdessen ein eigenes Recht an der Route haben (z.B. "/preise").
+    """
+    if name not in rechte_mod.RECHTE:
+        raise ValueError(f"Unbekanntes Recht: {name}")
+
+    async def pruefen(request: Request, zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
+        _benutzer_verlangen(zugriff)
+        route = request.scope.get("route")
+        pfad = getattr(route, "path", request.url.path)
+        if request.method not in _LESEND and not pfad.endswith(ausser or ("\0",)):
+            pruefe_recht(name, zugriff)
+        return zugriff
+
+    return pruefen
 
 
 async def benutzer_noetig(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
@@ -291,9 +325,9 @@ async def nur_geraetesitzung(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugrif
     return zugriff
 
 
-def geraet_oder_angemeldet(bereich: Literal["scanner", "terminal"]):
+def geraet_oder_angemeldet(bereich: Literal["scanner", "terminal"], benutzer_recht: str | None = None):
     """
-    Geräteschlüssel des Bereichs oder ein angemeldeter Benutzer.
+    Geräteschlüssel des Bereichs oder ein angemeldeter Benutzer (mit benutzer_recht, falls angegeben).
     Ohne Zugangsdaten nur, solange GERAETESCHLUESSEL_ERZWINGEN aus ist; beim Kundenterminal
     (Kundendaten) zusätzlich nur, solange ANMELDUNG_ERZWINGEN aus ist.
     """
@@ -303,6 +337,8 @@ def geraet_oder_angemeldet(bereich: Literal["scanner", "terminal"]):
                 raise _fehler(403, "geraeteschluessel_nicht_erlaubt")
             return zugriff
         if zugriff.benutzer is not None:
+            if benutzer_recht:
+                pruefe_recht(benutzer_recht, zugriff)
             return zugriff
         if zugriff.geraet is not None:
             raise _fehler(401, "bediener_noetig")

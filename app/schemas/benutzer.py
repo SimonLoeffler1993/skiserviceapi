@@ -3,7 +3,6 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-Rolle = Literal["admin", "mitarbeiter"]
 GeraetArt = Literal["center", "kasse"]
 SchluesselBereich = Literal["scanner", "terminal"]
 
@@ -62,12 +61,21 @@ class OidcUrl(BaseModel):
     url: str
 
 
+class GruppeKurz(BaseModel):
+    id: int
+    name: str
+    # "manuell" (im Center) oder "oidc" (bei jeder OIDC-Anmeldung abgeglichen)
+    quelle: str
+
+
 class IchBenutzer(BaseModel):
     id: int
     benutzername: str
     anzeigename: str
     email: Optional[str] = None
-    rolle: Rolle
+    # Rechte aus Gruppen -> Rollen; "*" = alle (dann stehen zusätzlich alle bekannten Rechte in der Liste)
+    rechte: list[str]
+    gruppen: list[GruppeKurz]
     hat_passwort: bool
     hat_pin: bool
     passwort_aendern: bool
@@ -135,7 +143,8 @@ class BenutzerRead(BaseModel):
     benutzername: str
     anzeigename: str
     email: Optional[str] = None
-    rolle: Rolle
+    rechte: list[str]
+    gruppen: list[GruppeKurz]
     aktiv: bool
     freigabe_ausstehend: bool
     hat_passwort: bool
@@ -153,7 +162,7 @@ class BenutzerAnlegen(BaseModel):
     benutzername: str = Field(pattern=BENUTZERNAME_MUSTER)
     anzeigename: str = Field(min_length=1, max_length=100)
     email: Optional[str] = Field(default=None, max_length=255)
-    rolle: Rolle = "mitarbeiter"
+    gruppen_ids: list[int] = []
     # Startpasswort, muss bei der ersten Anmeldung geändert werden
     passwort: str = Field(min_length=1, max_length=256)
 
@@ -161,7 +170,8 @@ class BenutzerAnlegen(BaseModel):
 class BenutzerAendern(BaseModel):
     anzeigename: Optional[str] = Field(default=None, min_length=1, max_length=100)
     email: Optional[str] = Field(default=None, max_length=255)
-    rolle: Optional[Rolle] = None
+    # Ersetzt die manuellen Gruppen; über OIDC gekommene bleiben
+    gruppen_ids: Optional[list[int]] = None
     aktiv: Optional[bool] = None
     # True gibt einen neuen OIDC-Benutzer frei (und aktiviert ihn)
     freigeben: Optional[bool] = None
@@ -220,3 +230,62 @@ class GeraetesitzungAendern(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     # Ausdrücklich null setzt auf die Einstellung zurück
     bediener_timeout_minuten: Optional[int] = Field(default=None, ge=0, le=24 * 60)
+
+
+# --- Rollen und Gruppen (Admin) ----------------------------------------------
+
+class RechtInfo(BaseModel):
+    recht: str
+    bereich: str
+    bezeichnung: str
+
+
+class RolleRead(BaseModel):
+    id: int
+    name: str
+    beschreibung: Optional[str] = None
+    system: bool
+    rechte: list[str]
+    anzahl_gruppen: int
+
+
+class RolleAnlegen(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    beschreibung: Optional[str] = Field(default=None, max_length=255)
+    rechte: list[str] = []
+
+
+class RolleAendern(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    beschreibung: Optional[str] = Field(default=None, max_length=255)
+    rechte: Optional[list[str]] = None
+
+
+class RolleKurz(BaseModel):
+    id: int
+    name: str
+    system: bool
+
+
+class GruppeRead(BaseModel):
+    id: int
+    name: str
+    beschreibung: Optional[str] = None
+    oidc_gruppe: Optional[str] = None
+    rollen: list[RolleKurz]
+    anzahl_mitglieder: int
+
+
+class GruppeAnlegen(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    beschreibung: Optional[str] = Field(default=None, max_length=255)
+    oidc_gruppe: Optional[str] = Field(default=None, max_length=255)
+    rollen_ids: list[int] = []
+
+
+class GruppeAendern(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    beschreibung: Optional[str] = Field(default=None, max_length=255)
+    # Leer/None löst die Zuordnung (die OIDC-Mitgliedschaften werden dann manuell)
+    oidc_gruppe: Optional[str] = Field(default=None, max_length=255)
+    rollen_ids: Optional[list[int]] = None

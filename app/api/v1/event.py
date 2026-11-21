@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from app.core.zugriff import Zugriff, angemeldet, geraet_oder_angemeldet
+from app.core.zugriff import Zugriff, angemeldet, geraet_oder_angemeldet, recht
 from fastapi.responses import StreamingResponse
 import asyncio
 import json
@@ -41,7 +41,7 @@ async def list_terminals(request: Request):
     ohne = sorted(t for t in terminals if t in terminal_manager.ohne_schluessel)
     return {"terminals": terminals, "ohne_schluessel": ohne}
 
-@router.post("/zeigekunde", dependencies=[Depends(angemeldet)])
+@router.post("/zeigekunde", dependencies=[Depends(recht("kunden.bearbeiten"))])
 async def zeige_kunde(daten: SkiKundeZuTerminal, request: Request, db: Session = Depends(get_db)):
     if daten.terminal not in terminal_manager.verbindungen:
         return {"status": "Terminal not connected", "terminal": daten.terminal}
