@@ -269,13 +269,15 @@ def einrichten(db: Session, benutzername: str, anzeigename: str, passwort: str, 
     return _sitzungen_anlegen(db, benutzer, "passwort", Zugriff(), geraet_name, geraet_art, dauerhaft=True)
 
 
-def bediener_abmelden(db: Session, zugriff: Zugriff) -> None:
-    """Bediener abmelden; bei einer persönlichen Anmeldung endet damit auch die Gerätesitzung."""
+def bediener_abmelden(db: Session, zugriff: Zugriff) -> bool:
+    """Bediener abmelden; bei einer persönlichen Anmeldung endet damit auch die Gerätesitzung (gibt dann True)."""
     if zugriff.bedienersitzung_id:
         db.query(Bedienersitzung).filter(Bedienersitzung.ID == zugriff.bedienersitzung_id).delete()
-    if zugriff.geraet and not zugriff.geraet.dauerhaft:
+    geraet_weg = bool(zugriff.geraet and not zugriff.geraet.dauerhaft)
+    if geraet_weg:
         db.query(Geraetesitzung).filter(Geraetesitzung.ID == zugriff.geraet.id).delete()
     db.commit()
+    return geraet_weg
 
 
 # --- Gerät dauerhaft anmelden -------------------------------------------------------

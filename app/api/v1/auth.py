@@ -102,8 +102,7 @@ def ich(zugriff: Zugriff = Depends(hole_zugriff), db: Session = Depends(get_db))
 @router.post("/bediener/abmelden")
 def bediener_abmelden(zugriff: Zugriff = Depends(hole_zugriff), db: Session = Depends(get_db)):
     """Meldet den Bediener ab. Ein dauerhaft angemeldetes Gerät bleibt angemeldet, eine persönliche Anmeldung endet."""
-    anmeldung.bediener_abmelden(db, zugriff)
-    return {"success": True}
+    return {"success": True, "geraet_abgemeldet": anmeldung.bediener_abmelden(db, zugriff)}
 
 
 @router.post("/abmelden")
