@@ -2,8 +2,8 @@
 Wer ruft die API auf?
 
 Zugangsdaten (alle optional, solange die Pflicht in den Einstellungen aus ist):
-- Authorization: Bearer sb_…  Bedienersitzung (Benutzer auf einem angemeldeten Gerät)
-- Authorization: Bearer sg_…  Gerätesitzung ohne Bediener (Bedienerauswahl, PIN)
+- Authorization: Bearer sb_…  Bedienersitzung (Benutzer auf einem Gerät)
+- Authorization: Bearer sg_…  Gerätesitzung ohne Bediener (Bedienerauswahl, PIN; nur dauerhaft angemeldete Geräte)
 - X-Geraete-Schluessel: gk_…  Hardware-Scanner bzw. Kundenterminal
 - ?ticket=tk_…               Kurzzeit-Ticket für WebSocket, EventSource und PDF-Links
 
@@ -52,6 +52,8 @@ class GeraetInfo:
     name: str
     art: str
     timeout_minuten: int
+    # False = persönliche Anmeldung, endet mit dem Bediener
+    dauerhaft: bool = True
 
 
 @dataclass(frozen=True)
@@ -121,7 +123,8 @@ def bediener_timeout(geraet: Geraetesitzung) -> int:
 
 
 def _geraet_info(geraet: Geraetesitzung) -> GeraetInfo:
-    return GeraetInfo(id=geraet.ID, name=geraet.Name, art=geraet.Art, timeout_minuten=bediener_timeout(geraet))
+    return GeraetInfo(id=geraet.ID, name=geraet.Name, art=geraet.Art, timeout_minuten=bediener_timeout(geraet),
+                      dauerhaft=bool(geraet.Dauerhaft))
 
 
 def _benutzer_info(db, benutzer: Benutzer) -> BenutzerInfo:
@@ -145,6 +148,18 @@ def _geraet_pruefen(db, geraet: Geraetesitzung | None, jetzt: datetime) -> Gerae
     return geraet
 
 
+def _bediener_ende(db, sitzung: Bedienersitzung | None, geraet: Geraetesitzung) -> ZugriffFehler:
+    """Bediener weg: ein dauerhaftes Gerät wählt neu, eine persönliche Anmeldung endet ganz."""
+    if sitzung is not None:
+        db.delete(sitzung)
+    if not geraet.Dauerhaft:
+        db.delete(geraet)
+        db.commit()
+        return _fehler(401, "anmeldung_noetig")
+    db.commit()
+    return _fehler(401, "bediener_noetig")
+
+
 def zugriff_aus_token(token: str) -> Zugriff:
     """Wertet ein Bearer-Token aus. Wirft 401 bei ungültigem oder abgelaufenem Token."""
     jetzt = datetime.now()
@@ -158,14 +173,10 @@ def zugriff_aus_token(token: str) -> Zugriff:
             geraet = _geraet_pruefen(db, db.get(Geraetesitzung, sitzung.Geraetesitzung_ID), jetzt)
             timeout = bediener_timeout(geraet)
             if timeout and sitzung.Letzte_Aktivitaet + timedelta(minutes=timeout) < jetzt:
-                db.delete(sitzung)
-                db.commit()
-                raise _fehler(401, "bediener_noetig")
+                raise _bediener_ende(db, sitzung, geraet)
             benutzer = db.get(Benutzer, sitzung.Benutzer_ID)
             if benutzer is None or not benutzer.darf_anmelden:
-                db.delete(sitzung)
-                db.commit()
-                raise _fehler(401, "bediener_noetig")
+                raise _bediener_ende(db, sitzung, geraet)
             if jetzt - sitzung.Letzte_Aktivitaet > _SCHREIB_ABSTAND:
                 sitzung.Letzte_Aktivitaet = jetzt
             ergebnis = Zugriff(benutzer=_benutzer_info(db, benutzer), geraet=_geraet_info(geraet),
@@ -175,6 +186,11 @@ def zugriff_aus_token(token: str) -> Zugriff:
         if token.startswith(sicherheit.PRAEFIX_GERAET):
             geraet = db.query(Geraetesitzung).filter(Geraetesitzung.Token_Hash == hash_wert).one_or_none()
             geraet = _geraet_pruefen(db, geraet, jetzt)
+            if not geraet.Dauerhaft:
+                # Persönliche Anmeldung ohne (gültigen) Bediener: keine Bedienerauswahl
+                hat_bediener = db.query(Bedienersitzung.ID).filter(Bedienersitzung.Geraetesitzung_ID == geraet.ID).first()
+                if not hat_bediener:
+                    raise _bediener_ende(db, None, geraet)
             ergebnis = Zugriff(geraet=_geraet_info(geraet))
             db.commit()
             return ergebnis
@@ -370,9 +386,11 @@ async def benutzer_noetig(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
 
 
 async def nur_geraetesitzung(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
-    """Ein angemeldetes Gerät, mit oder ohne Bediener (Bedienerauswahl, PIN)."""
+    """Ein dauerhaft angemeldetes Gerät, mit oder ohne Bediener (Bedienerauswahl, PIN)."""
     if zugriff.geraet is None:
         raise _fehler(401, "anmeldung_noetig")
+    if not zugriff.geraet.dauerhaft:
+        raise _fehler(403, "geraet_nicht_dauerhaft")
     return zugriff
 
 

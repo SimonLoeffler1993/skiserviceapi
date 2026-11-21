@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.zugriff import Zugriff, benutzer_noetig, hole_zugriff, nur_geraetesitzung
 from app.db.deps import get_db
 from app.schemas.benutzer import (AnmeldeAntwort, AnmeldenAnfrage, AuthStatus, EigenePin, EigenesPasswort,
-                                  EinrichtungAnfrage, GeraetPruefung, IchAntwort, IchBenutzer, Kachel,
+                                  EinrichtungAnfrage, GeraetAnmelden, GeraetOidc, GeraetPruefung, IchAntwort, IchGeraet, IchBenutzer, Kachel,
                                   OidcEinloesen, OidcUrl, OidcVerknuepfen, PinAnmeldung, TicketAnfrage,
                                   TicketAntwort)
 from app.services import anmeldung, oidc
@@ -101,7 +101,7 @@ def ich(zugriff: Zugriff = Depends(hole_zugriff), db: Session = Depends(get_db))
 
 @router.post("/bediener/abmelden")
 def bediener_abmelden(zugriff: Zugriff = Depends(hole_zugriff), db: Session = Depends(get_db)):
-    """Meldet nur den Bediener ab, das Gerät bleibt angemeldet."""
+    """Meldet den Bediener ab. Ein dauerhaft angemeldetes Gerät bleibt angemeldet, eine persönliche Anmeldung endet."""
     anmeldung.bediener_abmelden(db, zugriff)
     return {"success": True}
 
@@ -111,6 +111,24 @@ def abmelden(zugriff: Zugriff = Depends(hole_zugriff), db: Session = Depends(get
     """Meldet das ganze Gerät ab."""
     anmeldung.geraet_abmelden(db, zugriff)
     return {"success": True}
+
+
+@router.post("/geraet/anmelden", response_model=IchGeraet)
+def geraet_anmelden(daten: GeraetAnmelden, zugriff: Zugriff = Depends(benutzer_noetig), db: Session = Depends(get_db)):
+    """Macht dieses Gerät dauerhaft angemeldet (Recht geraete.anmelden, Passwort erneut). Die Tokens bleiben gleich."""
+    return _ausfuehren(anmeldung.geraet_dauerhaft, db, zugriff.benutzer.id, zugriff.geraet.id if zugriff.geraet else None,
+                       daten.name, daten.passwort)
+
+
+@router.post("/geraet/oidc", response_model=OidcUrl)
+def geraet_oidc(daten: GeraetOidc, zugriff: Zugriff = Depends(benutzer_noetig), db: Session = Depends(get_db)):
+    """Wie /geraet/anmelden, bestätigt über den OIDC-Anbieter. Rückkehr mit ?geraet_angemeldet=1 bzw. ?fehler=…"""
+    _ausfuehren(anmeldung.geraet_pruefen, db, zugriff)
+    try:
+        return {"url": oidc.start_url(daten.ziel, geraet={
+            "benutzer_id": zugriff.benutzer.id, "geraet_id": zugriff.geraet.id, "name": daten.name})}
+    except oidc.OidcFehler as e:
+        raise HTTPException(status_code=400, detail=e.text)
 
 
 @router.put("/ich/passwort", response_model=IchBenutzer)

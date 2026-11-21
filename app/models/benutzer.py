@@ -49,8 +49,10 @@ class Benutzer(Base):
 
 class Geraetesitzung(Base):
     """
-    Ein angemeldetes Gerät (Center-Tablet, Kasse). Lange gültig, die Bediener wechseln darauf.
-    Im Token steht nur der Zufallswert, gespeichert wird sein SHA-256.
+    Ein Gerät (Center-Tablet, Kasse) mit seiner Anmeldung. Im Token steht nur der Zufallswert, gespeichert wird sein SHA-256.
+
+    Dauerhaft (über "Gerät anmelden", Recht geraete.anmelden): lange gültig, die Bediener wechseln darauf (PIN).
+    Persönlich (normale Anmeldung): gehört zu genau einer Bedienersitzung und endet mit ihr.
     """
     __tablename__ = "geraetesitzungen"
     ID: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -65,6 +67,7 @@ class Geraetesitzung(Base):
     Laeuft_Ab: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     # Abmeldung des Bedieners nach so vielen Minuten ohne Aktivität. None = Einstellung, 0 = nie
     Bediener_Timeout_Minuten: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    Dauerhaft: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="1")
 
 
 class Bedienersitzung(Base):

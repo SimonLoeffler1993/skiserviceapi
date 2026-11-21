@@ -11,7 +11,8 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.rechte import ADMIN_GRUPPE, ALLE_RECHTE, MITARBEITER_RECHTE, RECHTE, SYSTEMROLLE, VERWALTUNGSRECHT
+from app.core.rechte import (ADMIN_GRUPPE, ALLE_RECHTE, GERAET_ANMELDEN, MITARBEITER_RECHTE, RECHTE,
+                             ROLLE_GERAET_ANMELDEN, SYSTEMROLLE, VERWALTUNGSRECHT)
 from app.models.benutzer import Benutzer
 from app.models.rechte import BenutzerGruppe, Gruppe, GruppeRolle, Rolle, RolleRecht
 from app.services import ereignisse
@@ -156,7 +157,7 @@ def admin_gruppe(db: Session) -> Gruppe:
 
 
 def standard_anlegen(db: Session) -> None:
-    """Beim Start: Systemrolle/Admin-Gruppe sicherstellen; ohne jede Rolle zusätzlich "Mitarbeiter"."""
+    """Beim Start: Systemrolle/Admin-Gruppe sicherstellen; ohne jede Rolle zusätzlich "Mitarbeiter" und "Gerät anmelden"."""
     ohne_rollen = db.query(func.count(Rolle.ID)).scalar() == 0
     admin_gruppe(db)
     gast_gruppe(db)
@@ -164,7 +165,9 @@ def standard_anlegen(db: Session) -> None:
         rolle = Rolle(Name="Mitarbeiter", Beschreibung="Tagesgeschäft", Angelegt_Am=datetime.now(),
                       rechte=[RolleRecht(Recht=r) for r in MITARBEITER_RECHTE])
         gruppe = Gruppe(Name="Mitarbeiter", Beschreibung="Tagesgeschäft", Angelegt_Am=datetime.now(), rollen=[rolle])
-        db.add_all([rolle, gruppe])
+        geraet = Rolle(Name=ROLLE_GERAET_ANMELDEN, Beschreibung="Darf Geräte dauerhaft anmelden",
+                       Angelegt_Am=datetime.now(), rechte=[RolleRecht(Recht=GERAET_ANMELDEN)])
+        db.add_all([rolle, gruppe, geraet])
     db.commit()
 
 

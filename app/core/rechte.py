@@ -22,12 +22,17 @@ RECHTE: dict[str, tuple[str, str]] = {
     "einstellungen.verwalten": ("Verwaltung", "Einstellungen, Check-in-Schlüssel, neue Saison"),
     "benutzer.verwalten": ("Verwaltung", "Benutzer, Gruppen und Rollen, Freigaben, Verlauf je Benutzer"),
     "geraete.verwalten": ("Verwaltung", "Geräteschlüssel, angemeldete Geräte, Scanner-Update"),
+    "geraete.anmelden": ("Verwaltung", "Geräte (Center, Kasse) dauerhaft anmelden: danach Bedienerauswahl und PIN"),
 }
 
 # Rechte der bisherigen Rolle "Mitarbeiter" (Migration und neue Installation)
 MITARBEITER_RECHTE = [
     "skiservice.bearbeiten", "verleih.bearbeiten", "kunden.bearbeiten", "material.bearbeiten", "kasse.kassieren",
 ]
+
+# Fertige Rolle mit nur diesem Recht (Migration und neue Installation)
+GERAET_ANMELDEN = "geraete.anmelden"
+ROLLE_GERAET_ANMELDEN = "Gerät anmelden"
 
 SYSTEMROLLE = "Administrator"
 ADMIN_GRUPPE = "Administratoren"

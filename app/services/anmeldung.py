@@ -1,8 +1,10 @@
 """
 Anmeldung: Passwort (Standard), freiwillige PIN, OIDC-Einmalcode; Geräte- und Bedienersitzungen; Tickets.
 
-Ein Gerät (Center-Tablet, Kasse) wird einmal angemeldet und bekommt eine lange Gerätesitzung.
-Darauf meldet sich jeweils ein Bediener an (Bedienersitzung). Pro Gerät gibt es höchstens einen Bediener.
+Jede Anmeldung mit Passwort oder OIDC legt eine persönliche Gerätesitzung an, die mit dem Bediener endet.
+Wer das Recht geraete.anmelden hat, kann sie danach (Passwort bzw. OIDC erneut bestätigt) dauerhaft machen:
+dann bleibt das Gerät angemeldet, und die Bediener wechseln darauf (Bedienerauswahl, PIN).
+Pro Gerät gibt es höchstens einen Bediener.
 """
 import logging
 import os
@@ -82,7 +84,7 @@ def ich_benutzer(db: Session, benutzer: Benutzer) -> dict:
 
 def ich_geraet(geraet: Geraetesitzung) -> dict:
     return {"id": geraet.ID, "name": geraet.Name, "art": geraet.Art,
-            "bediener_timeout_minuten": bediener_timeout(geraet)}
+            "bediener_timeout_minuten": bediener_timeout(geraet), "dauerhaft": bool(geraet.Dauerhaft)}
 
 
 def status(db: Session) -> dict:
@@ -148,10 +150,15 @@ def _darf_anmelden(benutzer: Benutzer) -> None:
 # --- Sitzungen -----------------------------------------------------------------
 
 def _sitzungen_anlegen(db: Session, benutzer: Benutzer, methode: str, zugriff: Zugriff,
-                       geraet_name: str | None, geraet_art: str) -> dict:
+                       geraet_name: str | None, geraet_art: str, dauerhaft: bool = False) -> dict:
     jetzt = datetime.now()
     geraet_token = None
     geraet = db.get(Geraetesitzung, zugriff.geraet.id) if zugriff.geraet else None
+    if geraet is not None and not geraet.Dauerhaft:
+        # Persönliche Anmeldung eines anderen (bzw. erneut): die alte endet, es gibt eine neue
+        db.delete(geraet)
+        db.flush()
+        geraet = None
     if geraet is None:
         geraet_token = sicherheit.token_erzeugen(sicherheit.PRAEFIX_GERAET)
         name = (geraet_name or "").strip() or f"{'Kasse' if geraet_art == 'kasse' else 'Center'} ({benutzer.Anzeigename})"
@@ -163,11 +170,13 @@ def _sitzungen_anlegen(db: Session, benutzer: Benutzer, methode: str, zugriff: Z
             Erstellt_Am=jetzt,
             Zuletzt_Gesehen=jetzt,
             Laeuft_Ab=jetzt + timedelta(days=int(einstellungen.hole("GERAETESITZUNG_TAGE"))),
+            Dauerhaft=dauerhaft,
         )
         db.add(geraet)
         db.flush()
-        ereignisse.erfasse(db, "geraet_angemeldet", benutzer_id=benutzer.ID, benutzer_name=benutzer.Anzeigename,
-                           text=geraet.Name)
+        if dauerhaft:
+            ereignisse.erfasse(db, "geraet_angemeldet", benutzer_id=benutzer.ID, benutzer_name=benutzer.Anzeigename,
+                               text=geraet.Name)
     else:
         # Ein Bediener je Gerät: der vorherige wird abgemeldet
         db.query(Bedienersitzung).filter(Bedienersitzung.Geraetesitzung_ID == geraet.ID).delete()
@@ -256,13 +265,67 @@ def einrichten(db: Session, benutzername: str, anzeigename: str, passwort: str, 
     _crud_rechte().zur_admin_gruppe(db, benutzer)
     ereignisse.erfasse(db, "benutzer_angelegt", benutzer_id=benutzer.ID, benutzer_name=benutzer.Anzeigename,
                        text="Erster Admin (Einrichtung)")
-    return _sitzungen_anlegen(db, benutzer, "passwort", Zugriff(), geraet_name, geraet_art)
+    # Der erste Admin darf ohnehin Geräte anmelden: sein Gerät bleibt gleich dauerhaft angemeldet
+    return _sitzungen_anlegen(db, benutzer, "passwort", Zugriff(), geraet_name, geraet_art, dauerhaft=True)
 
 
 def bediener_abmelden(db: Session, zugriff: Zugriff) -> None:
+    """Bediener abmelden; bei einer persönlichen Anmeldung endet damit auch die Gerätesitzung."""
     if zugriff.bedienersitzung_id:
         db.query(Bedienersitzung).filter(Bedienersitzung.ID == zugriff.bedienersitzung_id).delete()
-        db.commit()
+    if zugriff.geraet and not zugriff.geraet.dauerhaft:
+        db.query(Geraetesitzung).filter(Geraetesitzung.ID == zugriff.geraet.id).delete()
+    db.commit()
+
+
+# --- Gerät dauerhaft anmelden -------------------------------------------------------
+
+def _geraet_zum_anmelden(db: Session, benutzer_id: int, geraet_id: int | None) -> tuple[Benutzer, Geraetesitzung]:
+    from app.core import rechte as rechte_mod
+
+    benutzer = db.get(Benutzer, benutzer_id)
+    if benutzer is None or not benutzer.darf_anmelden:
+        raise AnmeldeFehler(401, "anmeldung_noetig")
+    if not rechte_mod.hat(_crud_rechte().rechte_von(db, benutzer.ID), rechte_mod.GERAET_ANMELDEN):
+        raise AnmeldeFehler(403, "kein_recht_geraet")
+    geraet = db.get(Geraetesitzung, geraet_id) if geraet_id else None
+    if geraet is None:
+        raise AnmeldeFehler(401, "anmeldung_noetig")
+    if geraet.Dauerhaft:
+        raise AnmeldeFehler(409, "bereits_dauerhaft")
+    return benutzer, geraet
+
+
+def geraet_pruefen(db: Session, zugriff: Zugriff) -> None:
+    """Vorab (vor dem Umweg über OIDC): darf dieser Bediener dieses Gerät dauerhaft anmelden?"""
+    _geraet_zum_anmelden(db, zugriff.benutzer.id, zugriff.geraet.id if zugriff.geraet else None)
+
+
+def geraet_dauerhaft(db: Session, benutzer_id: int, geraet_id: int | None, name: str | None,
+                     passwort: str | None, oidc_bestaetigt: bool = False) -> dict:
+    """
+    Macht die persönliche Gerätesitzung dauerhaft. Bestätigt mit dem Passwort oder (oidc_bestaetigt)
+    durch eine frische Anmeldung beim OIDC-Anbieter. Die Tokens bleiben gleich.
+    """
+    benutzer, geraet = _geraet_zum_anmelden(db, benutzer_id, geraet_id)
+    jetzt = datetime.now()
+    if not oidc_bestaetigt:
+        if not benutzer.Passwort_Hash:
+            raise AnmeldeFehler(403, "oidc_bestaetigen")
+        _sperre_pruefen(benutzer, jetzt)
+        if not sicherheit.passwort_pruefen(benutzer.Passwort_Hash, passwort or ""):
+            _fehlversuch(db, benutzer, "Passwort (Gerät anmelden)", jetzt)
+            raise AnmeldeFehler(403, "passwort_falsch")
+        benutzer.Fehlversuche = 0
+    if name and name.strip():
+        geraet.Name = name.strip()[:100]
+    geraet.Dauerhaft = True
+    geraet.Angemeldet_Von = benutzer.ID
+    geraet.Laeuft_Ab = jetzt + timedelta(days=int(einstellungen.hole("GERAETESITZUNG_TAGE")))
+    ereignisse.erfasse(db, "geraet_angemeldet", benutzer_id=benutzer.ID, benutzer_name=benutzer.Anzeigename,
+                       text=geraet.Name)
+    db.commit()
+    return ich_geraet(geraet)
 
 
 def geraet_abmelden(db: Session, zugriff: Zugriff) -> None:

@@ -95,6 +95,19 @@ class IchGeraet(BaseModel):
     name: str
     art: str
     bediener_timeout_minuten: int
+    # False = persönliche Anmeldung (endet mit dem Bediener), True = über "Gerät anmelden"
+    dauerhaft: bool = True
+
+
+class GeraetAnmelden(BaseModel):
+    passwort: str = Field(max_length=200)
+    name: Optional[str] = Field(default=None, max_length=100)
+
+
+class GeraetOidc(BaseModel):
+    # Rücksprung nach der Bestätigung beim Anbieter, muss in ERLAUBTE_URSPRUENGE liegen
+    ziel: str = Field(max_length=500)
+    name: Optional[str] = Field(default=None, max_length=100)
 
 
 class IchAntwort(BaseModel):
@@ -231,6 +244,7 @@ class GeraetesitzungRead(BaseModel):
     laeuft_ab: datetime
     # None = Einstellung BEDIENER_TIMEOUT_MINUTEN, 0 = nie
     bediener_timeout_minuten: Optional[int] = None
+    dauerhaft: bool = True
 
 
 class GeraetesitzungAendern(BaseModel):

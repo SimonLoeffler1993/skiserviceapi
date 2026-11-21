@@ -96,6 +96,7 @@ def sitzungen(db: Session) -> list[dict]:
         "zuletzt_gesehen": g.Zuletzt_Gesehen,
         "laeuft_ab": g.Laeuft_Ab,
         "bediener_timeout_minuten": g.Bediener_Timeout_Minuten,
+        "dauerhaft": bool(g.Dauerhaft),
     } for g in geraete]
 
 

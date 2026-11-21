@@ -208,8 +208,11 @@ def _b64url(daten: bytes) -> str:
     return base64.urlsafe_b64encode(daten).rstrip(b"=").decode("ascii")
 
 
-def start_url(ziel: str, verknuepfen_benutzer_id: int | None = None) -> str:
-    """URL zum Anbieter. Wirft OidcFehler, wenn OIDC aus oder unvollständig ist bzw. das Ziel nicht erlaubt."""
+def start_url(ziel: str, verknuepfen_benutzer_id: int | None = None, geraet: dict | None = None) -> str:
+    """
+    URL zum Anbieter. Wirft OidcFehler, wenn OIDC aus oder unvollständig ist bzw. das Ziel nicht erlaubt.
+    geraet ({benutzer_id, geraet_id, name}): Bestätigung für "Gerät anmelden", mit erzwungener Neuanmeldung.
+    """
     if not einstellungen.hole("OIDC_AKTIV"):
         raise OidcFehler("oidc_aus", "Die Anmeldung mit OIDC ist ausgeschaltet.")
     _konfiguration_pruefen()
@@ -225,6 +228,8 @@ def start_url(ziel: str, verknuepfen_benutzer_id: int | None = None) -> str:
         "verifier": verifier,
         "issuer": konfigurierter_issuer(),
         "verknuepfen": verknuepfen_benutzer_id,
+        "geraet": geraet,
+        "start": int(time.time()),
     })
     parameter = {
         "response_type": "code",
@@ -236,7 +241,11 @@ def start_url(ziel: str, verknuepfen_benutzer_id: int | None = None) -> str:
         "code_challenge": _b64url(hashlib.sha256(verifier.encode("ascii")).digest()),
         "code_challenge_method": "S256",
     }
-    if anbieter().konto_waehlen:
+    if geraet:
+        # Bestätigung: der Anbieter muss neu nach dem Passwort fragen, nicht nur die laufende Sitzung nehmen
+        parameter["prompt"] = "login"
+        parameter["max_age"] = "0"
+    elif anbieter().konto_waehlen:
         parameter["prompt"] = "select_account"
     trenner = "&" if "?" in dokument["authorization_endpoint"] else "?"
     return dokument["authorization_endpoint"] + trenner + urlencode(parameter)
@@ -376,6 +385,8 @@ def callback(db: Session, code: str | None, state: str | None, fehler: str | Non
         identitaet = _identitaet(eintrag["issuer"], claims)
         token_gruppen = _gruppen_aus_token(dokument, claims, tokens.get("access_token"))
 
+        if eintrag.get("geraet"):
+            return ziel_mit(ziel, _geraet_abschliessen(db, eintrag["geraet"], identitaet, claims, eintrag.get("start")))
         if eintrag.get("verknuepfen"):
             return ziel_mit(ziel, _verknuepfen_abschliessen(db, eintrag["verknuepfen"], identitaet, token_gruppen))
 
@@ -477,6 +488,25 @@ def _verknuepfen_abschliessen(db: Session, benutzer_id: int, identitaet: Identit
     db.commit()
     _gruppen_uebernehmen(db, benutzer, token_gruppen)
     return {"verknuepft": "1"}
+
+
+def _geraet_abschliessen(db: Session, geraet: dict, identitaet: Identitaet, claims: dict,
+                         start: int | None) -> dict[str, str]:
+    """ "Gerät anmelden" mit OIDC bestätigt: nur, wenn sich genau dieser Benutzer gerade neu angemeldet hat."""
+    from app.services import anmeldung  # spät: anmeldung importiert oidc
+
+    benutzer = benutzer_zur_identitaet(db, identitaet)
+    if benutzer is None or benutzer.ID != geraet["benutzer_id"]:
+        return {"fehler": "oidc_anderer_benutzer"}
+    auth_time = claims.get("auth_time")
+    if start and isinstance(auth_time, (int, float)) and auth_time < start - 60:
+        # Anbieter hat die alte Sitzung genommen statt neu zu fragen
+        return {"fehler": "oidc_nicht_frisch"}
+    try:
+        anmeldung.geraet_dauerhaft(db, benutzer.ID, geraet["geraet_id"], geraet.get("name"), None, oidc_bestaetigt=True)
+    except anmeldung.AnmeldeFehler as e:
+        return {"fehler": e.detail}
+    return {"geraet_angemeldet": "1"}
 
 
 def testen() -> dict:
