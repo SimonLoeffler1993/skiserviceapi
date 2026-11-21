@@ -374,13 +374,16 @@ def callback(db: Session, code: str | None, state: str | None, fehler: str | Non
             raise OidcFehler("oidc", "Der Anbieter hat kein ID-Token geliefert.")
         claims = _id_token_pruefen(dokument, tokens["id_token"], eintrag["nonce"])
         identitaet = _identitaet(eintrag["issuer"], claims)
+        token_gruppen = _gruppen_aus_token(dokument, claims, tokens.get("access_token"))
 
         if eintrag.get("verknuepfen"):
-            return ziel_mit(ziel, _verknuepfen_abschliessen(db, eintrag["verknuepfen"], identitaet))
+            return ziel_mit(ziel, _verknuepfen_abschliessen(db, eintrag["verknuepfen"], identitaet, token_gruppen))
 
         benutzer = benutzer_zur_identitaet(db, identitaet)
         if benutzer is None:
-            benutzer = _neuer_benutzer(db, identitaet)
+            benutzer = _neuer_benutzer(db, identitaet, token_gruppen)
+        else:
+            _gruppen_uebernehmen(db, benutzer, token_gruppen)
         if benutzer.Freigabe_Ausstehend:
             return ziel_mit(ziel, {"fehler": "freigabe_ausstehend"})
         if not benutzer.Aktiv:
@@ -393,7 +396,49 @@ def callback(db: Session, code: str | None, state: str | None, fehler: str | Non
         return ziel_mit(ziel, {"fehler": e.code})
 
 
-def _neuer_benutzer(db: Session, identitaet: Identitaet) -> Benutzer:
+def _gruppen_aus_token(dokument: dict, claims: dict, access_token: str | None) -> list[str]:
+    """
+    Gruppen aus dem Claim OIDC_GRUPPEN_CLAIM (Standard "groups"). Fehlt er im ID-Token, wird der
+    userinfo-Endpunkt gefragt (z.B. Authentik, Keycloak). Liste oder einzelner String.
+    """
+    claim = (einstellungen.hole("OIDC_GRUPPEN_CLAIM") or "groups").strip() or "groups"
+    wert = claims.get(claim)
+    if wert is None and access_token and dokument.get("userinfo_endpoint"):
+        try:
+            antwort = httpx.get(dokument["userinfo_endpoint"], timeout=10,
+                                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"})
+            if antwort.status_code == 200:
+                wert = antwort.json().get(claim)
+        except Exception as e:
+            logger.warning("OIDC userinfo nicht abrufbar: %s", e)
+    if wert is None:
+        return []
+    if isinstance(wert, str):
+        return [wert]
+    if isinstance(wert, list):
+        return [str(g) for g in wert if g is not None]
+    return []
+
+
+def _gruppen_uebernehmen(db: Session, benutzer: Benutzer, token_gruppen: list[str]) -> int:
+    """
+    Gruppen mit OIDC-Zuordnung abgleichen. Wer danach in einer zugeordneten Gruppe ist und auf die
+    Freigabe wartet, wird freigegeben (deaktivierte Benutzer bleiben deaktiviert).
+    """
+    from app.crud import rechte as crud_rechte
+    from app.services import ereignisse
+
+    passend = crud_rechte.oidc_gruppen_abgleichen(db, benutzer, token_gruppen)
+    if passend and benutzer.Freigabe_Ausstehend:
+        benutzer.Freigabe_Ausstehend = False
+        benutzer.Aktiv = True
+        ereignisse.erfasse(db, "benutzer_freigegeben", benutzer_id=benutzer.ID, benutzer_name=benutzer.Anzeigename,
+                           text="Automatisch über OIDC-Gruppe")
+    db.commit()
+    return passend
+
+
+def _neuer_benutzer(db: Session, identitaet: Identitaet, token_gruppen: list[str]) -> Benutzer:
     from app.services import ereignisse
 
     freigeben = bool(einstellungen.hole("OIDC_AUTO_FREIGABE"))
@@ -409,12 +454,14 @@ def _neuer_benutzer(db: Session, identitaet: Identitaet) -> Benutzer:
     db.add(benutzer)
     db.flush()
     ereignisse.erfasse(db, "benutzer_angelegt", benutzer_id=benutzer.ID, benutzer_name=benutzer.Anzeigename,
-                       text=f"Über {anbieter().name}" + ("" if freigeben else ", Freigabe ausstehend"))
-    db.commit()
+                       text=f"Über {anbieter().name}")
+    # Gruppen aus dem Token: mit einer zugeordneten Gruppe gleich freigegeben
+    _gruppen_uebernehmen(db, benutzer, token_gruppen)
     return benutzer
 
 
-def _verknuepfen_abschliessen(db: Session, benutzer_id: int, identitaet: Identitaet) -> dict[str, str]:
+def _verknuepfen_abschliessen(db: Session, benutzer_id: int, identitaet: Identitaet,
+                              token_gruppen: list[str]) -> dict[str, str]:
     benutzer = db.get(Benutzer, benutzer_id)
     if benutzer is None:
         return {"fehler": "oidc"}
@@ -428,6 +475,7 @@ def _verknuepfen_abschliessen(db: Session, benutzer_id: int, identitaet: Identit
             return {"fehler": "bereits_verknuepft"}
     verknuepfen(benutzer, identitaet)
     db.commit()
+    _gruppen_uebernehmen(db, benutzer, token_gruppen)
     return {"verknuepft": "1"}
 
 

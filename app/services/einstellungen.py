@@ -194,11 +194,15 @@ DEFINITIONEN: list[EinstellungDefinition] = [
     EinstellungDefinition("OIDC_CLIENT_ID", "oidc", "Client-ID"),
     EinstellungDefinition("OIDC_CLIENT_SECRET", "oidc", "Client-Secret", typ="passwort"),
     EinstellungDefinition("OIDC_SCOPES", "oidc", "Scopes", standard="openid profile email"),
+    EinstellungDefinition("OIDC_GRUPPEN_CLAIM", "oidc", "Claim mit den Gruppen", standard="groups",
+                          beschreibung="Aus diesem Claim kommen die Gruppen für Verwalten → Benutzer → Gruppen (Feld „OIDC-Gruppe“). "
+                                       "Authentik: groups. Keycloak: groups (Group-Mapper anlegen). Microsoft: groups (Object-IDs eintragen) "
+                                       "oder roles für App-Rollen. Google liefert keine Gruppen."),
     EinstellungDefinition("OIDC_BUTTON_TEXT", "oidc", "Text auf dem Button",
                           beschreibung="Leer = „Mit <Anbieter> anmelden“."),
     EinstellungDefinition("OIDC_AUTO_FREIGABE", "oidc", "Neue Benutzer automatisch freigeben", typ="bool", standard=False,
-                          beschreibung="Aus: Wer sich zum ersten Mal anmeldet, wartet auf die Freigabe durch einen Admin. "
-                                       "An: wird sofort als Mitarbeiter freigegeben. Nur einschalten, wenn beim Anbieter ausschließlich eigene Mitarbeiter Zugang haben."),
+                          beschreibung="Wer in einer zugeordneten OIDC-Gruppe ist, wird immer sofort freigegeben. Diese Einstellung gilt für alle anderen: "
+                                       "Aus = sie warten auf die Freigabe unter Verwalten → Benutzer. An = sofort freigegeben (ohne Gruppe aber ohne Rechte)."),
     EinstellungDefinition("OIDC_API_ADRESSE", "oidc", "Öffentliche Adresse der API",
                           beschreibung="So erreicht der Browser die API, z.B. https://api.example.de. "
                                        "Daraus entsteht die Redirect-URI, die beim Anbieter eingetragen wird."),
