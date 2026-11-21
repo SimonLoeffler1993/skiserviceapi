@@ -48,7 +48,7 @@ def schluessel_erzeugen(db: Session = Depends(get_db)):
     return _schluessel_read(checkin_schluessel.erzeugen(db))
 
 
-@router.post("/{checkin_id}/uebernehmen", response_model=CheckinUebernommen, dependencies=[Depends(recht("kunden.bearbeiten"))])
+@router.post("/{checkin_id}/uebernehmen", response_model=CheckinUebernommen, dependencies=[Depends(recht("kunden.anlegen"))])
 def uebernehmen(checkin_id: str, db: Session = Depends(get_db)):
     """Legt den Kunden an und löscht den Check-in aus der Zwischendatenbank."""
     try:
@@ -64,7 +64,7 @@ def uebernehmen(checkin_id: str, db: Session = Depends(get_db)):
     return {"kunde": ergebnis.kunde, "warnung": ergebnis.warnung}
 
 
-@router.delete("/{checkin_id}", dependencies=[Depends(recht("kunden.bearbeiten"))])
+@router.delete("/{checkin_id}", dependencies=[Depends(recht("kunden.anlegen"))])
 def verwerfen(checkin_id: str):
     """Löscht einen Check-in, z.B. Spam."""
     try:

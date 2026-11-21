@@ -41,7 +41,7 @@ async def erstelle_saisonverleihpreis(preis: SaisonVerleihPreisBase, db: Session
     ergebnis = crud_saisonverleih.create_saisonverleihpreis(db, preis)
     return ergebnis
 
-@router.post("/neu")
+@router.post("/neu", dependencies=[Depends(recht("verleih.anlegen"))])
 async def erstelle_saisonverleih(saisonverleih: SaisonVerleihCreate, db: Session = Depends(get_db)):
     """
     Erstellt einen neuen Saisonverleih.
@@ -118,7 +118,7 @@ def get_saisonverleih_pdf(saisonverleih_id: int, db: Session = Depends(get_db)):
         "Content-Disposition": f"inline; filename=saisonverleih_{saisonverleih_id}.pdf"
     })
 
-@router.post("/zurueckgeben/{saisonverleih_id}")
+@router.post("/zurueckgeben/{saisonverleih_id}", dependencies=[Depends(recht("verleih.status"))])
 async def saisonverleih_zurueckgeben(saisonverleih_id: int, db: Session = Depends(get_db), zurueck: bool = True):
     """
     Markiert einen Saisonverleih als zurückgegeben.
@@ -128,7 +128,7 @@ async def saisonverleih_zurueckgeben(saisonverleih_id: int, db: Session = Depend
         raise HTTPException(status_code=404, detail="Saisonverleih not found")
     return {"message": f"Saisonverleih {saisonverleih_id} wurde als zurückgegeben markiert", "success": True}
 
-@router.patch("/{saisonverleih_id}/status", response_model=SaisonVerleihRead)
+@router.patch("/{saisonverleih_id}/status", response_model=SaisonVerleihRead, dependencies=[Depends(recht("verleih.status"))])
 def setze_verleih_status(saisonverleih_id: int, daten: VerleihStatusAenderung, db: Session = Depends(get_db)):
     """
     Setzt den Status: vorbereitung -> vorbereitet -> unterwegs (abgeholt) -> zurueck. Auch rückwärts zum Korrigieren.
@@ -153,7 +153,7 @@ def setze_verleih_bezahlt(saisonverleih_id: int, daten: BezahltSetzen, db: Sessi
         raise HTTPException(status_code=404, detail="Saisonverleih not found")
     return crud_saisonverleih.get_saisonverleih(db, saisonverleih_id)
 
-@router.post("/{saisonverleih_id}/benachrichtigen", response_model=SaisonVerleihRead)
+@router.post("/{saisonverleih_id}/benachrichtigen", response_model=SaisonVerleihRead, dependencies=[Depends(recht("verleih.status"))])
 def benachrichtige_kunde(saisonverleih_id: int, anfrage: VerleihBenachrichtigenAnfrage, db: Session = Depends(get_db)):
     """
     Versendet die Abhol- bzw. Rückgabe-Mail (auch erneut) und setzt danach die Benachrichtigung.
@@ -168,7 +168,7 @@ def benachrichtige_kunde(saisonverleih_id: int, anfrage: VerleihBenachrichtigenA
     return crud_saisonverleih.setze_benachrichtigt(db, saisonverleih_id, anfrage.art)
 
 
-@router.patch("/{saisonverleih_id}/benachrichtigt", response_model=SaisonVerleihRead)
+@router.patch("/{saisonverleih_id}/benachrichtigt", response_model=SaisonVerleihRead, dependencies=[Depends(recht("verleih.status"))])
 def setze_benachrichtigt(saisonverleih_id: int, daten: VerleihBenachrichtigtAenderung, db: Session = Depends(get_db)):
     """
     Setzt die Benachrichtigung von Hand ohne Mail, z.B. nach einem Anruf. Jederzeit änderbar.
@@ -234,7 +234,7 @@ def aendere_material(saisonverleih_id: int, material_id: int, daten: SaisonVerle
         raise HTTPException(status_code=409, detail=str(e))
 
 
-@router.post("/{saisonverleih_id}/bindung-geprueft", response_model=SaisonVerleihMitMail)
+@router.post("/{saisonverleih_id}/bindung-geprueft", response_model=SaisonVerleihMitMail, dependencies=[Depends(recht("verleih.status"))])
 def bindung_geprueft(saisonverleih_id: int, anfrage: BindungGeprueftAnfrage, hintergrund: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Markiert die Bindungen der Materialzeilen als geprüft (ohne material_ids alle).

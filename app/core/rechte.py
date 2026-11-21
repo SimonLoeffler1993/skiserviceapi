@@ -9,11 +9,16 @@ ALLE_RECHTE = "*"
 
 # Recht -> (Bereich, Bezeichnung)
 RECHTE: dict[str, tuple[str, str]] = {
-    "skiservice.bearbeiten": ("Skiservice", "Aufträge anlegen und ändern, Ski fertig, Bindung, abgeholt, bezahlt von Hand, Bindungsdaten"),
+    "skiservice.anlegen": ("Skiservice", "Neue Aufträge anlegen"),
+    "skiservice.bearbeiten": ("Skiservice", "Aufträge ändern: Daten, Ski hinzufügen, ändern und entfernen, Bindungsdaten, bezahlt von Hand"),
+    "skiservice.status": ("Skiservice", "Ski fertig, Bindung geprüft, abgeholt, Kunden benachrichtigen"),
     "skiservice.loeschen": ("Skiservice", "Aufträge löschen"),
-    "verleih.bearbeiten": ("Verleih", "Verleihe anlegen und ändern, Status, Bindung geprüft, bezahlt von Hand"),
+    "verleih.anlegen": ("Verleih", "Neue Verleihe anlegen (Saison und Tag)"),
+    "verleih.bearbeiten": ("Verleih", "Verleihe ändern: Daten, Material hinzufügen, ändern und entfernen, bezahlt von Hand"),
+    "verleih.status": ("Verleih", "Status, Bindung geprüft, Zurückgeben, Kunden benachrichtigen"),
     "verleih.loeschen": ("Verleih", "Verleihe löschen"),
-    "kunden.bearbeiten": ("Kunden", "Kunden anlegen und ändern, Check-in übernehmen und löschen, Kunde ans Terminal senden"),
+    "kunden.anlegen": ("Kunden", "Neue Kunden anlegen, Check-in übernehmen und verwerfen"),
+    "kunden.bearbeiten": ("Kunden", "Kunden ändern, Kunde ans Terminal senden"),
     "material.bearbeiten": ("Material", "Ski, Schuhe, Stöcke, Hersteller, Modelle und Services am Leihski"),
     "kasse.kassieren": ("Kasse", "Kasse bedienen, Quittung per Mail senden"),
     "quittungen.verwalten": ("Kasse", "Quittungen stornieren, aus Quittung entfernen, Lexware-Upload, externe Belege"),
@@ -27,7 +32,9 @@ RECHTE: dict[str, tuple[str, str]] = {
 
 # Rechte der bisherigen Rolle "Mitarbeiter" (Migration und neue Installation)
 MITARBEITER_RECHTE = [
-    "skiservice.bearbeiten", "verleih.bearbeiten", "kunden.bearbeiten", "material.bearbeiten", "kasse.kassieren",
+    "skiservice.anlegen", "skiservice.bearbeiten", "skiservice.status",
+    "verleih.anlegen", "verleih.bearbeiten", "verleih.status",
+    "kunden.anlegen", "kunden.bearbeiten", "material.bearbeiten", "kasse.kassieren",
 ]
 
 # Fertige Rolle mit nur diesem Recht (Migration und neue Installation)

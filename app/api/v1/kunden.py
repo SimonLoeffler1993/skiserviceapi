@@ -102,7 +102,7 @@ async def update_kunde(kunde_id: int, kunde: SkiKundeSpeichern, db: Session = De
         db.rollback()
         raise HTTPException(status_code=400, detail="PLZ nicht gefunden")
 
-@router.post("/erfassen", dependencies=[Depends(geraet_oder_angemeldet("terminal", "kunden.bearbeiten"))])
+@router.post("/erfassen", dependencies=[Depends(geraet_oder_angemeldet("terminal", "kunden.anlegen"))])
 async def erfassen_kunde(kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     return crud_kunde.erfassen_kunde(db, kunde)
 
