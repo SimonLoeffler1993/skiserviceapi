@@ -18,7 +18,7 @@ from app.api.v1 import mailprotokoll
 from app.api.v1 import werkstatt
 from app.api.v1 import auth, benutzer, geraete, ereignisse, rollen, gruppen
 from app.core.cors import EinstellungsCors
-from app.core.zugriff import angemeldet, recht, schreibrecht
+from app.core.zugriff import angemeldet, angemeldet_ausser, recht, schreibrecht
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services import checkin_schluessel
@@ -97,10 +97,10 @@ app.include_router(schuh.router, prefix=appPrefix, dependencies=schreiben("mater
 app.include_router(stock.router, prefix=appPrefix, dependencies=schreiben("material.bearbeiten"))
 app.include_router(ettiket.router, prefix=appPrefix, dependencies=ANGEMELDET)
 app.include_router(saison.router, prefix=appPrefix)
-app.include_router(quittungen.router, prefix=appPrefix, dependencies=ANGEMELDET)
+app.include_router(quittungen.router, prefix=appPrefix, dependencies=[Depends(angemeldet_ausser(("/pdf",)))])
 app.include_router(skiscanner.router, prefix=appPrefix)
 app.include_router(skiservice.router, prefix=appPrefix, dependencies=schreiben("skiservice.bearbeiten", ausser=("/preise", "/bindungsservice")))
-app.include_router(kasse.router, prefix=appPrefix, dependencies=schreiben("kasse.kassieren"))
+app.include_router(kasse.router, prefix=appPrefix, dependencies=ganz("kasse.kassieren"))
 app.include_router(einstellungen.router, prefix=appPrefix, dependencies=ganz("einstellungen.verwalten"))
 app.include_router(bindungsdaten.router, prefix=appPrefix, dependencies=schreiben("skiservice.bearbeiten"))
 app.include_router(handware.router, prefix=appPrefix, dependencies=schreiben("preise.verwalten"))

@@ -13,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core import sicherheit
-from app.core.zugriff import (Zugriff, anmeldung_erzwungen, bediener_timeout, ticket_ausstellen)
+from app.core.zugriff import (Zugriff, anmeldung_erzwungen, bediener_timeout, ticket_ausstellen, darf_anonym, darf_anonym_lesen)
 from app.models.benutzer import Bedienersitzung, Benutzer, Geraetesitzung
 from app.services import einstellungen, ereignisse, oidc
 
@@ -92,6 +92,7 @@ def status(db: Session) -> dict:
         "geraeteschluessel_erzwungen": bool(einstellungen.hole("GERAETESCHLUESSEL_ERZWINGEN")),
         "pin_erlaubt": bool(einstellungen.hole("PIN_ANMELDUNG_ERLAUBT")),
         "oidc": {"aktiv": oidc.aktiv(), "anbieter": oidc.anbieter_schluessel(), "button_text": oidc.button_text()},
+        "ohne_anmeldung": _ohne_anmeldung(),
     }
 
 
@@ -99,6 +100,14 @@ def _crud_rechte():
     from app.crud import rechte  # spät: crud.rechte -> services.ereignisse -> core.zugriff
 
     return rechte
+
+
+def _ohne_anmeldung() -> dict:
+    """Was ohne Anmeldung erlaubt ist: im Übergang alles, sonst die Gruppe "Ohne Anmeldung"."""
+    if not anmeldung_erzwungen():
+        return {"lesen": True, "rechte": ["*"]}
+    lesen, rechte = _crud_rechte().gast_zugriff()
+    return {"lesen": lesen, "rechte": sorted(rechte)}
 
 
 def einrichtung_noetig(db: Session) -> bool:
@@ -359,11 +368,14 @@ def ticket(zugriff: Zugriff, pfad: str) -> str:
         erlaubt = _TICKET_PFADE
     elif zugriff.geraet is not None:
         raise AnmeldeFehler(401, "bediener_noetig")
-    elif anmeldung_erzwungen():
-        raise AnmeldeFehler(401, "anmeldung_noetig")
-    else:
-        # Übergang ohne Anmeldung: das Ticket erlaubt nicht mehr als ohne
+    elif darf_anonym_lesen():
+        # Ohne Anmeldung (Übergang bzw. Gastgruppe mit "Alles ansehen"): das Ticket erlaubt nicht mehr als ohne
         erlaubt = _TICKET_PFADE
+    elif darf_anonym("kasse.kassieren"):
+        # Kasse ohne Anmeldung: nur das Quittungs-PDF
+        erlaubt = [muster for muster in _TICKET_PFADE if "quittung" in muster.pattern]
+    else:
+        raise AnmeldeFehler(401, "anmeldung_noetig")
     if not any(muster.match(pfad) for muster in erlaubt):
         raise AnmeldeFehler(403, "pfad_nicht_erlaubt")
     return ticket_ausstellen(zugriff, pfad)

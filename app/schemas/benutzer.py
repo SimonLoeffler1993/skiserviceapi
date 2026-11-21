@@ -17,12 +17,19 @@ class OidcStatus(BaseModel):
     button_text: str
 
 
+class OhneAnmeldung(BaseModel):
+    # Ohne Anmeldung alles ansehen bzw. diese Rechte (Übergang: True / ["*"])
+    lesen: bool
+    rechte: list[str]
+
+
 class AuthStatus(BaseModel):
     einrichtung_noetig: bool
     anmeldung_erzwungen: bool
     geraeteschluessel_erzwungen: bool
     pin_erlaubt: bool
     oidc: OidcStatus
+    ohne_anmeldung: OhneAnmeldung
 
 
 class GeraetAngaben(BaseModel):
@@ -274,6 +281,9 @@ class GruppeRead(BaseModel):
     oidc_gruppe: Optional[str] = None
     rollen: list[RolleKurz]
     anzahl_mitglieder: int
+    # Systemgruppe "Ohne Anmeldung" und ihr Schalter "alles ansehen"
+    gast: bool = False
+    lesen: bool = False
 
 
 class GruppeAnlegen(BaseModel):
@@ -289,3 +299,5 @@ class GruppeAendern(BaseModel):
     # Leer/None löst die Zuordnung (die OIDC-Mitgliedschaften werden dann manuell)
     oidc_gruppe: Optional[str] = Field(default=None, max_length=255)
     rollen_ids: Optional[list[int]] = None
+    # Nur bei der Gruppe "Ohne Anmeldung"
+    lesen: Optional[bool] = None

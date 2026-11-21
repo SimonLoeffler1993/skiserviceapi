@@ -2,7 +2,7 @@ import httpx
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from app.core.zugriff import recht
+from app.core.zugriff import lesen_oder_recht, recht
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -140,7 +140,7 @@ def storniere_quittung(quittung_id: int, db: Session = Depends(get_db)):
     db.commit()
     return crud_quittung.get_quittung(db, quittung_id)
 
-@router.get("/quittung/{quittung_id}/pdf")
+@router.get("/quittung/{quittung_id}/pdf", dependencies=[Depends(lesen_oder_recht("kasse.kassieren"))])
 def get_quittung_pdf(quittung_id: int, db: Session = Depends(get_db)):
     """
     Holt das PDF einer Quittung anhand der ID.

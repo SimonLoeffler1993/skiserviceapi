@@ -244,21 +244,44 @@ async def hole_zugriff(request: Request) -> Zugriff:
     return zugriff
 
 
-def _benutzer_verlangen(zugriff: Zugriff) -> None:
-    """Gemeinsame Prüfung für Mitarbeiter- und Admin-Routen."""
-    if zugriff.benutzer is not None:
-        return
+def darf_anonym_lesen() -> bool:
+    """Ohne Anmeldung ansehen: im Übergang immer, sonst nur mit "Alles ansehen" der Gruppe "Ohne Anmeldung"."""
+    if not anmeldung_erzwungen():
+        return True
+    from app.crud.rechte import gast_zugriff  # spät: crud -> services -> zugriff
+
+    return gast_zugriff()[0]
+
+
+def darf_anonym(recht: str) -> bool:
+    """Recht ohne Anmeldung: im Übergang immer, sonst nur, wenn die Gruppe "Ohne Anmeldung" es hat."""
+    if not anmeldung_erzwungen():
+        return True
+    from app.crud.rechte import gast_zugriff
+
+    return rechte_mod.hat(gast_zugriff()[1], recht)
+
+
+def _kein_benutzer(zugriff: Zugriff) -> None:
+    """Gerät ohne Bediener bzw. Geräteschlüssel: nie wie "ohne Anmeldung" behandeln."""
     if zugriff.geraet is not None:
         # Gerät angemeldet, aber kein Bediener gewählt
         raise _fehler(401, "bediener_noetig")
     if zugriff.schluessel is not None:
         raise _fehler(403, "geraeteschluessel_nicht_erlaubt")
-    if anmeldung_erzwungen():
+
+
+def _benutzer_verlangen(zugriff: Zugriff) -> None:
+    """Lesen: angemeldet, oder ohne Anmeldung, wenn Ansehen ohne Anmeldung erlaubt ist."""
+    if zugriff.benutzer is not None:
+        return
+    _kein_benutzer(zugriff)
+    if not darf_anonym_lesen():
         raise _fehler(401, "anmeldung_noetig")
 
 
 async def angemeldet(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
-    """Mitarbeiter oder Admin. Ohne Anmeldung nur, solange ANMELDUNG_ERZWINGEN aus ist."""
+    """Lesen. Ohne Anmeldung im Übergang bzw. mit "Alles ansehen" der Gruppe "Ohne Anmeldung"."""
     _benutzer_verlangen(zugriff)
     return zugriff
 
@@ -266,24 +289,37 @@ async def angemeldet(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
 def pruefe_recht(recht: str, zugriff: Zugriff | None = None) -> None:
     """
     Für Prüfungen im Handler, z.B. wenn nur eine Variante einer Route ein Recht braucht.
-    Ohne Anmeldung nur, solange ANMELDUNG_ERZWINGEN aus ist (Übergang).
+    Ohne Anmeldung im Übergang bzw. wenn die Gruppe "Ohne Anmeldung" das Recht hat.
     """
     zugriff = zugriff or aktueller_zugriff.get()
     if zugriff.benutzer is not None:
         if not zugriff.benutzer.hat(recht):
             raise _fehler(403, "recht_fehlt")
         return
-    _benutzer_verlangen(zugriff)
+    _kein_benutzer(zugriff)
+    if not darf_anonym(recht):
+        raise _fehler(401, "anmeldung_noetig")
 
 
 def recht(name: str):
-    """Dependency: angemeldet und mit diesem Recht (app/core/rechte.py)."""
+    """Dependency: mit diesem Recht (app/core/rechte.py). Ohne Anmeldung reicht das Recht der Gastgruppe."""
     if name not in rechte_mod.RECHTE:
         raise ValueError(f"Unbekanntes Recht: {name}")
 
     async def pruefen(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
-        _benutzer_verlangen(zugriff)
         pruefe_recht(name, zugriff)
+        return zugriff
+
+    return pruefen
+
+
+def lesen_oder_recht(name: str):
+    """Dependency: lesen dürfen oder dieses Recht haben (z.B. Quittungs-PDF auch nur mit Kassenrecht)."""
+    async def pruefen(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
+        if zugriff.benutzer is None and zugriff.geraet is None and zugriff.schluessel is None \
+                and not darf_anonym_lesen() and darf_anonym(name):
+            return zugriff
+        _benutzer_verlangen(zugriff)
         return zugriff
 
     return pruefen
@@ -292,20 +328,35 @@ def recht(name: str):
 _LESEND = {"GET", "HEAD", "OPTIONS"}
 
 
+def _pfad(request: Request) -> str:
+    route = request.scope.get("route")
+    return getattr(route, "path", request.url.path)
+
+
 def schreibrecht(name: str, ausser: tuple[str, ...] = ()):
     """
-    Router-Dependency: Lesen für alle Angemeldeten, Schreiben (POST/PUT/PATCH/DELETE) nur mit diesem Recht.
+    Router-Dependency: Lesen wie angemeldet(), Schreiben (POST/PUT/PATCH/DELETE) nur mit diesem Recht.
     ausser: Endungen von Routen-Pfaden, die stattdessen ein eigenes Recht an der Route haben (z.B. "/preise").
     """
     if name not in rechte_mod.RECHTE:
         raise ValueError(f"Unbekanntes Recht: {name}")
 
     async def pruefen(request: Request, zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
-        _benutzer_verlangen(zugriff)
-        route = request.scope.get("route")
-        pfad = getattr(route, "path", request.url.path)
-        if request.method not in _LESEND and not pfad.endswith(ausser or ("\0",)):
+        if request.method in _LESEND:
+            _benutzer_verlangen(zugriff)
+        elif not _pfad(request).endswith(ausser or ("\0",)):
+            # Schreiben ohne Anmeldung braucht nur das Recht, nicht "Alles ansehen"
             pruefe_recht(name, zugriff)
+        return zugriff
+
+    return pruefen
+
+
+def angemeldet_ausser(ausser: tuple[str, ...]):
+    """Router-Dependency wie angemeldet(), außer für Routen mit diesen Pfad-Endungen (eigene Prüfung an der Route)."""
+    async def pruefen(request: Request, zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
+        if not _pfad(request).endswith(ausser):
+            _benutzer_verlangen(zugriff)
         return zugriff
 
     return pruefen
@@ -329,7 +380,7 @@ def geraet_oder_angemeldet(bereich: Literal["scanner", "terminal"], benutzer_rec
     """
     Geräteschlüssel des Bereichs oder ein angemeldeter Benutzer (mit benutzer_recht, falls angegeben).
     Ohne Zugangsdaten nur, solange GERAETESCHLUESSEL_ERZWINGEN aus ist; beim Kundenterminal
-    (Kundendaten) zusätzlich nur, solange ANMELDUNG_ERZWINGEN aus ist.
+    (Kundendaten) zusätzlich nur, wenn das ohne Anmeldung erlaubt ist (Übergang bzw. Gastgruppe).
     """
     async def pruefen(zugriff: Zugriff = Depends(hole_zugriff)) -> Zugriff:
         if zugriff.schluessel is not None:
@@ -342,7 +393,10 @@ def geraet_oder_angemeldet(bereich: Literal["scanner", "terminal"], benutzer_rec
             return zugriff
         if zugriff.geraet is not None:
             raise _fehler(401, "bediener_noetig")
-        if geraeteschluessel_erzwungen() or (bereich == "terminal" and anmeldung_erzwungen()):
+        if geraeteschluessel_erzwungen():
+            raise _fehler(401, "geraeteschluessel_noetig")
+        # Kundenterminal ohne Schlüssel: nur, wenn ohne Anmeldung erlaubt (Übergang bzw. Gastgruppe)
+        if bereich == "terminal" and not (darf_anonym(benutzer_recht) if benutzer_recht else darf_anonym_lesen()):
             raise _fehler(401, "geraeteschluessel_noetig")
         return zugriff
 

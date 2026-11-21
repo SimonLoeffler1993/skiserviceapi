@@ -39,6 +39,10 @@ class Gruppe(Base):
     # Name (bzw. bei Microsoft die Object-ID) der Gruppe beim OIDC-Anbieter
     Oidc_Gruppe: Mapped[str | None] = mapped_column(String(255), nullable=True)
     Angelegt_Am: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Systemgruppe "Ohne Anmeldung": ihre Rechte gelten für alle Aufrufe ohne Anmeldung (wenn die Anmeldung erzwungen ist)
+    Gast: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Nur bei der Gastgruppe: ohne Anmeldung alles ansehen
+    Lesen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rollen: Mapped[list[Rolle]] = relationship(Rolle, secondary="gruppe_rollen", lazy="selectin")
 
 

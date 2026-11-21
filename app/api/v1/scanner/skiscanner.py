@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from app.core.zugriff import Zugriff, angemeldet, anmeldung_erzwungen, geraet_oder_angemeldet, recht, zugriff_aus_ticket
+from app.core.zugriff import ANONYM, Zugriff, angemeldet, darf_anonym_lesen, geraet_oder_angemeldet, recht, zugriff_aus_ticket
 from sqlalchemy.orm import Session
 
 from app.api.v1.health import health_antwort
@@ -72,10 +72,15 @@ async def websocket_endpoint(websocket: WebSocket):
     # Kein Header möglich: angemeldet über ?ticket= (POST /auth/ticket), ohne Ticket nur im Übergang
     ticket = websocket.query_params.get("ticket")
     try:
-        zugriff = zugriff_aus_ticket(ticket, websocket.url.path) if ticket else None
+        zugriff = zugriff_aus_ticket(ticket, websocket.url.path) if ticket else ANONYM
     except HTTPException:
         zugriff = None
-    if (zugriff is None or zugriff.benutzer is None) and (ticket or anmeldung_erzwungen()):
+    erlaubt = zugriff is not None and (
+        zugriff.benutzer is not None
+        # Ohne Anmeldung: Übergang bzw. Gruppe "Ohne Anmeldung" mit "Alles ansehen"
+        or (zugriff.geraet is None and zugriff.schluessel is None and darf_anonym_lesen())
+    )
+    if not erlaubt:
         # Erst annehmen, dann schließen: so sieht der Browser den Code 4401 und holt ein neues Ticket
         await websocket.accept()
         await websocket.close(code=4401)

@@ -20,6 +20,59 @@ logger = logging.getLogger(__name__)
 
 NOTZUGANG_TEXT = "Es muss mindestens ein aktiver Benutzer mit Passwort bleiben, der Benutzer verwalten darf."
 
+GAST_GRUPPE = "Ohne Anmeldung"
+# Ohne Anmeldung nie: sonst könnte sich jeder im Netz selbst zum Admin machen
+GAST_VERBOTEN = {ALLE_RECHTE, VERWALTUNGSRECHT}
+GAST_VERBOTEN_TEXT = "Die Gruppe „Ohne Anmeldung“ darf weder alle Rechte noch „Benutzer verwalten“ bekommen."
+
+
+# --- Gruppe "Ohne Anmeldung" -------------------------------------------------------
+
+_gast_cache: tuple[bool, frozenset[str]] | None = None
+
+
+def gast_cache_leeren() -> None:
+    global _gast_cache
+    _gast_cache = None
+
+
+def gast_gruppe(db: Session) -> Gruppe:
+    """Systemgruppe für Aufrufe ohne Anmeldung; legt sie an, falls sie fehlt (ohne Commit)."""
+    gruppe = db.query(Gruppe).filter(Gruppe.Gast.is_(True)).first()
+    if gruppe is None:
+        name = GAST_GRUPPE if not db.query(Gruppe.ID).filter(Gruppe.Name == GAST_GRUPPE).first() else f"{GAST_GRUPPE} (System)"
+        gruppe = Gruppe(Name=name, Beschreibung="Rechte für alle, die nicht angemeldet sind", Gast=True, Lesen=False,
+                        Angelegt_Am=datetime.now())
+        db.add(gruppe)
+        db.flush()
+    return gruppe
+
+
+def gast_zugriff() -> tuple[bool, frozenset[str]]:
+    """(alles ansehen, Rechte) für Aufrufe ohne Anmeldung, im Speicher zwischengespeichert."""
+    global _gast_cache
+    if _gast_cache is None:
+        from app.db.session import SessionLocal
+
+        try:
+            with SessionLocal() as db:
+                gruppe = db.query(Gruppe).filter(Gruppe.Gast.is_(True)).first()
+                if gruppe is None:
+                    _gast_cache = (False, frozenset())
+                else:
+                    rechte = frozenset(r.Recht for rolle in gruppe.rollen for r in rolle.rechte) - GAST_VERBOTEN
+                    _gast_cache = (bool(gruppe.Lesen), rechte)
+        except Exception:
+            logger.exception("Rechte ohne Anmeldung nicht lesbar")
+            return (False, frozenset())
+    return _gast_cache
+
+
+def _gast_rollen_pruefen(rollen: list[Rolle]) -> None:
+    for rolle in rollen:
+        if rolle.System or GAST_VERBOTEN & {r.Recht for r in rolle.rechte}:
+            raise ValueError(GAST_VERBOTEN_TEXT)
+
 
 # --- Rechte eines Benutzers -----------------------------------------------------
 
@@ -106,6 +159,7 @@ def standard_anlegen(db: Session) -> None:
     """Beim Start: Systemrolle/Admin-Gruppe sicherstellen; ohne jede Rolle zusätzlich "Mitarbeiter"."""
     ohne_rollen = db.query(func.count(Rolle.ID)).scalar() == 0
     admin_gruppe(db)
+    gast_gruppe(db)
     if ohne_rollen:
         rolle = Rolle(Name="Mitarbeiter", Beschreibung="Tagesgeschäft", Angelegt_Am=datetime.now(),
                       rechte=[RolleRecht(Recht=r) for r in MITARBEITER_RECHTE])
@@ -181,9 +235,15 @@ def rolle_aendern(db: Session, rolle_id: int, felder: dict) -> Rolle:
         if "beschreibung" in felder:
             rolle.Beschreibung = (felder["beschreibung"] or "").strip() or None
         if felder.get("rechte") is not None:
-            rolle.rechte = [RolleRecht(Recht=r) for r in _rechte_pruefen(felder["rechte"])]
+            neue = _rechte_pruefen(felder["rechte"])
+            in_gastgruppe = db.query(GruppeRolle.Gruppe_ID).join(Gruppe, Gruppe.ID == GruppeRolle.Gruppe_ID) \
+                .filter(GruppeRolle.Rolle_ID == rolle.ID, Gruppe.Gast.is_(True)).first()
+            if in_gastgruppe and GAST_VERBOTEN & set(neue):
+                raise ValueError(GAST_VERBOTEN_TEXT)
+            rolle.rechte = [RolleRecht(Recht=r) for r in neue]
         ereignisse.erfasse(db, "rolle_geaendert", text=rolle.Name)
     db.commit()
+    gast_cache_leeren()
     return rolle
 
 
@@ -195,6 +255,7 @@ def rolle_loeschen(db: Session, rolle_id: int) -> None:
         ereignisse.erfasse(db, "rolle_geaendert", text=f"{rolle.Name} gelöscht")
         db.delete(rolle)
     db.commit()
+    gast_cache_leeren()
 
 
 # --- Gruppen -------------------------------------------------------------------------
@@ -205,11 +266,14 @@ def gruppe_read(db: Session, gruppe: Gruppe) -> dict:
         "id": gruppe.ID, "name": gruppe.Name, "beschreibung": gruppe.Beschreibung, "oidc_gruppe": gruppe.Oidc_Gruppe,
         "rollen": [{"id": r.ID, "name": r.Name, "system": bool(r.System)} for r in sorted(gruppe.rollen, key=lambda r: r.Name)],
         "anzahl_mitglieder": mitglieder,
+        "gast": bool(gruppe.Gast),
+        "lesen": bool(gruppe.Lesen),
     }
 
 
 def gruppen(db: Session) -> list[Gruppe]:
-    return db.query(Gruppe).order_by(Gruppe.Name).all()
+    # Die Gruppe "Ohne Anmeldung" zuerst
+    return db.query(Gruppe).order_by(Gruppe.Gast.desc(), Gruppe.Name).all()
 
 
 def _gruppe(db: Session, gruppe_id: int) -> Gruppe:
@@ -252,6 +316,8 @@ def gruppe_anlegen(db: Session, name: str, beschreibung: str | None, oidc_gruppe
 
 def gruppe_aendern(db: Session, gruppe_id: int, felder: dict) -> Gruppe:
     gruppe = _gruppe(db, gruppe_id)
+    if gruppe.Gast:
+        return _gast_gruppe_aendern(db, gruppe, felder)
     with notzugang_schuetzen(db):
         if felder.get("name"):
             gruppe.Name = _name_frei(db, Gruppe, felder["name"], gruppe.ID)
@@ -267,11 +333,34 @@ def gruppe_aendern(db: Session, gruppe_id: int, felder: dict) -> Gruppe:
             gruppe.rollen = _rollen_zu_ids(db, felder["rollen_ids"])
         ereignisse.erfasse(db, "gruppe_geaendert", text=gruppe.Name)
     db.commit()
+    gast_cache_leeren()
+    return gruppe
+
+
+def _gast_gruppe_aendern(db: Session, gruppe: Gruppe, felder: dict) -> Gruppe:
+    if felder.get("name") and felder["name"].strip() != gruppe.Name:
+        raise ValueError("Der Name der Gruppe „Ohne Anmeldung“ kann nicht geändert werden.")
+    if (felder.get("oidc_gruppe") or "").strip():
+        raise ValueError("Die Gruppe „Ohne Anmeldung“ kann keiner OIDC-Gruppe zugeordnet werden.")
+    if "beschreibung" in felder:
+        gruppe.Beschreibung = (felder["beschreibung"] or "").strip() or None
+    if felder.get("lesen") is not None:
+        gruppe.Lesen = bool(felder["lesen"])
+    if felder.get("rollen_ids") is not None:
+        rollen = _rollen_zu_ids(db, felder["rollen_ids"])
+        _gast_rollen_pruefen(rollen)
+        gruppe.rollen = rollen
+    ereignisse.erfasse(db, "gruppe_geaendert", text=f"{gruppe.Name}: "
+                       + ", ".join([("alles ansehen" if gruppe.Lesen else "nichts ansehen")] + [r.Name for r in gruppe.rollen]))
+    db.commit()
+    gast_cache_leeren()
     return gruppe
 
 
 def gruppe_loeschen(db: Session, gruppe_id: int) -> None:
     gruppe = _gruppe(db, gruppe_id)
+    if gruppe.Gast:
+        raise ValueError("Die Gruppe „Ohne Anmeldung“ kann nicht gelöscht werden.")
     with notzugang_schuetzen(db):
         ereignisse.erfasse(db, "gruppe_geaendert", text=f"{gruppe.Name} gelöscht")
         db.delete(gruppe)
@@ -282,9 +371,12 @@ def gruppe_loeschen(db: Session, gruppe_id: int) -> None:
 
 def manuelle_gruppen_setzen(db: Session, benutzer: Benutzer, gruppen_ids: list[int]) -> bool:
     """Ersetzt die manuellen Mitgliedschaften; über OIDC gekommene bleiben. True bei Änderung (ohne Commit)."""
-    vorhanden = {g.ID for g in db.query(Gruppe.ID).filter(Gruppe.ID.in_(gruppen_ids)).all()} if gruppen_ids else set()
-    if len(vorhanden) != len(set(gruppen_ids)):
+    gefunden = db.query(Gruppe.ID, Gruppe.Gast).filter(Gruppe.ID.in_(gruppen_ids)).all() if gruppen_ids else []
+    if len(gefunden) != len(set(gruppen_ids)):
         raise ValueError("Unbekannte Gruppe.")
+    if any(g.Gast for g in gefunden):
+        raise ValueError("Die Gruppe „Ohne Anmeldung“ hat keine Mitglieder.")
+    vorhanden = {g.ID for g in gefunden}
     oidc = {m.Gruppe_ID for m in benutzer.mitgliedschaften if m.Quelle == "oidc"}
     vorher = {m.Gruppe_ID for m in benutzer.mitgliedschaften if m.Quelle != "oidc"}
     ziel = vorhanden - oidc

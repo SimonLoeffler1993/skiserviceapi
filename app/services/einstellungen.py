@@ -158,7 +158,8 @@ DEFINITIONEN: list[EinstellungDefinition] = [
 
     # Benutzer & Anmeldung
     EinstellungDefinition("ANMELDUNG_ERZWINGEN", "anmeldung", "Anmeldung erzwingen", typ="bool", standard=False,
-                          beschreibung="Aus: Center und Kasse funktionieren auch ohne Anmeldung (Übergang). "
+                          beschreibung="Aus: Center und Kasse funktionieren ohne Anmeldung vollständig (Übergang). "
+                                       "An: ohne Anmeldung gilt nur, was unter Verwalten → Benutzer → Gruppen der Gruppe „Ohne Anmeldung“ freigegeben ist. "
                                        "Erst einschalten, wenn alle Geräte angemeldet sind und Terminal und Scanner einen Geräteschlüssel haben."),
     EinstellungDefinition("GERAETESCHLUESSEL_ERZWINGEN", "anmeldung", "Geräteschlüssel erzwingen", typ="bool", standard=False,
                           beschreibung="Aus: Hardware-Scanner und Kundenterminal funktionieren auch ohne Geräteschlüssel. "
