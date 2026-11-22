@@ -8,6 +8,7 @@ Zentrales Backend der Skiservice-Anwendung. Alle Frontends sprechen ausschließl
 | [skiservice-center](https://github.com/SimonLoeffler1993/skiservice-center) | Verwaltung für Mitarbeiter: Kunden, Skiservice, Saison- und Tagesverleih, Material, Preise, Einstellungen |
 | ski-kunden-dialog | Kundenterminal (Tablet): Kunden erfassen und prüfen ihre Daten selbst |
 | [ski-pos-kasse](https://github.com/SimonLoeffler1993/ski-pos-kasse) | Kasse |
+| [scanner_project](https://github.com/SimonLoeffler1993/scanner_project) | Firmware für den Hardware-Scanner (ESP32-S3 mit USB-Barcodescanner), mit Webflasher |
 
 ![API-Dokumentation (Swagger)](docs/screenshots/swagger.png)
 
