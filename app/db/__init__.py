@@ -15,3 +15,6 @@ from app.models.checkin_schluessel import CheckinSchluessel
 from app.models.mailvorlage import MailVorlage
 from app.models.materialskiservice import VerleihSkiService
 from app.models.mailprotokoll import MailProtokoll
+from app.models.benutzer import Benutzer, Geraetesitzung, Bedienersitzung, Geraeteschluessel
+from app.models.ereignis import Ereignis
+from app.models.rechte import Rolle, RolleRecht, Gruppe, GruppeRolle, BenutzerGruppe

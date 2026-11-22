@@ -247,6 +247,8 @@ def _quittungen_eintraege(db: Session, bedingung) -> list[QuittungListeEintrag]:
             BuchhaltungSync=bool(q.BuchhaltungSync),
             Storniert=bool(q.Storniert),
             Storniert_Am=q.Storniert_Am,
+            KassiertVonName=q.KassiertVonName,
+            StorniertVonName=q.StorniertVonName,
             artikelgruppen=gruppen,
         ))
     return liste

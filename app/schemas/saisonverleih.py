@@ -1,6 +1,6 @@
 from pydantic import BaseModel, model_validator
 from typing import Literal, Optional, List
-from datetime import date
+from datetime import date, datetime
 
 from app.schemas.kunde import SkiKundeOut
 from app.schemas.mailstatus import MailStatus
@@ -156,6 +156,10 @@ class SaisonVerleihRead(SaisonVerleihBase):
     Kunde: SkiKundeOut | None = None
     Saison: SaisonRead | None = None
     Material: List[SaisonVerleihMaterialRead] = [] 
+    # Nachvollziehbarkeit (Anzeigename des Benutzers), bei alten Verleihen leer
+    AngelegtVonName: str | None = None
+    GeaendertVonName: str | None = None
+    Geaendert_Am: datetime | None = None
 
     model_config = {
         "from_attributes": True

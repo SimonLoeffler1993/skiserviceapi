@@ -3,14 +3,16 @@ from email.mime.text import MIMEText
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.zugriff import aktueller_benutzer
 from app.db.deps import get_db
+from app.crud import rechte as crud_rechte
 from app.schemas.einstellungen import EinstellungRead, EinstellungenSpeichern, TestMail, TestErgebnis
-from app.services import einstellungen
+from app.services import einstellungen, oidc
 from app.utils.mail import sendeMail
 from app.utils.skiEttiket import SkiEttiket
 from app.utils.lexware import LexwareAPI
 
-# TODO Auth: Die Einstellungen sind aktuell ohne Anmeldung erreichbar (nur internes Netz)
+# Nur Admin (in main.py eingebunden mit ADMIN)
 router = APIRouter(
     prefix="/einstellungen",
     tags=["einstellungen"],
@@ -26,12 +28,28 @@ def get_einstellungen():
     return einstellungen.alle_fuer_anzeige()
 
 
+def _anmeldepflicht_pruefen(db: Session, werte: dict) -> None:
+    """
+    Anmeldung erzwingen nur, wenn sich danach noch jemand anmelden kann: der Aufrufer ist selbst angemeldet
+    und es gibt einen aktiven Benutzer mit Passwort, der Benutzer verwalten darf (Notzugang ohne OIDC).
+    """
+    if werte.get("ANMELDUNG_ERZWINGEN") not in (True, "true", "1", 1) or einstellungen.hole("ANMELDUNG_ERZWINGEN"):
+        return
+    if aktueller_benutzer() is None:
+        raise HTTPException(status_code=409, detail="Anmeldung erzwingen geht nur, wenn du selbst angemeldet bist.")
+    if not crud_rechte.notzugang_vorhanden(db):
+        raise HTTPException(status_code=409, detail="Es gibt keinen aktiven Benutzer mit Passwort, der Benutzer verwalten darf.")
+
+
 @router.put("/", response_model=list[EinstellungRead])
 def speichere_einstellungen(daten: EinstellungenSpeichern, db: Session = Depends(get_db)):
+    _anmeldepflicht_pruefen(db, daten.werte)
     try:
         einstellungen.speichern(db, daten.werte)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if any(s.startswith("OIDC_") for s in daten.werte):
+        oidc.cache_leeren()
     return einstellungen.alle_fuer_anzeige()
 
 
@@ -80,3 +98,13 @@ def teste_lexware():
     except Exception as e:
         return {"success": False, "message": f"Verbindung fehlgeschlagen: {e}"}
     return {"success": True, "message": f"Verbunden mit {profil.get('companyName', 'Lexware Office')}."}
+
+
+@router.post("/test/oidc", response_model=TestErgebnis)
+def teste_oidc():
+    """Ruft die Konfiguration des eingestellten OIDC-Anbieters ab."""
+    try:
+        info = oidc.testen()
+    except oidc.OidcFehler as e:
+        return {"success": False, "message": e.text}
+    return {"success": True, "message": f"Verbunden mit {info['anbieter']} ({info['issuer']}).", "data": info}

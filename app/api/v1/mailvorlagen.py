@@ -10,7 +10,7 @@ from app.schemas.mailvorlagen import MailVorlageRead, MailVorlageSpeichern, Mail
 from app.services import mailvorlagen
 from app.utils.mail import sendeMail
 
-# TODO Auth: Die Vorlagen sind aktuell ohne Anmeldung erreichbar (nur internes Netz)
+# Nur Admin (in main.py eingebunden mit ADMIN)
 router = APIRouter(
     prefix="/mailvorlagen",
     tags=["mailvorlagen"],

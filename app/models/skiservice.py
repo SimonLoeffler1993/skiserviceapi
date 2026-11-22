@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Integer, String, Double, Date, TIMESTAMP, Text, ForeignKey, Numeric
+from sqlalchemy import Boolean, Integer, String, Double, Date, DateTime, TIMESTAMP, Text, ForeignKey, Numeric
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from datetime import date, datetime
@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from app.db.base import Base
 from app.models.kunde import SkiKunde
+from app.models.benutzer import Benutzer
 
 class Ski(Base):
     __tablename__ = "ski"
@@ -64,6 +65,22 @@ class Auftrag(Base):
     rabat_waerung: Mapped[Optional[int]] = mapped_column("RabatWaerung", Integer)
     leih_versicherung: Mapped[Optional[int]] = mapped_column("Leih_Versicherung", Integer)
     quittung_id: Mapped[Optional[int]] = mapped_column("QuittungID", Integer)
+    # Nachvollziehbarkeit, gesetzt von app/services/nachvollziehbarkeit.py
+    angelegt_von: Mapped[Optional[int]] = mapped_column(
+        "Angelegt_Von", Integer, ForeignKey("benutzer.ID", ondelete="SET NULL", name="fk_auftraege_angelegt_von"))
+    geaendert_von: Mapped[Optional[int]] = mapped_column(
+        "Geaendert_Von", Integer, ForeignKey("benutzer.ID", ondelete="SET NULL", name="fk_auftraege_geaendert_von"))
+    geaendert_am: Mapped[Optional[datetime]] = mapped_column("Geaendert_Am", DateTime)
+    angelegt_von_benutzer: Mapped[Optional[Benutzer]] = relationship(Benutzer, foreign_keys=[angelegt_von], viewonly=True, lazy="joined")
+    geaendert_von_benutzer: Mapped[Optional[Benutzer]] = relationship(Benutzer, foreign_keys=[geaendert_von], viewonly=True, lazy="joined")
+
+    @property
+    def angelegt_von_name(self) -> Optional[str]:
+        return self.angelegt_von_benutzer.Anzeigename if self.angelegt_von_benutzer else None
+
+    @property
+    def geaendert_von_name(self) -> Optional[str]:
+        return self.geaendert_von_benutzer.Anzeigename if self.geaendert_von_benutzer else None
 
     # Relation zu Ski
     skis: Mapped[list["Ski"]] = relationship(Ski, back_populates="auftrag", cascade="all, delete-orphan")

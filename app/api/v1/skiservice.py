@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from app.core.zugriff import pruefe_recht, recht
 from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
@@ -76,7 +77,7 @@ async def _fertig_mail(db: Session, auftrag, auftragSchema: AuftragSchema) -> tu
     return None, ""
 
 
-@router.post("/skifertig")
+@router.post("/skifertig", dependencies=[Depends(recht("skiservice.status"))])
 async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depends(get_db)):
     """
     Endpoint, der aufgerufen wird, wenn ein Ski fertig bearbeitet ist.
@@ -120,7 +121,7 @@ async def skifertig(AuftragSkiFertig: AuftragSkiFertigSchema, db: Session = Depe
     # Auftrag wie bisher, ergänzt um das Ergebnis der Mail
     return {**jsonable_encoder(auftrag), "mail": mail}
 
-@router.post("/bindungfertig")
+@router.post("/bindungfertig", dependencies=[Depends(recht("skiservice.status"))])
 async def bindungfertig(SkisChecked: SkiBindungFertigSchema, db: Session = Depends(get_db)):
     """
     Endpunkt der eine Bindung auf geprüft setzt
@@ -160,12 +161,12 @@ async def get_preise(db: Session = Depends(get_db)):
     preise = crud_skiservicepreis.get_ski_service_preise(db)
     return preise
 
-@router.post("/preise", response_model=SkiServicePreiseSchema)
+@router.post("/preise", response_model=SkiServicePreiseSchema, dependencies=[Depends(recht("preise.verwalten"))])
 async def create_preis(preis: SkiServicePreiseBase, db: Session = Depends(get_db)):
     new_preis = crud_skiservicepreis.create_ski_service_preis(db, preis)
     return new_preis
 
-@router.post("/neu", response_model=AuftragSchema )
+@router.post("/neu", response_model=AuftragSchema, dependencies=[Depends(recht("skiservice.anlegen"))])
 async def erstelle_auftrag(auftrag: AuftragCreateSchema, hintergrundProzess: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Erstellt einen neuen Skiservice-Auftrag.
@@ -182,7 +183,7 @@ async def erstelle_auftrag(auftrag: AuftragCreateSchema, hintergrundProzess: Bac
 
     return skiauftrag
 
-@router.post("/bindungsservice", response_model=SkiServicePreiseSchema)
+@router.post("/bindungsservice", response_model=SkiServicePreiseSchema, dependencies=[Depends(recht("preise.verwalten"))])
 async def set_bindungsservice(bindungsserviceid: int, db: Session = Depends(get_db)):
     """
     Setzt den Bindungsservice für einen Skiservice-Auftrag.
@@ -216,11 +217,13 @@ def setze_auftrag_bezahlt(skiservice_auftrag_id: int, daten: BezahltSetzen, db: 
     Mit mit_quittung werden die Quittung und alle Positionen darauf ebenfalls geändert.
     Mit quittung_entfernen wird bei "nicht bezahlt" nur dieser Auftrag von der Quittung genommen.
     """
+    if daten.quittung_entfernen:
+        pruefe_recht("quittungen.verwalten")
     if auftrag_bezahlt_setzen(db, skiservice_auftrag_id, daten.bezahlt, daten.mit_quittung, daten.quittung_entfernen) is None:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
     return crud_skiservice.getSkiserviceAuftrag(db, skiservice_auftrag_id)
 
-@router.patch("/auftrag/{skiservice_auftrag_id}/abgeholt", response_model=AuftragSchema)
+@router.patch("/auftrag/{skiservice_auftrag_id}/abgeholt", response_model=AuftragSchema, dependencies=[Depends(recht("skiservice.status"))])
 def setze_auftrag_abgeholt(skiservice_auftrag_id: int, daten: AuftragAbgeholtSetzen, db: Session = Depends(get_db)):
     """
     Setzt den Auftrag auf abgeholt (mit Datum) oder nimmt die Abholung zurück, auch bei bezahlten Aufträgen.
@@ -228,7 +231,7 @@ def setze_auftrag_abgeholt(skiservice_auftrag_id: int, daten: AuftragAbgeholtSet
     return _auftrag_oder_404(crud_skiservice.setzeAbgeholt(db, skiservice_auftrag_id, daten.abgeholt))
 
 
-@router.post("/auftrag/{skiservice_auftrag_id}/benachrichtigen", response_model=AuftragSchema)
+@router.post("/auftrag/{skiservice_auftrag_id}/benachrichtigen", response_model=AuftragSchema, dependencies=[Depends(recht("skiservice.status"))])
 def benachrichtige_kunde(skiservice_auftrag_id: int, db: Session = Depends(get_db)):
     """
     Versendet die Fertig-Mail von Hand (auch erneut) und setzt den Auftrag auf benachrichtigt.
@@ -242,7 +245,7 @@ def benachrichtige_kunde(skiservice_auftrag_id: int, db: Session = Depends(get_d
     return crud_skiservice.getSkiserviceAuftrag(db, skiservice_auftrag_id)
 
 
-@router.delete("/auftrag/{skiservice_auftrag_id}")
+@router.delete("/auftrag/{skiservice_auftrag_id}", dependencies=[Depends(recht("skiservice.loeschen"))])
 def loesche_auftrag(skiservice_auftrag_id: int, db: Session = Depends(get_db)):
     """
     Löscht einen Auftrag mit allen Ski. Bezahlte Aufträge können nicht gelöscht werden.

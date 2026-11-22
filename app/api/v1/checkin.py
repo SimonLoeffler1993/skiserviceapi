@@ -1,3 +1,4 @@
+from app.core.zugriff import recht
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -35,19 +36,19 @@ def status(db: Session = Depends(get_db)):
     return checkin_service.status(db)
 
 
-@router.get("/schluessel", response_model=list[CheckinSchluesselRead])
+@router.get("/schluessel", response_model=list[CheckinSchluesselRead], dependencies=[Depends(recht("einstellungen.verwalten"))])
 def schluessel_liste(db: Session = Depends(get_db)):
     """Schlüssel nur mit Public Key, der private Schlüssel verlässt die API nie."""
     return [_schluessel_read(eintrag) for eintrag in checkin_schluessel.liste(db)]
 
 
-@router.post("/schluessel", response_model=CheckinSchluesselRead)
+@router.post("/schluessel", response_model=CheckinSchluesselRead, dependencies=[Depends(recht("einstellungen.verwalten"))])
 def schluessel_erzeugen(db: Session = Depends(get_db)):
     """Neues Schlüsselpaar. Mit gemeinsamem Ordner bekommt es die Check-in-App sofort, sonst von Hand als CHECKIN_PUBLIC_KEY eintragen."""
     return _schluessel_read(checkin_schluessel.erzeugen(db))
 
 
-@router.post("/{checkin_id}/uebernehmen", response_model=CheckinUebernommen)
+@router.post("/{checkin_id}/uebernehmen", response_model=CheckinUebernommen, dependencies=[Depends(recht("kunden.anlegen"))])
 def uebernehmen(checkin_id: str, db: Session = Depends(get_db)):
     """Legt den Kunden an und löscht den Check-in aus der Zwischendatenbank."""
     try:
@@ -63,7 +64,7 @@ def uebernehmen(checkin_id: str, db: Session = Depends(get_db)):
     return {"kunde": ergebnis.kunde, "warnung": ergebnis.warnung}
 
 
-@router.delete("/{checkin_id}")
+@router.delete("/{checkin_id}", dependencies=[Depends(recht("kunden.anlegen"))])
 def verwerfen(checkin_id: str):
     """Löscht einen Check-in, z.B. Spam."""
     try:

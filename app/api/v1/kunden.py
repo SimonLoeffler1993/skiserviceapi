@@ -1,6 +1,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.core.zugriff import angemeldet, geraet_oder_angemeldet
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,11 +28,11 @@ router = APIRouter(
 #     finally:
 #         db.close()
 
-@router.get("/test")
+@router.get("/test", dependencies=[Depends(angemeldet)])
 async def test():
     return {"test": "test"}
 
-@router.get("/suchen", response_model=list[SkiKundeOut])
+@router.get("/suchen", response_model=list[SkiKundeOut], dependencies=[Depends(angemeldet)])
 def search_kunde(
     vorname: str | None = Query(None, max_length=50),
     nachname: str | None = Query(None, max_length=50),
@@ -44,7 +45,7 @@ def search_kunde(
     return crud_kunde.search_kunde(db, vorname, nachname)
 
 # Muss vor /{kunde_id} stehen, sonst wird "liste" als ID gelesen
-@router.get("/liste", response_model=KundenListe)
+@router.get("/liste", response_model=KundenListe, dependencies=[Depends(angemeldet)])
 def kunden_liste(
     seite: int = Query(1, ge=1),
     pro_seite: int = Query(25, ge=1, le=100),
@@ -58,7 +59,7 @@ def kunden_liste(
     return {"eintraege": eintraege, "gesamt": gesamt, "seite": seite, "pro_seite": pro_seite}
 
 # Muss vor /{kunde_id} stehen, sonst wird "letzte" als ID gelesen
-@router.get("/letzte", response_model=list[SkiKundeOut])
+@router.get("/letzte", response_model=list[SkiKundeOut], dependencies=[Depends(angemeldet)])
 def letzte_kunden(db: Session = Depends(get_db)):
     """
     Zuletzt angelegte Kunden, die Anzahl kommt aus der Einstellung KUNDEN_LETZTE_ANZAHL.
@@ -67,14 +68,14 @@ def letzte_kunden(db: Session = Depends(get_db)):
     anzahl = min(max(5 if wert is None else int(wert), 1), 50)
     return crud_kunde.letzte_kunden(db, anzahl)
 
-@router.get("/{kunde_id}", response_model= SkiKundeOut)
+@router.get("/{kunde_id}", response_model=SkiKundeOut, dependencies=[Depends(geraet_oder_angemeldet("terminal"))])
 async def get_kunde(kunde_id: int, db: Session = Depends(get_db)):
     kunde = crud_kunde.get_kunde(db, kunde_id)
     if kunde is None:
         raise HTTPException(status_code=404, detail="Kunde nicht gefunden")
     return kunde
 
-@router.get("/{kunde_id}/historie", response_model=KundeHistorie)
+@router.get("/{kunde_id}/historie", response_model=KundeHistorie, dependencies=[Depends(angemeldet)])
 def get_historie(kunde_id: int, db: Session = Depends(get_db)):
     """Aufträge, Verleihe und die zugehörigen Quittungen eines Kunden über alle Saisons."""
     if crud_kunde.get_kunde(db, kunde_id) is None:
@@ -89,7 +90,7 @@ def get_historie(kunde_id: int, db: Session = Depends(get_db)):
         "quittungen": quittungen_nach_ids(db, quittung_ids),
     }
 
-@router.put("/{kunde_id}")
+@router.put("/{kunde_id}", dependencies=[Depends(geraet_oder_angemeldet("terminal", "kunden.bearbeiten"))])
 async def update_kunde(kunde_id: int, kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     existing_kunde = crud_kunde.get_kunde(db, kunde_id)
     if not existing_kunde:
@@ -101,7 +102,7 @@ async def update_kunde(kunde_id: int, kunde: SkiKundeSpeichern, db: Session = De
         db.rollback()
         raise HTTPException(status_code=400, detail="PLZ nicht gefunden")
 
-@router.post("/erfassen")
+@router.post("/erfassen", dependencies=[Depends(geraet_oder_angemeldet("terminal", "kunden.anlegen"))])
 async def erfassen_kunde(kunde: SkiKundeSpeichern, db: Session = Depends(get_db)):
     return crud_kunde.erfassen_kunde(db, kunde)
 

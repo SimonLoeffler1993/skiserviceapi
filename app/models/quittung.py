@@ -1,8 +1,10 @@
 from sqlalchemy import Column, ForeignKey, Integer, Date, String, Boolean, Double
+from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import date
 
 from app.db.base import Base
+from app.models.benutzer import Benutzer
 
 # TODO Lex Sync Datum in DB
 # Vorne bei Mapped immer Python typen verwenden, hinten bei mapped_column die SQLAlchemy Spaltentypen
@@ -25,6 +27,13 @@ class Quittung(Base):
     # Storniert: zählt nicht mehr, Aufträge und Verleihe sind gelöst. Die Artikel bleiben als Nachweis stehen
     Storniert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     Storniert_Am: Mapped[date | None] = mapped_column(Date, nullable=True, default=None)
+    # Wer an der Kasse kassiert bzw. storniert hat
+    Kassiert_Von: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("benutzer.ID", ondelete="SET NULL", name="fk_quittungen_kassiert_von"), nullable=True)
+    Storniert_Von: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("benutzer.ID", ondelete="SET NULL", name="fk_quittungen_storniert_von"), nullable=True)
+    KassiertVon: Mapped[Optional[Benutzer]] = relationship(Benutzer, foreign_keys=[Kassiert_Von], viewonly=True, lazy="joined")
+    StorniertVon: Mapped[Optional[Benutzer]] = relationship(Benutzer, foreign_keys=[Storniert_Von], viewonly=True, lazy="joined")
     # Relation zu den Artikels, die in dieser Quittung enthalten sind
     artikels: Mapped[list["QuittungArtikel"]] = relationship("QuittungArtikel", back_populates="quittung", cascade="all, delete-orphan")
 
@@ -33,6 +42,14 @@ class Quittung(Base):
         """Angezeigte Nummer, z.B. "26/27Q12" oder die Lexware Rechnungsnummer. Altbestand ohne Nummer: die ID."""
         name = (self.Name or "").strip()
         return name if name.lower() not in ("", "quittung", "externer beleg") else str(self.ID)
+
+    @property
+    def KassiertVonName(self) -> str | None:
+        return self.KassiertVon.Anzeigename if self.KassiertVon else None
+
+    @property
+    def StorniertVonName(self) -> str | None:
+        return self.StorniertVon.Anzeigename if self.StorniertVon else None
 
     @property
     def ManuellZugewiesen(self) -> bool:

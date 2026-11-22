@@ -48,7 +48,12 @@ GRUPPEN = {
     "verleih": "Verleih",
     "scanner": "Hardware-Scanner",
     "anwendung": "Anwendung",
+    "anmeldung": "Benutzer & Anmeldung",
+    "oidc": "Anmeldung mit OIDC",
 }
+
+# Anbieter für die Anmeldung mit OIDC, siehe app/services/oidc.py
+OIDC_ANBIETER_OPTIONEN = ["authentik", "microsoft", "google", "keycloak", "generisch"]
 
 # Startstatus eines neuen Verleihs, getrennt für Saison- und Tagesverleih
 VERLEIH_STARTSTATUS_OPTIONEN = ["vorbereitung", "vorbereitet", "unterwegs"]
@@ -150,6 +155,58 @@ DEFINITIONEN: list[EinstellungDefinition] = [
                           beschreibung="Ergibt z.B. 25/26Q12"),
     EinstellungDefinition("KUNDEN_LETZTE_ANZAHL", "anwendung", "Anzahl letzte Kunden", typ="zahl", standard=5,
                           beschreibung="So viele zuletzt angelegte Kunden werden beim Anlegen von Skiservice und Verleih zur Auswahl angeboten."),
+
+    # Benutzer & Anmeldung
+    EinstellungDefinition("ANMELDUNG_ERZWINGEN", "anmeldung", "Anmeldung erzwingen", typ="bool", standard=False,
+                          beschreibung="Aus: Center und Kasse funktionieren ohne Anmeldung vollständig (Übergang). "
+                                       "An: ohne Anmeldung gilt nur, was unter Verwalten → Benutzer → Gruppen der Gruppe „Ohne Anmeldung“ freigegeben ist. "
+                                       "Erst einschalten, wenn alle Geräte angemeldet sind und Terminal und Scanner einen Geräteschlüssel haben."),
+    EinstellungDefinition("GERAETESCHLUESSEL_ERZWINGEN", "anmeldung", "Geräteschlüssel erzwingen", typ="bool", standard=False,
+                          beschreibung="Aus: Hardware-Scanner und Kundenterminal funktionieren auch ohne Geräteschlüssel. "
+                                       "Erst einschalten, wenn unter Verwalten → Hardware-Scanner kein Scanner mehr „ohne Schlüssel“ steht."),
+    EinstellungDefinition("BEDIENER_TIMEOUT_MINUTEN", "anmeldung", "Bediener abmelden nach Minuten ohne Aktivität", typ="zahl", standard=10,
+                          beschreibung="Danach erscheint wieder die Bedienerauswahl. 0 = nie. Pro Gerät unter Verwalten → Geräte änderbar."),
+    EinstellungDefinition("GERAETESITZUNG_TAGE", "anmeldung", "Gerät bleibt angemeldet (Tage)", typ="zahl", standard=180,
+                          beschreibung="Gilt ab der letzten Nutzung."),
+    EinstellungDefinition("PIN_ANMELDUNG_ERLAUBT", "anmeldung", "Schnellwahl mit PIN erlauben", typ="bool", standard=True,
+                          beschreibung="Jeder Benutzer kann sich unter „Mein Konto“ eine PIN festlegen und erscheint dann als Kachel in der Bedienerauswahl."),
+    EinstellungDefinition("PIN_MIN_STELLEN", "anmeldung", "PIN mindestens Stellen", typ="zahl", standard=4,
+                          beschreibung="4 bis 8 Ziffern."),
+    EinstellungDefinition("PASSWORT_MIN_LAENGE", "anmeldung", "Passwort mindestens Zeichen", typ="zahl", standard=8),
+    EinstellungDefinition("MAX_FEHLVERSUCHE", "anmeldung", "Sperre nach Fehlversuchen", typ="zahl", standard=5,
+                          beschreibung="Falsches Passwort oder falsche PIN, zusammen gezählt."),
+    EinstellungDefinition("SPERRE_MINUTEN", "anmeldung", "Sperre in Minuten", typ="zahl", standard=5),
+    EinstellungDefinition("ERLAUBTE_URSPRUENGE", "anmeldung", "Adressen von Center, Kasse und Kundenterminal",
+                          beschreibung="Mit Komma getrennt, z.B. https://center.example.de,https://kasse.example.de,https://terminal.example.de. "
+                                       "Nur diese Seiten dürfen die API aus dem Browser aufrufen (auch das Kundenterminal für die Live-Verbindung) "
+                                       "und sind als Rücksprung nach der OIDC-Anmeldung erlaubt. Leer = alle Seiten erlaubt, OIDC-Anmeldung nicht möglich."),
+
+    # Anmeldung mit OIDC (ein Anbieter)
+    EinstellungDefinition("OIDC_AKTIV", "oidc", "Anmeldung mit OIDC", typ="bool", standard=False),
+    EinstellungDefinition("OIDC_ANBIETER", "oidc", "Anbieter", typ="auswahl", standard="authentik", optionen=OIDC_ANBIETER_OPTIONEN,
+                          beschreibung="Bestimmt, wie der Issuer gebildet und der Benutzer erkannt wird."),
+    EinstellungDefinition("OIDC_ISSUER", "oidc", "Issuer",
+                          beschreibung="Authentik: https://<host>/application/o/<slug>/ · Keycloak: https://<host>/realms/<realm> · "
+                                       "Generisch: Issuer des Anbieters. Bei Microsoft und Google leer lassen."),
+    EinstellungDefinition("OIDC_MANDANT", "oidc", "Microsoft: Mandant (Tenant-ID)",
+                          beschreibung="Verzeichnis-ID (Mandant) aus Entra ID. „organizations“ erlaubt Konten aller Firmen-Mandanten. Nur für Microsoft."),
+    EinstellungDefinition("OIDC_ERLAUBTE_MANDANTEN", "oidc", "Microsoft: erlaubte Mandanten",
+                          beschreibung="Nur bei Mandant „organizations“: Tenant-IDs mit Komma getrennt. Leer = alle."),
+    EinstellungDefinition("OIDC_CLIENT_ID", "oidc", "Client-ID"),
+    EinstellungDefinition("OIDC_CLIENT_SECRET", "oidc", "Client-Secret", typ="passwort"),
+    EinstellungDefinition("OIDC_SCOPES", "oidc", "Scopes", standard="openid profile email"),
+    EinstellungDefinition("OIDC_GRUPPEN_CLAIM", "oidc", "Claim mit den Gruppen", standard="groups",
+                          beschreibung="Aus diesem Claim kommen die Gruppen für Verwalten → Benutzer → Gruppen (Feld „OIDC-Gruppe“). "
+                                       "Authentik: groups. Keycloak: groups (Group-Mapper anlegen). Microsoft: groups (Object-IDs eintragen) "
+                                       "oder roles für App-Rollen. Google liefert keine Gruppen."),
+    EinstellungDefinition("OIDC_BUTTON_TEXT", "oidc", "Text auf dem Button",
+                          beschreibung="Leer = „Mit <Anbieter> anmelden“."),
+    EinstellungDefinition("OIDC_AUTO_FREIGABE", "oidc", "Neue Benutzer automatisch freigeben", typ="bool", standard=False,
+                          beschreibung="Wer in einer zugeordneten OIDC-Gruppe ist, wird immer sofort freigegeben. Diese Einstellung gilt für alle anderen: "
+                                       "Aus = sie warten auf die Freigabe unter Verwalten → Benutzer. An = sofort freigegeben (ohne Gruppe aber ohne Rechte)."),
+    EinstellungDefinition("OIDC_API_ADRESSE", "oidc", "Öffentliche Adresse der API",
+                          beschreibung="So erreicht der Browser die API, z.B. https://api.example.de. "
+                                       "Daraus entsteht die Redirect-URI, die beim Anbieter eingetragen wird."),
 ]
 
 DEFINITION_NACH_SCHLUESSEL = {d.schluessel: d for d in DEFINITIONEN}
@@ -301,16 +358,23 @@ def speichern(db: Session, werte: dict[str, Any]):
     anteil = werte.get("VERLEIH_ANTEIL_SKI_PROZENT")
     if anteil not in (None, "") and not 0 <= int(anteil) <= 100:
         raise ValueError("Der Anteil Ski muss zwischen 0 und 100 % liegen.")
+    _anmeldung_pruefen(werte)
     for schluessel in ("SCANNER_COUNTDOWN_FERTIG", "SCANNER_COUNTDOWN_BINDUNG"):
         sekunden = werte.get(schluessel)
         if sekunden not in (None, "") and not 0 <= int(sekunden) <= SCANNER_COUNTDOWN_MAX:
             raise ValueError(f"{DEFINITION_NACH_SCHLUESSEL[schluessel].bezeichnung}: 0 bis {SCANNER_COUNTDOWN_MAX} erlaubt.")
 
+    # Spät importiert: ereignisse -> zugriff -> einstellungen
+    from app.services import ereignisse
     for schluessel, wert in werte.items():
         definition = DEFINITION_NACH_SCHLUESSEL[schluessel]
         if definition.geheim and (wert is None or wert == ""):
             continue
         eintrag = db.get(Einstellung, schluessel)
+        neu = _als_text(definition, wert)
+        if (eintrag.Wert if eintrag else None) != neu:
+            ereignisse.erfasse(db, "einstellung_geaendert", text=definition.bezeichnung,
+                               daten={"schluessel": schluessel, "wert": "geändert" if definition.geheim else neu})
         if eintrag is None:
             db.add(Einstellung(Schluessel=schluessel, Wert=_als_text(definition, wert)))
         else:
@@ -318,6 +382,42 @@ def speichern(db: Session, werte: dict[str, Any]):
 
     db.commit()
     cache_leeren()
+
+
+def _zahl_im_bereich(werte: dict[str, Any], schluessel: str, minimum: int, maximum: int | None = None):
+    wert = werte.get(schluessel)
+    if wert in (None, ""):
+        return
+    zahl = int(wert)
+    if zahl < minimum or (maximum is not None and zahl > maximum):
+        bezeichnung = DEFINITION_NACH_SCHLUESSEL[schluessel].bezeichnung
+        bereich = f"{minimum} bis {maximum}" if maximum is not None else f"mindestens {minimum}"
+        raise ValueError(f"{bezeichnung}: {bereich} erlaubt.")
+
+
+def urspruenge(text: str | None = None) -> list[str]:
+    """ERLAUBTE_URSPRUENGE als Liste, ohne Schrägstrich am Ende."""
+    if text is None:
+        text = hole("ERLAUBTE_URSPRUENGE")
+    return [u.strip().rstrip("/") for u in (text or "").split(",") if u.strip()]
+
+
+def _anmeldung_pruefen(werte: dict[str, Any]):
+    _zahl_im_bereich(werte, "BEDIENER_TIMEOUT_MINUTEN", 0, 24 * 60)
+    _zahl_im_bereich(werte, "GERAETESITZUNG_TAGE", 1, 3650)
+    _zahl_im_bereich(werte, "PIN_MIN_STELLEN", 4, 8)
+    _zahl_im_bereich(werte, "PASSWORT_MIN_LAENGE", 6, 128)
+    _zahl_im_bereich(werte, "MAX_FEHLVERSUCHE", 1, 100)
+    _zahl_im_bereich(werte, "SPERRE_MINUTEN", 1, 24 * 60)
+    if isinstance(werte.get("ERLAUBTE_URSPRUENGE"), str):
+        for ursprung in urspruenge(werte["ERLAUBTE_URSPRUENGE"]):
+            teile = ursprung.split("://", 1)
+            if len(teile) != 2 or teile[0] not in ("http", "https") or not teile[1] or "/" in teile[1]:
+                raise ValueError(f"Ungültige Adresse „{ursprung}“: erwartet z.B. https://center.example.de ohne Pfad.")
+    for schluessel in ("OIDC_ISSUER", "OIDC_API_ADRESSE"):
+        wert = werte.get(schluessel)
+        if isinstance(wert, str) and wert.strip() and not wert.strip().startswith(("http://", "https://")):
+            raise ValueError(f"{DEFINITION_NACH_SCHLUESSEL[schluessel].bezeichnung} muss mit http:// oder https:// beginnen.")
 
 
 def geheimnis_loeschen(db: Session, schluessel: str):

@@ -68,5 +68,7 @@ class ScannerMeldung(BaseModel):
 class ScannerGeraet(ScannerMeldung):
     zuletzt: datetime
     verbunden: bool
+    # Name des Geräteschlüssels, mit dem er sich zuletzt gemeldet hat; None = ohne Schlüssel
+    schluessel: str | None = None
     # Im Center angestoßenes Update, auf das der Scanner noch nicht reagiert hat
     update_angefordert: datetime | None = None

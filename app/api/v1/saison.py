@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from app.core.zugriff import angemeldet, recht
 from sqlalchemy.orm import Session
 
 from app.schemas.saison import SaisonErstellen, SaisonsNamen
@@ -12,7 +13,7 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-@router.get("/test")
+@router.get("/test", dependencies=[Depends(angemeldet)])
 async def test():
     return {"test": "test"}
 
@@ -27,7 +28,7 @@ def get_aktuelle_saison(db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Keine aktuelle Saison vorhanden.")
     return saison
 
-@router.post("/erfassen", response_model=SaisonsNamen)
+@router.post("/erfassen", response_model=SaisonsNamen, dependencies=[Depends(recht("einstellungen.verwalten"))])
 async def erfasse_saison(saison: SaisonErstellen, db: Session = Depends(get_db)):
     # TODO: #16 Auftrags und Saison Nummern reseten 
     return crud_saison.erfasse_saison(db, saison)

@@ -1,12 +1,13 @@
 from __future__ import annotations
-from sqlalchemy import Integer, String, Double, Date, ForeignKey, Boolean
+from sqlalchemy import Integer, String, Double, Date, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from app.db.base import Base
 from app.models.saison import Saison
 from app.models.kunde import SkiKunde
+from app.models.benutzer import Benutzer
 from app.models.materialski import EigenSki
 from app.models.materialschuh import EigenSchuh
 from app.models.materialstock import Skistock
@@ -91,12 +92,28 @@ class SaisonVerleih(Base):
     # "saison" = Saisonverleih, "tag" = Tagesverleih
     Art: Mapped[str] = mapped_column(String(10), nullable=False, default="saison", server_default="saison")
     QuittungID: Mapped[int | None] = mapped_column(Integer)
+    # Nachvollziehbarkeit, gesetzt von app/services/nachvollziehbarkeit.py
+    Angelegt_Von: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("benutzer.ID", ondelete="SET NULL", name="fk_saisonverleih_angelegt_von"))
+    Geaendert_Von: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("benutzer.ID", ondelete="SET NULL", name="fk_saisonverleih_geaendert_von"))
+    Geaendert_Am: Mapped[datetime | None] = mapped_column(DateTime)
+    AngelegtVon: Mapped[Optional[Benutzer]] = relationship(Benutzer, foreign_keys=[Angelegt_Von], viewonly=True, lazy="joined")
+    GeaendertVon: Mapped[Optional[Benutzer]] = relationship(Benutzer, foreign_keys=[Geaendert_Von], viewonly=True, lazy="joined")
 
     # Feste Reihenfolge (Erfassung), darauf beruht z.B. die Zählung "Ausrüstung #1, #2"
     Material: Mapped[list[SaisonVerleihMaterial]] = relationship(
         SaisonVerleihMaterial, back_populates="saisonverleih", cascade="all, delete-orphan",
         order_by=lambda: SaisonVerleihMaterial.ID,
     )
+
+    @property
+    def AngelegtVonName(self) -> str | None:
+        return self.AngelegtVon.Anzeigename if self.AngelegtVon else None
+
+    @property
+    def GeaendertVonName(self) -> str | None:
+        return self.GeaendertVon.Anzeigename if self.GeaendertVon else None
 
     @property
     def Tage(self) -> int | None:
